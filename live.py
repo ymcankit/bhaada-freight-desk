@@ -272,6 +272,10 @@ class Desk:
                         "distanceKm": max(1, r["km"]), "hours": r.get("hours"), "distanceSrc": r["src"],
                         "returnLoadProb": known["returnLoadProb"] if known else self.settings["defaultReturnLoadProb"]}
         self._event(load, "Routing", f"{r['km']} km by road ({r['src']})" + (f", about {r['hours']} h driving" if r.get("hours") else ""))
+        if f.get("budget_rs") and f["budget_rs"] < 300:     # "40 rupaye per km" lands here as 40: a rate, not a total
+            per_km = f["budget_rs"]
+            f["budget_rs"] = round(per_km * load["lane"]["distanceKm"])
+            self._event(load, "Intake", f"Budget ₹{per_km:g}/km × {load['lane']['distanceKm']} km = ₹{f['budget_rs']:,}")
         tc = E.type_check(f)
         load["searchType"] = f["truck_type"] if tc["fits"] else (tc["suggest"][0] if tc["suggest"] else None)
         if not load["searchType"]:
@@ -517,7 +521,7 @@ class Desk:
         load["status"], load["reason"] = "escalated", reason
         load["closedAt"] = now()
         self._event(load, "Orchestrator", f"Escalated to you: {reason}")
-        self._to_broker(load, f"❌ {load['id']} not quoted. {reason} Over to you.")
+        self._to_broker(load, f"❌ {load['id']}: abhi quote nahi ban paaya. {reason}\nAap khud dekh lijiye, ya thodi der baad phir bhejiye.")
         self.save()
 
     # ---------------- approval, hold, back-out ----------------

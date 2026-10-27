@@ -322,11 +322,12 @@ def on_text(wa, text):
     load = desk.start_load(merged, "telegram" if wa.startswith("tg:") else "whatsapp", broker_phone=wa,
                            raw=" / ".join(m["text"] for m in s["chat"] if m["role"] == "user"))
     desk.brokers[wa] = {"chat": [], "load": {}}
-    send(wa, f"🔍 {load['id']}: got it. Messaging owners near {merged['origin']} now…")
+    send(wa, f"🔍 {load['id']}: {merged['origin']} ke paas ke truck owners ko message kar raha hoon…\n"
+                f"({load['id']} is load ka number hai; isi se updates aayenge.)")
 
 def on_button(wa, bid):
     action, _, lid = bid.partition(":")
     if action in ("approve", "reject") and lid:
         desk.post(action, lid=lid)
-        return send(wa, "✅ Approved. Asking the owner to hold the truck…" if action == "approve" else "Rejected. Nothing booked.")
+        return send(wa, "✅ Approve ho gaya. Owner se gaadi hold karwa raha hoon…" if action == "approve" else "Reject kar diya. Kuch book nahi hua.")
     send(wa, "That button has expired. Send *new* to start again.")
