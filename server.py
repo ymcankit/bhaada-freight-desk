@@ -108,6 +108,7 @@ def state():
     v["whatsapp"] = WA_READY
     v["telegram"] = TG_BOT["username"] if TG_READY else None
     v["build"] = (os.getenv("RENDER_GIT_COMMIT") or "local")[:7]
+    v["memory"] = "upstash" if live._store() else "local file (lost on restart)"
     v["llm"] = E.llm_ready()
     return v
 
