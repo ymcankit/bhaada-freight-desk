@@ -24,7 +24,7 @@ def cfg(k, default=""):
 E.configure(key=cfg("GROQ_API_KEY"), model=cfg("GROQ_MODEL"), whisper=cfg("GROQ_WHISPER"))
 WA_TOKEN, WA_PHONE_ID = cfg("WHATSAPP_TOKEN"), cfg("WHATSAPP_PHONE_ID")
 WA_VERIFY = cfg("WHATSAPP_VERIFY_TOKEN", "bhaada_verify_123")
-WA_READY = bool(WA_TOKEN and WA_PHONE_ID and "paste" not in WA_TOKEN)
+WA_READY = len(WA_TOKEN) > 40 and WA_PHONE_ID.isdigit()        # placeholders like "later" mean not connected
 GRAPH = "https://graph.facebook.com/v21.0"
 
 # ---------------- WhatsApp sending ----------------
