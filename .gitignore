@@ -1,0 +1,10 @@
+.env
+.streamlit/secrets.toml
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+.claude/
+# team documents stay local (slides, master doc, voice note)
+docs/

@@ -1,0 +1,117 @@
+[
+  {
+    "id": "Q1",
+    "channel": "voice",
+    "lang": "hinglish",
+    "shipper": "Gupta Textiles",
+    "transcript": "Kal subah Bhiwandi se Surat, 18 ton kapda, 32 MXL chahiye.",
+    "expect": "18T is over a 32 ft MXL's 16T -> agent substitutes a Taurus and says so",
+    "scenario": "happy path + voice",
+    "load": {
+      "origin": "Bhiwandi",
+      "destination": "Surat",
+      "weight_ton": 18,
+      "truck_type": "32 ft MXL",
+      "pickup_when": "kal subah"
+    }
+  },
+  {
+    "id": "Q2",
+    "channel": "text",
+    "lang": "english",
+    "shipper": "Anchor Chemicals",
+    "text": "Need a 22ft truck Delhi to Jaipur day after tomorrow, ~9 tons packaged goods.",
+    "expect": "clear -> Delhi->Jaipur, 9T, 22 ft",
+    "scenario": "happy path",
+    "load": {
+      "origin": "Delhi",
+      "destination": "Jaipur",
+      "weight_ton": 9,
+      "truck_type": "22 ft",
+      "pickup_when": "day after tomorrow"
+    }
+  },
+  {
+    "id": "Q3",
+    "channel": "text",
+    "lang": "hinglish",
+    "shipper": "Shree Distributors",
+    "text": "Pune se Nashik ek gaadi chahiye kal.",
+    "expect": "AMBIGUOUS -> missing weight & truck type -> ask clarifying question",
+    "scenario": "clarification"
+  },
+  {
+    "id": "Q4",
+    "channel": "pdf",
+    "lang": "english",
+    "shipper": "Meridian FMCG",
+    "pdfRef": "sample_load_request.pdf",
+    "expect": "parse PDF -> Bhiwandi->Ahmedabad, 14T; PDF asks for 32 ft SXL (9T max) -> agent substitutes",
+    "scenario": "PDF intake",
+    "load": {
+      "origin": "Bhiwandi",
+      "destination": "Ahmedabad",
+      "weight_ton": 14,
+      "truck_type": "32 ft SXL",
+      "pickup_when": "28 Oct, before 10 AM"
+    }
+  },
+  {
+    "id": "Q5",
+    "channel": "voice",
+    "lang": "hinglish",
+    "shipper": "Kisan Agro",
+    "transcript": "Ahmedabad se Indore, 20 ton, Taurus laga do, aaj hi.",
+    "expect": "clear but same-day -> tight availability",
+    "scenario": "tight timing",
+    "load": {
+      "origin": "Ahmedabad",
+      "destination": "Indore",
+      "weight_ton": 20,
+      "truck_type": "Taurus (10-tyre)",
+      "pickup_when": "aaj hi"
+    }
+  },
+  {
+    "id": "Q6",
+    "channel": "text",
+    "lang": "english",
+    "shipper": "Volt Appliances",
+    "text": "Mumbai to Bengaluru, 11 tons, 20ft container, flexible on date.",
+    "expect": "long lane -> higher cost, 2-3 day transit",
+    "scenario": "long haul pricing"
+  },
+  {
+    "id": "Q7",
+    "channel": "text",
+    "lang": "hinglish",
+    "shipper": "Nomad Traders",
+    "text": "Kolkata se Patna 25 ton steel, sabse sasta rate bhejo.",
+    "expect": "25T exceeds most single trucks -> no suitable truck / escalate",
+    "scenario": "no matching truck",
+    "load": {
+      "origin": "Kolkata",
+      "destination": "Patna",
+      "weight_ton": 25,
+      "truck_type": "Taurus (10-tyre)",
+      "pickup_when": "kal"
+    }
+  },
+  {
+    "id": "Q8",
+    "channel": "text",
+    "lang": "english",
+    "shipper": "Prime Retail",
+    "text": "Chennai to Hyderabad, 8 tons, need it booked under a tight budget of Rs 18000.",
+    "expect": "budget below floor -> negotiate or escalate (margin breach)",
+    "scenario": "margin-floor breach",
+    "load": {
+      "origin": "Chennai",
+      "destination": "Hyderabad",
+      "weight_ton": 8,
+      "truck_type": "22 ft",
+      "pickup_when": "kal",
+      "budget_rs": 18000
+    }
+  }
+]

@@ -1,0 +1,82 @@
+[
+  {
+    "laneId": "L01",
+    "origin": "Bhiwandi",
+    "destination": "Surat",
+    "distanceKm": 284,
+    "transitDays": 1,
+    "returnLoadProb": 0.75
+  },
+  {
+    "laneId": "L02",
+    "origin": "Delhi",
+    "destination": "Jaipur",
+    "distanceKm": 281,
+    "transitDays": 1,
+    "returnLoadProb": 0.7
+  },
+  {
+    "laneId": "L03",
+    "origin": "Bhiwandi",
+    "destination": "Ahmedabad",
+    "distanceKm": 525,
+    "transitDays": 2,
+    "returnLoadProb": 0.65
+  },
+  {
+    "laneId": "L04",
+    "origin": "Pune",
+    "destination": "Nashik",
+    "distanceKm": 210,
+    "transitDays": 1,
+    "returnLoadProb": 0.6
+  },
+  {
+    "laneId": "L05",
+    "origin": "Delhi",
+    "destination": "Kanpur",
+    "distanceKm": 480,
+    "transitDays": 2,
+    "returnLoadProb": 0.55
+  },
+  {
+    "laneId": "L06",
+    "origin": "Ahmedabad",
+    "destination": "Indore",
+    "distanceKm": 400,
+    "transitDays": 2,
+    "returnLoadProb": 0.5
+  },
+  {
+    "laneId": "L07",
+    "origin": "Mumbai",
+    "destination": "Bengaluru",
+    "distanceKm": 980,
+    "transitDays": 3,
+    "returnLoadProb": 0.45
+  },
+  {
+    "laneId": "L08",
+    "origin": "Chennai",
+    "destination": "Hyderabad",
+    "distanceKm": 625,
+    "transitDays": 2,
+    "returnLoadProb": 0.55
+  },
+  {
+    "laneId": "L09",
+    "origin": "Kolkata",
+    "destination": "Patna",
+    "distanceKm": 580,
+    "transitDays": 2,
+    "returnLoadProb": 0.4
+  },
+  {
+    "laneId": "L10",
+    "origin": "Delhi",
+    "destination": "Mumbai",
+    "distanceKm": 1400,
+    "transitDays": 4,
+    "returnLoadProb": 0.6
+  }
+]

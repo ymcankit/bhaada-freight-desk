@@ -1,0 +1,21 @@
+{
+  "_comment": "City centroids for empty-run (deadhead) distance. Road km = straight-line km x roadFactor. Replace with a maps/OSRM call in production.",
+  "roadFactor": 1.3,
+  "cities": {
+    "Bhiwandi":  [19.30, 73.06],
+    "Mumbai":    [19.08, 72.88],
+    "Pune":      [18.52, 73.86],
+    "Nashik":    [20.00, 73.79],
+    "Surat":     [21.17, 72.83],
+    "Ahmedabad": [23.02, 72.57],
+    "Indore":    [22.72, 75.86],
+    "Delhi":     [28.61, 77.21],
+    "Jaipur":    [26.91, 75.79],
+    "Kanpur":    [26.45, 80.33],
+    "Bengaluru": [12.97, 77.59],
+    "Chennai":   [13.08, 80.27],
+    "Hyderabad": [17.39, 78.49],
+    "Kolkata":   [22.57, 88.36],
+    "Patna":     [25.59, 85.14]
+  }
+}

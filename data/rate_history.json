@@ -1,0 +1,821 @@
+[
+  {
+    "laneId": "L01",
+    "truckType": "24 ft SXL",
+    "quotedTotal": 9580.0,
+    "buyTotal": 8570.0,
+    "marginPct": 10.6,
+    "outcome": "lost",
+    "date": "2026-10-04"
+  },
+  {
+    "laneId": "L01",
+    "truckType": "14 ft",
+    "quotedTotal": 7090.0,
+    "buyTotal": 6670.0,
+    "marginPct": 5.9,
+    "outcome": "lost",
+    "date": "2026-10-18"
+  },
+  {
+    "laneId": "L01",
+    "truckType": "19 ft",
+    "quotedTotal": 8560.0,
+    "buyTotal": 7560.0,
+    "marginPct": 11.7,
+    "outcome": "lost",
+    "date": "2026-10-07"
+  },
+  {
+    "laneId": "L01",
+    "truckType": "20 ft container",
+    "quotedTotal": 8120.0,
+    "buyTotal": 7560.0,
+    "marginPct": 6.9,
+    "outcome": "lost",
+    "date": "2026-10-16"
+  },
+  {
+    "laneId": "L01",
+    "truckType": "22 ft",
+    "quotedTotal": 8610.0,
+    "buyTotal": 8150.0,
+    "marginPct": 5.3,
+    "outcome": "won",
+    "date": "2026-10-06"
+  },
+  {
+    "laneId": "L01",
+    "truckType": "20 ft container",
+    "quotedTotal": 8260.0,
+    "buyTotal": 7560.0,
+    "marginPct": 8.5,
+    "outcome": "won",
+    "date": "2026-10-22"
+  },
+  {
+    "laneId": "L01",
+    "truckType": "20 ft container",
+    "quotedTotal": 8760.0,
+    "buyTotal": 7560.0,
+    "marginPct": 13.7,
+    "outcome": "lost",
+    "date": "2026-10-23"
+  },
+  {
+    "laneId": "L01",
+    "truckType": "17 ft",
+    "quotedTotal": 7820.0,
+    "buyTotal": 7080.0,
+    "marginPct": 9.5,
+    "outcome": "lost",
+    "date": "2026-10-06"
+  },
+  {
+    "laneId": "L02",
+    "truckType": "32 ft MXL",
+    "quotedTotal": 11180.0,
+    "buyTotal": 9940.0,
+    "marginPct": 11.0,
+    "outcome": "won",
+    "date": "2026-10-12"
+  },
+  {
+    "laneId": "L02",
+    "truckType": "32 ft SXL",
+    "quotedTotal": 9490.0,
+    "buyTotal": 9000.0,
+    "marginPct": 5.2,
+    "outcome": "won",
+    "date": "2026-10-05"
+  },
+  {
+    "laneId": "L02",
+    "truckType": "22 ft",
+    "quotedTotal": 8880.0,
+    "buyTotal": 8080.0,
+    "marginPct": 9.0,
+    "outcome": "lost",
+    "date": "2026-10-19"
+  },
+  {
+    "laneId": "L02",
+    "truckType": "24 ft SXL",
+    "quotedTotal": 9660.0,
+    "buyTotal": 8500.0,
+    "marginPct": 12.0,
+    "outcome": "lost",
+    "date": "2026-10-20"
+  },
+  {
+    "laneId": "L02",
+    "truckType": "20 ft container",
+    "quotedTotal": 7860.0,
+    "buyTotal": 7500.0,
+    "marginPct": 4.6,
+    "outcome": "lost",
+    "date": "2026-10-23"
+  },
+  {
+    "laneId": "L02",
+    "truckType": "32 ft MXL",
+    "quotedTotal": 10970.0,
+    "buyTotal": 9940.0,
+    "marginPct": 9.3,
+    "outcome": "lost",
+    "date": "2026-10-19"
+  },
+  {
+    "laneId": "L02",
+    "truckType": "17 ft",
+    "quotedTotal": 8120.0,
+    "buyTotal": 7020.0,
+    "marginPct": 13.5,
+    "outcome": "lost",
+    "date": "2026-10-15"
+  },
+  {
+    "laneId": "L02",
+    "truckType": "32 ft SXL",
+    "quotedTotal": 9920.0,
+    "buyTotal": 9000.0,
+    "marginPct": 9.3,
+    "outcome": "won",
+    "date": "2026-10-18"
+  },
+  {
+    "laneId": "L02",
+    "truckType": "32 ft MXL",
+    "quotedTotal": 10560.0,
+    "buyTotal": 9940.0,
+    "marginPct": 5.8,
+    "outcome": "lost",
+    "date": "2026-10-14"
+  },
+  {
+    "laneId": "L02",
+    "truckType": "32 ft SXL",
+    "quotedTotal": 10300.0,
+    "buyTotal": 9000.0,
+    "marginPct": 12.6,
+    "outcome": "lost",
+    "date": "2026-10-17"
+  },
+  {
+    "laneId": "L02",
+    "truckType": "19 ft",
+    "quotedTotal": 7950.0,
+    "buyTotal": 7500.0,
+    "marginPct": 5.6,
+    "outcome": "lost",
+    "date": "2026-10-23"
+  },
+  {
+    "laneId": "L03",
+    "truckType": "24 ft SXL",
+    "quotedTotal": 17900.0,
+    "buyTotal": 15530.0,
+    "marginPct": 13.3,
+    "outcome": "lost",
+    "date": "2026-10-03"
+  },
+  {
+    "laneId": "L03",
+    "truckType": "22 ft",
+    "quotedTotal": 16460.0,
+    "buyTotal": 14750.0,
+    "marginPct": 10.4,
+    "outcome": "lost",
+    "date": "2026-10-05"
+  },
+  {
+    "laneId": "L03",
+    "truckType": "32 ft MXL",
+    "quotedTotal": 20300.0,
+    "buyTotal": 18220.0,
+    "marginPct": 10.2,
+    "outcome": "won",
+    "date": "2026-10-21"
+  },
+  {
+    "laneId": "L03",
+    "truckType": "19 ft",
+    "quotedTotal": 15740.0,
+    "buyTotal": 13660.0,
+    "marginPct": 13.3,
+    "outcome": "won",
+    "date": "2026-10-22"
+  },
+  {
+    "laneId": "L03",
+    "truckType": "32 ft MXL",
+    "quotedTotal": 20930.0,
+    "buyTotal": 18220.0,
+    "marginPct": 12.9,
+    "outcome": "lost",
+    "date": "2026-10-19"
+  },
+  {
+    "laneId": "L03",
+    "truckType": "14 ft",
+    "quotedTotal": 13740.0,
+    "buyTotal": 12020.0,
+    "marginPct": 12.6,
+    "outcome": "won",
+    "date": "2026-10-21"
+  },
+  {
+    "laneId": "L03",
+    "truckType": "Taurus (10-tyre)",
+    "quotedTotal": 19970.0,
+    "buyTotal": 18640.0,
+    "marginPct": 6.7,
+    "outcome": "won",
+    "date": "2026-10-19"
+  },
+  {
+    "laneId": "L04",
+    "truckType": "32 ft MXL",
+    "quotedTotal": 8220.0,
+    "buyTotal": 7870.0,
+    "marginPct": 4.2,
+    "outcome": "lost",
+    "date": "2026-10-18"
+  },
+  {
+    "laneId": "L04",
+    "truckType": "22 ft",
+    "quotedTotal": 7480.0,
+    "buyTotal": 6480.0,
+    "marginPct": 13.4,
+    "outcome": "lost",
+    "date": "2026-10-22"
+  },
+  {
+    "laneId": "L04",
+    "truckType": "24 ft SXL",
+    "quotedTotal": 7430.0,
+    "buyTotal": 6790.0,
+    "marginPct": 8.6,
+    "outcome": "lost",
+    "date": "2026-10-06"
+  },
+  {
+    "laneId": "L04",
+    "truckType": "32 ft SXL",
+    "quotedTotal": 7870.0,
+    "buyTotal": 7170.0,
+    "marginPct": 8.9,
+    "outcome": "won",
+    "date": "2026-10-20"
+  },
+  {
+    "laneId": "L04",
+    "truckType": "19 ft",
+    "quotedTotal": 6910.0,
+    "buyTotal": 6040.0,
+    "marginPct": 12.5,
+    "outcome": "lost",
+    "date": "2026-10-12"
+  },
+  {
+    "laneId": "L04",
+    "truckType": "20 ft container",
+    "quotedTotal": 6380.0,
+    "buyTotal": 6040.0,
+    "marginPct": 5.3,
+    "outcome": "lost",
+    "date": "2026-10-18"
+  },
+  {
+    "laneId": "L04",
+    "truckType": "17 ft",
+    "quotedTotal": 6080.0,
+    "buyTotal": 5690.0,
+    "marginPct": 6.5,
+    "outcome": "won",
+    "date": "2026-10-15"
+  },
+  {
+    "laneId": "L04",
+    "truckType": "22 ft",
+    "quotedTotal": 6820.0,
+    "buyTotal": 6480.0,
+    "marginPct": 4.9,
+    "outcome": "lost",
+    "date": "2026-10-13"
+  },
+  {
+    "laneId": "L04",
+    "truckType": "Taurus (10-tyre)",
+    "quotedTotal": 8760.0,
+    "buyTotal": 8040.0,
+    "marginPct": 8.3,
+    "outcome": "lost",
+    "date": "2026-10-06"
+  },
+  {
+    "laneId": "L05",
+    "truckType": "22 ft",
+    "quotedTotal": 15710.0,
+    "buyTotal": 14160.0,
+    "marginPct": 9.9,
+    "outcome": "lost",
+    "date": "2026-10-06"
+  },
+  {
+    "laneId": "L05",
+    "truckType": "32 ft SXL",
+    "quotedTotal": 17390.0,
+    "buyTotal": 15780.0,
+    "marginPct": 9.2,
+    "outcome": "lost",
+    "date": "2026-10-10"
+  },
+  {
+    "laneId": "L05",
+    "truckType": "32 ft SXL",
+    "quotedTotal": 16580.0,
+    "buyTotal": 15780.0,
+    "marginPct": 4.8,
+    "outcome": "lost",
+    "date": "2026-10-15"
+  },
+  {
+    "laneId": "L05",
+    "truckType": "20 ft container",
+    "quotedTotal": 13990.0,
+    "buyTotal": 13130.0,
+    "marginPct": 6.2,
+    "outcome": "lost",
+    "date": "2026-10-02"
+  },
+  {
+    "laneId": "L05",
+    "truckType": "22 ft",
+    "quotedTotal": 15740.0,
+    "buyTotal": 14160.0,
+    "marginPct": 10.0,
+    "outcome": "lost",
+    "date": "2026-10-22"
+  },
+  {
+    "laneId": "L05",
+    "truckType": "32 ft SXL",
+    "quotedTotal": 17430.0,
+    "buyTotal": 15780.0,
+    "marginPct": 9.5,
+    "outcome": "lost",
+    "date": "2026-10-14"
+  },
+  {
+    "laneId": "L05",
+    "truckType": "19 ft",
+    "quotedTotal": 14070.0,
+    "buyTotal": 13130.0,
+    "marginPct": 6.7,
+    "outcome": "lost",
+    "date": "2026-10-13"
+  },
+  {
+    "laneId": "L05",
+    "truckType": "24 ft SXL",
+    "quotedTotal": 16200.0,
+    "buyTotal": 14890.0,
+    "marginPct": 8.1,
+    "outcome": "lost",
+    "date": "2026-10-07"
+  },
+  {
+    "laneId": "L05",
+    "truckType": "24 ft SXL",
+    "quotedTotal": 16000.0,
+    "buyTotal": 14890.0,
+    "marginPct": 6.9,
+    "outcome": "lost",
+    "date": "2026-10-15"
+  },
+  {
+    "laneId": "L05",
+    "truckType": "Taurus (10-tyre)",
+    "quotedTotal": 19130.0,
+    "buyTotal": 17820.0,
+    "marginPct": 6.9,
+    "outcome": "lost",
+    "date": "2026-10-22"
+  },
+  {
+    "laneId": "L05",
+    "truckType": "32 ft MXL",
+    "quotedTotal": 18400.0,
+    "buyTotal": 17430.0,
+    "marginPct": 5.3,
+    "outcome": "won",
+    "date": "2026-10-12"
+  },
+  {
+    "laneId": "L05",
+    "truckType": "Taurus (10-tyre)",
+    "quotedTotal": 19260.0,
+    "buyTotal": 17820.0,
+    "marginPct": 7.5,
+    "outcome": "lost",
+    "date": "2026-10-05"
+  },
+  {
+    "laneId": "L06",
+    "truckType": "32 ft MXL",
+    "quotedTotal": 16350.0,
+    "buyTotal": 15030.0,
+    "marginPct": 8.1,
+    "outcome": "won",
+    "date": "2026-10-02"
+  },
+  {
+    "laneId": "L06",
+    "truckType": "19 ft",
+    "quotedTotal": 12350.0,
+    "buyTotal": 11440.0,
+    "marginPct": 7.4,
+    "outcome": "lost",
+    "date": "2026-10-15"
+  },
+  {
+    "laneId": "L06",
+    "truckType": "19 ft",
+    "quotedTotal": 13120.0,
+    "buyTotal": 11440.0,
+    "marginPct": 12.8,
+    "outcome": "won",
+    "date": "2026-10-20"
+  },
+  {
+    "laneId": "L06",
+    "truckType": "22 ft",
+    "quotedTotal": 13370.0,
+    "buyTotal": 12300.0,
+    "marginPct": 8.0,
+    "outcome": "lost",
+    "date": "2026-10-10"
+  },
+  {
+    "laneId": "L06",
+    "truckType": "32 ft MXL",
+    "quotedTotal": 16540.0,
+    "buyTotal": 15030.0,
+    "marginPct": 9.2,
+    "outcome": "lost",
+    "date": "2026-10-16"
+  },
+  {
+    "laneId": "L06",
+    "truckType": "32 ft MXL",
+    "quotedTotal": 16170.0,
+    "buyTotal": 15030.0,
+    "marginPct": 7.1,
+    "outcome": "lost",
+    "date": "2026-10-12"
+  },
+  {
+    "laneId": "L06",
+    "truckType": "24 ft SXL",
+    "quotedTotal": 13600.0,
+    "buyTotal": 12910.0,
+    "marginPct": 5.0,
+    "outcome": "lost",
+    "date": "2026-10-10"
+  },
+  {
+    "laneId": "L07",
+    "truckType": "20 ft container",
+    "quotedTotal": 28480.0,
+    "buyTotal": 24880.0,
+    "marginPct": 12.6,
+    "outcome": "lost",
+    "date": "2026-10-20"
+  },
+  {
+    "laneId": "L07",
+    "truckType": "32 ft SXL",
+    "quotedTotal": 35020.0,
+    "buyTotal": 30290.0,
+    "marginPct": 13.5,
+    "outcome": "lost",
+    "date": "2026-10-19"
+  },
+  {
+    "laneId": "L07",
+    "truckType": "32 ft MXL",
+    "quotedTotal": 37930.0,
+    "buyTotal": 33670.0,
+    "marginPct": 11.2,
+    "outcome": "lost",
+    "date": "2026-10-06"
+  },
+  {
+    "laneId": "L07",
+    "truckType": "32 ft SXL",
+    "quotedTotal": 34130.0,
+    "buyTotal": 30290.0,
+    "marginPct": 11.2,
+    "outcome": "lost",
+    "date": "2026-10-13"
+  },
+  {
+    "laneId": "L07",
+    "truckType": "19 ft",
+    "quotedTotal": 27910.0,
+    "buyTotal": 24880.0,
+    "marginPct": 10.8,
+    "outcome": "won",
+    "date": "2026-10-23"
+  },
+  {
+    "laneId": "L07",
+    "truckType": "17 ft",
+    "quotedTotal": 24140.0,
+    "buyTotal": 23160.0,
+    "marginPct": 4.1,
+    "outcome": "lost",
+    "date": "2026-10-05"
+  },
+  {
+    "laneId": "L07",
+    "truckType": "32 ft SXL",
+    "quotedTotal": 32250.0,
+    "buyTotal": 30290.0,
+    "marginPct": 6.1,
+    "outcome": "lost",
+    "date": "2026-10-20"
+  },
+  {
+    "laneId": "L07",
+    "truckType": "20 ft container",
+    "quotedTotal": 28480.0,
+    "buyTotal": 24880.0,
+    "marginPct": 12.6,
+    "outcome": "lost",
+    "date": "2026-10-02"
+  },
+  {
+    "laneId": "L07",
+    "truckType": "32 ft MXL",
+    "quotedTotal": 37110.0,
+    "buyTotal": 33670.0,
+    "marginPct": 9.3,
+    "outcome": "lost",
+    "date": "2026-10-22"
+  },
+  {
+    "laneId": "L07",
+    "truckType": "32 ft SXL",
+    "quotedTotal": 32870.0,
+    "buyTotal": 30290.0,
+    "marginPct": 7.9,
+    "outcome": "lost",
+    "date": "2026-10-15"
+  },
+  {
+    "laneId": "L07",
+    "truckType": "20 ft container",
+    "quotedTotal": 26900.0,
+    "buyTotal": 24880.0,
+    "marginPct": 7.5,
+    "outcome": "lost",
+    "date": "2026-10-24"
+  },
+  {
+    "laneId": "L07",
+    "truckType": "32 ft MXL",
+    "quotedTotal": 38260.0,
+    "buyTotal": 33670.0,
+    "marginPct": 12.0,
+    "outcome": "lost",
+    "date": "2026-10-16"
+  },
+  {
+    "laneId": "L08",
+    "truckType": "20 ft container",
+    "quotedTotal": 17380.0,
+    "buyTotal": 16190.0,
+    "marginPct": 6.8,
+    "outcome": "lost",
+    "date": "2026-10-10"
+  },
+  {
+    "laneId": "L08",
+    "truckType": "Taurus (10-tyre)",
+    "quotedTotal": 25080.0,
+    "buyTotal": 22300.0,
+    "marginPct": 11.1,
+    "outcome": "lost",
+    "date": "2026-10-16"
+  },
+  {
+    "laneId": "L08",
+    "truckType": "22 ft",
+    "quotedTotal": 18960.0,
+    "buyTotal": 17530.0,
+    "marginPct": 7.6,
+    "outcome": "lost",
+    "date": "2026-10-24"
+  },
+  {
+    "laneId": "L08",
+    "truckType": "22 ft",
+    "quotedTotal": 18490.0,
+    "buyTotal": 17530.0,
+    "marginPct": 5.2,
+    "outcome": "lost",
+    "date": "2026-10-13"
+  },
+  {
+    "laneId": "L08",
+    "truckType": "20 ft container",
+    "quotedTotal": 17600.0,
+    "buyTotal": 16190.0,
+    "marginPct": 8.0,
+    "outcome": "lost",
+    "date": "2026-10-05"
+  },
+  {
+    "laneId": "L08",
+    "truckType": "22 ft",
+    "quotedTotal": 18830.0,
+    "buyTotal": 17530.0,
+    "marginPct": 6.9,
+    "outcome": "lost",
+    "date": "2026-10-12"
+  },
+  {
+    "laneId": "L08",
+    "truckType": "20 ft container",
+    "quotedTotal": 18110.0,
+    "buyTotal": 16190.0,
+    "marginPct": 10.6,
+    "outcome": "lost",
+    "date": "2026-10-07"
+  },
+  {
+    "laneId": "L09",
+    "truckType": "Taurus (10-tyre)",
+    "quotedTotal": 22430.0,
+    "buyTotal": 20910.0,
+    "marginPct": 6.8,
+    "outcome": "lost",
+    "date": "2026-10-09"
+  },
+  {
+    "laneId": "L09",
+    "truckType": "19 ft",
+    "quotedTotal": 16970.0,
+    "buyTotal": 15240.0,
+    "marginPct": 10.2,
+    "outcome": "lost",
+    "date": "2026-10-08"
+  },
+  {
+    "laneId": "L09",
+    "truckType": "17 ft",
+    "quotedTotal": 16330.0,
+    "buyTotal": 14220.0,
+    "marginPct": 12.9,
+    "outcome": "lost",
+    "date": "2026-10-08"
+  },
+  {
+    "laneId": "L09",
+    "truckType": "17 ft",
+    "quotedTotal": 15490.0,
+    "buyTotal": 14220.0,
+    "marginPct": 8.2,
+    "outcome": "lost",
+    "date": "2026-10-04"
+  },
+  {
+    "laneId": "L09",
+    "truckType": "32 ft MXL",
+    "quotedTotal": 21600.0,
+    "buyTotal": 20440.0,
+    "marginPct": 5.3,
+    "outcome": "lost",
+    "date": "2026-10-06"
+  },
+  {
+    "laneId": "L09",
+    "truckType": "24 ft SXL",
+    "quotedTotal": 20010.0,
+    "buyTotal": 17370.0,
+    "marginPct": 13.2,
+    "outcome": "lost",
+    "date": "2026-10-16"
+  },
+  {
+    "laneId": "L09",
+    "truckType": "32 ft MXL",
+    "quotedTotal": 23110.0,
+    "buyTotal": 20440.0,
+    "marginPct": 11.6,
+    "outcome": "lost",
+    "date": "2026-10-10"
+  },
+  {
+    "laneId": "L10",
+    "truckType": "17 ft",
+    "quotedTotal": 35680.0,
+    "buyTotal": 31510.0,
+    "marginPct": 11.7,
+    "outcome": "lost",
+    "date": "2026-10-08"
+  },
+  {
+    "laneId": "L10",
+    "truckType": "32 ft SXL",
+    "quotedTotal": 46640.0,
+    "buyTotal": 41390.0,
+    "marginPct": 11.3,
+    "outcome": "lost",
+    "date": "2026-10-06"
+  },
+  {
+    "laneId": "L10",
+    "truckType": "32 ft SXL",
+    "quotedTotal": 47210.0,
+    "buyTotal": 41390.0,
+    "marginPct": 12.3,
+    "outcome": "lost",
+    "date": "2026-10-02"
+  },
+  {
+    "laneId": "L10",
+    "truckType": "20 ft container",
+    "quotedTotal": 36860.0,
+    "buyTotal": 33890.0,
+    "marginPct": 8.1,
+    "outcome": "lost",
+    "date": "2026-10-24"
+  },
+  {
+    "laneId": "L10",
+    "truckType": "20 ft container",
+    "quotedTotal": 39010.0,
+    "buyTotal": 33890.0,
+    "marginPct": 13.1,
+    "outcome": "lost",
+    "date": "2026-10-01"
+  },
+  {
+    "laneId": "L10",
+    "truckType": "22 ft",
+    "quotedTotal": 40940.0,
+    "buyTotal": 36800.0,
+    "marginPct": 10.1,
+    "outcome": "lost",
+    "date": "2026-10-11"
+  },
+  {
+    "laneId": "L10",
+    "truckType": "22 ft",
+    "quotedTotal": 42640.0,
+    "buyTotal": 36800.0,
+    "marginPct": 13.7,
+    "outcome": "lost",
+    "date": "2026-10-16"
+  },
+  {
+    "laneId": "L10",
+    "truckType": "20 ft container",
+    "quotedTotal": 35790.0,
+    "buyTotal": 33890.0,
+    "marginPct": 5.3,
+    "outcome": "lost",
+    "date": "2026-10-09"
+  },
+  {
+    "laneId": "L10",
+    "truckType": "22 ft",
+    "quotedTotal": 38770.0,
+    "buyTotal": 36800.0,
+    "marginPct": 5.1,
+    "outcome": "won",
+    "date": "2026-10-15"
+  },
+  {
+    "laneId": "L10",
+    "truckType": "32 ft MXL",
+    "quotedTotal": 51890.0,
+    "buyTotal": 46080.0,
+    "marginPct": 11.2,
+    "outcome": "won",
+    "date": "2026-10-11"
+  },
+  {
+    "laneId": "L10",
+    "truckType": "Taurus (10-tyre)",
+    "quotedTotal": 52280.0,
+    "buyTotal": 47180.0,
+    "marginPct": 9.8,
+    "outcome": "lost",
+    "date": "2026-10-06"
+  }
+]

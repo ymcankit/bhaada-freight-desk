@@ -1,0 +1,1195 @@
+[
+  {
+    "ownerId": "O001",
+    "name": "Sharma Transport",
+    "phone": "+919891030736",
+    "baseCity": "Bhiwandi",
+    "languages": [
+      "Hindi",
+      "Gujarati"
+    ],
+    "reliability": 4.6,
+    "truckIds": [
+      "T001",
+      "T002",
+      "T003",
+      "T004",
+      "T000"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 120,
+      "ratePremium": 0.997,
+      "minRateMult": 0.974,
+      "honoursHoldProb": 0.81,
+      "backsOutAfterHold": true
+    }
+  },
+  {
+    "ownerId": "O002",
+    "name": "Patel Roadlines",
+    "phone": "+919863100814",
+    "baseCity": "Bhiwandi",
+    "languages": [
+      "Tamil",
+      "Hindi"
+    ],
+    "reliability": 4.2,
+    "truckIds": [
+      "T005",
+      "T006",
+      "T007",
+      "T008",
+      "T009",
+      "T001b"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 40,
+      "ratePremium": 1.084,
+      "minRateMult": 0.943,
+      "honoursHoldProb": 0.93,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O003",
+    "name": "Jadhav Transport Co",
+    "phone": "+919881016525",
+    "baseCity": "Nashik",
+    "languages": [
+      "Hindi",
+      "Gujarati"
+    ],
+    "reliability": 4.9,
+    "truckIds": [
+      "T010",
+      "T011"
+    ],
+    "behavior": {
+      "respondsToCheckin": false,
+      "responseDelaySec": 20,
+      "ratePremium": 1.075,
+      "minRateMult": 0.909,
+      "honoursHoldProb": 0.96,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O004",
+    "name": "Gowda Freight Carriers",
+    "phone": "+919851273847",
+    "baseCity": "Kolkata",
+    "languages": [
+      "Hindi",
+      "Marathi"
+    ],
+    "reliability": 3.7,
+    "truckIds": [
+      "T012",
+      "T013",
+      "T014"
+    ],
+    "behavior": {
+      "respondsToCheckin": false,
+      "responseDelaySec": 20,
+      "ratePremium": 0.992,
+      "minRateMult": 0.939,
+      "honoursHoldProb": 0.81,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O005",
+    "name": "Gowda Roadways",
+    "phone": "+919851837852",
+    "baseCity": "Kolkata",
+    "languages": [
+      "Hindi",
+      "Punjabi"
+    ],
+    "reliability": 4.9,
+    "truckIds": [
+      "T015"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 90,
+      "ratePremium": 1.106,
+      "minRateMult": 0.936,
+      "honoursHoldProb": 0.84,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O006",
+    "name": "Khan Goods Transport",
+    "phone": "+919898447167",
+    "baseCity": "Bhiwandi",
+    "languages": [
+      "Hindi",
+      "Punjabi"
+    ],
+    "reliability": 4.1,
+    "truckIds": [
+      "T016",
+      "T017",
+      "T018"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 300,
+      "ratePremium": 0.988,
+      "minRateMult": 0.952,
+      "honoursHoldProb": 0.92,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O007",
+    "name": "Patel Road Carriers",
+    "phone": "+919822517517",
+    "baseCity": "Hyderabad",
+    "languages": [
+      "Hindi",
+      "Bhojpuri"
+    ],
+    "reliability": 4.7,
+    "truckIds": [
+      "T019",
+      "T020"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 90,
+      "ratePremium": 1.047,
+      "minRateMult": 0.969,
+      "honoursHoldProb": 0.96,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O008",
+    "name": "Yadav Road Carriers",
+    "phone": "+919892097999",
+    "baseCity": "Bhiwandi",
+    "languages": [
+      "Hindi",
+      "Bhojpuri"
+    ],
+    "reliability": 4.5,
+    "truckIds": [
+      "T021",
+      "T022",
+      "T023",
+      "T024",
+      "T025",
+      "T026",
+      "T027",
+      "T028"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 120,
+      "ratePremium": 1.022,
+      "minRateMult": 0.953,
+      "honoursHoldProb": 0.97,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O009",
+    "name": "Reddy Freight Carriers",
+    "phone": "+919899514287",
+    "baseCity": "Surat",
+    "languages": [
+      "Hindi"
+    ],
+    "reliability": 4.1,
+    "truckIds": [
+      "T029",
+      "T030",
+      "T031",
+      "T032",
+      "T033"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 90,
+      "ratePremium": 1.116,
+      "minRateMult": 0.96,
+      "honoursHoldProb": 0.97,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O010",
+    "name": "Rao Carriers",
+    "phone": "+919833966966",
+    "baseCity": "Kolkata",
+    "languages": [
+      "Telugu",
+      "Hindi"
+    ],
+    "reliability": 4.9,
+    "truckIds": [
+      "T034",
+      "T035",
+      "T036",
+      "T037"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 20,
+      "ratePremium": 1.064,
+      "minRateMult": 0.928,
+      "honoursHoldProb": 0.94,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O011",
+    "name": "Jadhav Transport Co",
+    "phone": "+919858884978",
+    "baseCity": "Mumbai",
+    "languages": [
+      "Hindi",
+      "Punjabi"
+    ],
+    "reliability": 3.7,
+    "truckIds": [
+      "T038"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 60,
+      "ratePremium": 1.067,
+      "minRateMult": 0.953,
+      "honoursHoldProb": 0.82,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O012",
+    "name": "Rathod Freight Carriers",
+    "phone": "+919850785405",
+    "baseCity": "Mumbai",
+    "languages": [
+      "Hindi",
+      "Gujarati"
+    ],
+    "reliability": 3.9,
+    "truckIds": [
+      "T039",
+      "T040"
+    ],
+    "behavior": {
+      "respondsToCheckin": false,
+      "responseDelaySec": 120,
+      "ratePremium": 1.072,
+      "minRateMult": 0.937,
+      "honoursHoldProb": 0.88,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O013",
+    "name": "Gupta Roadways",
+    "phone": "+919824305904",
+    "baseCity": "Indore",
+    "languages": [
+      "Hindi",
+      "Bhojpuri"
+    ],
+    "reliability": 4.2,
+    "truckIds": [
+      "T041",
+      "T042",
+      "T043",
+      "T044"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 300,
+      "ratePremium": 1.053,
+      "minRateMult": 0.904,
+      "honoursHoldProb": 0.84,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O014",
+    "name": "Menon Roadlines",
+    "phone": "+919873709724",
+    "baseCity": "Indore",
+    "languages": [
+      "Hindi",
+      "Punjabi"
+    ],
+    "reliability": 3.9,
+    "truckIds": [
+      "T045"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 300,
+      "ratePremium": 1.019,
+      "minRateMult": 0.962,
+      "honoursHoldProb": 0.89,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O015",
+    "name": "Rao Freight Carriers",
+    "phone": "+919861410126",
+    "baseCity": "Indore",
+    "languages": [
+      "Tamil",
+      "Hindi"
+    ],
+    "reliability": 3.8,
+    "truckIds": [
+      "T046"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 90,
+      "ratePremium": 1.037,
+      "minRateMult": 0.943,
+      "honoursHoldProb": 0.87,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O016",
+    "name": "Gupta Road Carriers",
+    "phone": "+919860885459",
+    "baseCity": "Nashik",
+    "languages": [
+      "Hindi",
+      "Gujarati"
+    ],
+    "reliability": 4.6,
+    "truckIds": [
+      "T047",
+      "T048",
+      "T049",
+      "T050",
+      "T051"
+    ],
+    "behavior": {
+      "respondsToCheckin": false,
+      "responseDelaySec": 60,
+      "ratePremium": 1.097,
+      "minRateMult": 0.938,
+      "honoursHoldProb": 0.93,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O017",
+    "name": "Patel Goods Transport",
+    "phone": "+919851870192",
+    "baseCity": "Delhi",
+    "languages": [
+      "Telugu",
+      "Hindi"
+    ],
+    "reliability": 4.5,
+    "truckIds": [
+      "T052",
+      "T053",
+      "T054"
+    ],
+    "behavior": {
+      "respondsToCheckin": false,
+      "responseDelaySec": 90,
+      "ratePremium": 1.112,
+      "minRateMult": 0.916,
+      "honoursHoldProb": 0.91,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O018",
+    "name": "Bhat Logistics",
+    "phone": "+919892666356",
+    "baseCity": "Surat",
+    "languages": [
+      "Hindi",
+      "Bhojpuri"
+    ],
+    "reliability": 4.8,
+    "truckIds": [
+      "T055",
+      "T056",
+      "T057"
+    ],
+    "behavior": {
+      "respondsToCheckin": false,
+      "responseDelaySec": 90,
+      "ratePremium": 1.041,
+      "minRateMult": 0.958,
+      "honoursHoldProb": 0.85,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O019",
+    "name": "Menon Logistics",
+    "phone": "+919867110154",
+    "baseCity": "Patna",
+    "languages": [
+      "Tamil",
+      "Hindi"
+    ],
+    "reliability": 4.3,
+    "truckIds": [
+      "T058",
+      "T059",
+      "T060",
+      "T061",
+      "T062"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 90,
+      "ratePremium": 1.018,
+      "minRateMult": 0.92,
+      "honoursHoldProb": 0.82,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O020",
+    "name": "Gupta Goods Transport",
+    "phone": "+919855728776",
+    "baseCity": "Surat",
+    "languages": [
+      "Hindi",
+      "Marathi"
+    ],
+    "reliability": 4.9,
+    "truckIds": [
+      "T063",
+      "T064",
+      "T065",
+      "T066"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 90,
+      "ratePremium": 0.996,
+      "minRateMult": 0.905,
+      "honoursHoldProb": 0.89,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O021",
+    "name": "Pillai Transport",
+    "phone": "+919880138498",
+    "baseCity": "Ahmedabad",
+    "languages": [
+      "Hindi",
+      "Punjabi"
+    ],
+    "reliability": 4.2,
+    "truckIds": [
+      "T067"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 120,
+      "ratePremium": 1.119,
+      "minRateMult": 0.924,
+      "honoursHoldProb": 0.91,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O022",
+    "name": "Joshi Roadlines",
+    "phone": "+919864830300",
+    "baseCity": "Kolkata",
+    "languages": [
+      "Hindi",
+      "Punjabi"
+    ],
+    "reliability": 4.5,
+    "truckIds": [
+      "T068"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 20,
+      "ratePremium": 1.012,
+      "minRateMult": 0.957,
+      "honoursHoldProb": 0.93,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O023",
+    "name": "Desai Roadlines",
+    "phone": "+919829090631",
+    "baseCity": "Chennai",
+    "languages": [
+      "Hindi"
+    ],
+    "reliability": 3.7,
+    "truckIds": [
+      "T069"
+    ],
+    "behavior": {
+      "respondsToCheckin": false,
+      "responseDelaySec": 120,
+      "ratePremium": 1.085,
+      "minRateMult": 0.946,
+      "honoursHoldProb": 0.85,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O024",
+    "name": "Singh Cargo Movers",
+    "phone": "+919846173157",
+    "baseCity": "Hyderabad",
+    "languages": [
+      "Telugu",
+      "Hindi"
+    ],
+    "reliability": 3.7,
+    "truckIds": [
+      "T070",
+      "T071"
+    ],
+    "behavior": {
+      "respondsToCheckin": false,
+      "responseDelaySec": 90,
+      "ratePremium": 1.053,
+      "minRateMult": 0.935,
+      "honoursHoldProb": 0.85,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O025",
+    "name": "Pillai Road Carriers",
+    "phone": "+919893940940",
+    "baseCity": "Chennai",
+    "languages": [
+      "Hindi",
+      "Punjabi"
+    ],
+    "reliability": 4.6,
+    "truckIds": [
+      "T072",
+      "T073",
+      "T074",
+      "T075"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 120,
+      "ratePremium": 0.998,
+      "minRateMult": 0.923,
+      "honoursHoldProb": 0.96,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O026",
+    "name": "Mehta Roadlines",
+    "phone": "+919812059919",
+    "baseCity": "Bhiwandi",
+    "languages": [
+      "Tamil",
+      "Hindi"
+    ],
+    "reliability": 3.8,
+    "truckIds": [
+      "T076",
+      "T077",
+      "T078",
+      "T079",
+      "T080",
+      "T081",
+      "T082",
+      "T083"
+    ],
+    "behavior": {
+      "respondsToCheckin": false,
+      "responseDelaySec": 40,
+      "ratePremium": 0.99,
+      "minRateMult": 0.963,
+      "honoursHoldProb": 0.85,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O027",
+    "name": "Joshi Road Carriers",
+    "phone": "+919840532691",
+    "baseCity": "Chennai",
+    "languages": [
+      "Tamil",
+      "Hindi"
+    ],
+    "reliability": 3.7,
+    "truckIds": [
+      "T084"
+    ],
+    "behavior": {
+      "respondsToCheckin": false,
+      "responseDelaySec": 300,
+      "ratePremium": 1.079,
+      "minRateMult": 0.908,
+      "honoursHoldProb": 0.83,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O028",
+    "name": "Shah Transport",
+    "phone": "+919876795767",
+    "baseCity": "Bhiwandi",
+    "languages": [
+      "Telugu",
+      "Hindi"
+    ],
+    "reliability": 3.8,
+    "truckIds": [
+      "T085",
+      "T086"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 60,
+      "ratePremium": 1.044,
+      "minRateMult": 0.953,
+      "honoursHoldProb": 0.96,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O029",
+    "name": "Desai Freight Carriers",
+    "phone": "+919887149951",
+    "baseCity": "Chennai",
+    "languages": [
+      "Hindi",
+      "Gujarati"
+    ],
+    "reliability": 4.9,
+    "truckIds": [
+      "T087",
+      "T088"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 300,
+      "ratePremium": 1.035,
+      "minRateMult": 0.901,
+      "honoursHoldProb": 0.96,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O030",
+    "name": "Gowda Transport",
+    "phone": "+919833574011",
+    "baseCity": "Kanpur",
+    "languages": [
+      "Hindi",
+      "Marathi"
+    ],
+    "reliability": 3.8,
+    "truckIds": [
+      "T089",
+      "T090",
+      "T091"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 60,
+      "ratePremium": 1.054,
+      "minRateMult": 0.973,
+      "honoursHoldProb": 0.95,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O031",
+    "name": "Nair Cargo Movers",
+    "phone": "+919884801233",
+    "baseCity": "Kolkata",
+    "languages": [
+      "Hindi",
+      "Gujarati"
+    ],
+    "reliability": 3.7,
+    "truckIds": [
+      "T092"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 60,
+      "ratePremium": 1.055,
+      "minRateMult": 0.936,
+      "honoursHoldProb": 0.92,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O032",
+    "name": "Thakur Freight Carriers",
+    "phone": "+919825659979",
+    "baseCity": "Bengaluru",
+    "languages": [
+      "Hindi",
+      "Marathi"
+    ],
+    "reliability": 3.7,
+    "truckIds": [
+      "T093",
+      "T094"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 90,
+      "ratePremium": 0.996,
+      "minRateMult": 0.919,
+      "honoursHoldProb": 0.9,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O033",
+    "name": "Pawar Cargo Movers",
+    "phone": "+919835475673",
+    "baseCity": "Pune",
+    "languages": [
+      "Hindi"
+    ],
+    "reliability": 4.8,
+    "truckIds": [
+      "T095",
+      "T096",
+      "T097"
+    ],
+    "behavior": {
+      "respondsToCheckin": false,
+      "responseDelaySec": 20,
+      "ratePremium": 1.073,
+      "minRateMult": 0.951,
+      "honoursHoldProb": 0.91,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O034",
+    "name": "Sharma Transport",
+    "phone": "+919824754064",
+    "baseCity": "Kolkata",
+    "languages": [
+      "Tamil",
+      "Hindi"
+    ],
+    "reliability": 4.7,
+    "truckIds": [
+      "T098",
+      "T099"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 60,
+      "ratePremium": 1.091,
+      "minRateMult": 0.919,
+      "honoursHoldProb": 0.86,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O035",
+    "name": "Yadav Freight Carriers",
+    "phone": "+919878885632",
+    "baseCity": "Bhiwandi",
+    "languages": [
+      "Telugu",
+      "Hindi"
+    ],
+    "reliability": 3.7,
+    "truckIds": [
+      "T100"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 120,
+      "ratePremium": 0.986,
+      "minRateMult": 0.963,
+      "honoursHoldProb": 0.96,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O036",
+    "name": "Kumar Freight Carriers",
+    "phone": "+919867723010",
+    "baseCity": "Indore",
+    "languages": [
+      "Hindi",
+      "Punjabi"
+    ],
+    "reliability": 4.8,
+    "truckIds": [
+      "T101",
+      "T102",
+      "T103"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 90,
+      "ratePremium": 1.036,
+      "minRateMult": 0.958,
+      "honoursHoldProb": 0.86,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O037",
+    "name": "Chauhan Freight Carriers",
+    "phone": "+919886181117",
+    "baseCity": "Pune",
+    "languages": [
+      "Telugu",
+      "Hindi"
+    ],
+    "reliability": 3.7,
+    "truckIds": [
+      "T104",
+      "T105",
+      "T106",
+      "T107",
+      "T108",
+      "T109",
+      "T110",
+      "T111"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 40,
+      "ratePremium": 1.086,
+      "minRateMult": 0.904,
+      "honoursHoldProb": 0.81,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O038",
+    "name": "Desai Road Carriers",
+    "phone": "+919811037490",
+    "baseCity": "Indore",
+    "languages": [
+      "Hindi",
+      "Punjabi"
+    ],
+    "reliability": 4.6,
+    "truckIds": [
+      "T112",
+      "T113",
+      "T114"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 90,
+      "ratePremium": 1.055,
+      "minRateMult": 0.918,
+      "honoursHoldProb": 0.9,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O039",
+    "name": "Thakur Goods Transport",
+    "phone": "+919892963368",
+    "baseCity": "Surat",
+    "languages": [
+      "Hindi",
+      "Punjabi"
+    ],
+    "reliability": 4.7,
+    "truckIds": [
+      "T115",
+      "T116"
+    ],
+    "behavior": {
+      "respondsToCheckin": false,
+      "responseDelaySec": 20,
+      "ratePremium": 1.041,
+      "minRateMult": 0.908,
+      "honoursHoldProb": 0.88,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O040",
+    "name": "Pawar Roadways",
+    "phone": "+919844355473",
+    "baseCity": "Surat",
+    "languages": [
+      "Hindi",
+      "Marathi"
+    ],
+    "reliability": 3.8,
+    "truckIds": [
+      "T117",
+      "T118"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 300,
+      "ratePremium": 0.991,
+      "minRateMult": 0.976,
+      "honoursHoldProb": 0.91,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O041",
+    "name": "Desai Transport Co",
+    "phone": "+919892545028",
+    "baseCity": "Kolkata",
+    "languages": [
+      "Telugu",
+      "Hindi"
+    ],
+    "reliability": 4.3,
+    "truckIds": [
+      "T119",
+      "T120",
+      "T121"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 120,
+      "ratePremium": 1.114,
+      "minRateMult": 0.959,
+      "honoursHoldProb": 0.81,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O042",
+    "name": "Chettri Transport Co",
+    "phone": "+919877719420",
+    "baseCity": "Chennai",
+    "languages": [
+      "Tamil",
+      "Hindi"
+    ],
+    "reliability": 3.8,
+    "truckIds": [
+      "T122"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 90,
+      "ratePremium": 1.119,
+      "minRateMult": 0.942,
+      "honoursHoldProb": 0.91,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O043",
+    "name": "Verma Goods Transport",
+    "phone": "+919884888554",
+    "baseCity": "Kanpur",
+    "languages": [
+      "Tamil",
+      "Hindi"
+    ],
+    "reliability": 4.1,
+    "truckIds": [
+      "T123"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 300,
+      "ratePremium": 1.115,
+      "minRateMult": 0.948,
+      "honoursHoldProb": 0.83,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O044",
+    "name": "Khan Transport Co",
+    "phone": "+919827152188",
+    "baseCity": "Chennai",
+    "languages": [
+      "Tamil",
+      "Hindi"
+    ],
+    "reliability": 4.5,
+    "truckIds": [
+      "T124"
+    ],
+    "behavior": {
+      "respondsToCheckin": false,
+      "responseDelaySec": 300,
+      "ratePremium": 1.108,
+      "minRateMult": 0.907,
+      "honoursHoldProb": 0.92,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O045",
+    "name": "Kumar Goods Transport",
+    "phone": "+919830703455",
+    "baseCity": "Bhiwandi",
+    "languages": [
+      "Hindi",
+      "Marathi"
+    ],
+    "reliability": 3.8,
+    "truckIds": [
+      "T125",
+      "T126"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 120,
+      "ratePremium": 1.093,
+      "minRateMult": 0.913,
+      "honoursHoldProb": 0.88,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O046",
+    "name": "Jadhav Goods Transport",
+    "phone": "+919859823245",
+    "baseCity": "Chennai",
+    "languages": [
+      "Telugu",
+      "Hindi"
+    ],
+    "reliability": 4.8,
+    "truckIds": [
+      "T127",
+      "T128",
+      "T129"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 120,
+      "ratePremium": 1.099,
+      "minRateMult": 0.923,
+      "honoursHoldProb": 0.94,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O047",
+    "name": "Nair Cargo Movers",
+    "phone": "+919852773159",
+    "baseCity": "Kanpur",
+    "languages": [
+      "Hindi"
+    ],
+    "reliability": 4.7,
+    "truckIds": [
+      "T130",
+      "T131"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 40,
+      "ratePremium": 0.999,
+      "minRateMult": 0.923,
+      "honoursHoldProb": 0.95,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O048",
+    "name": "Bose Carriers",
+    "phone": "+919829270557",
+    "baseCity": "Kolkata",
+    "languages": [
+      "Hindi",
+      "Gujarati"
+    ],
+    "reliability": 4.2,
+    "truckIds": [
+      "T132",
+      "T133",
+      "T134"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 40,
+      "ratePremium": 1.06,
+      "minRateMult": 0.915,
+      "honoursHoldProb": 0.92,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O049",
+    "name": "Kumar Goods Transport",
+    "phone": "+919890859912",
+    "baseCity": "Surat",
+    "languages": [
+      "Hindi",
+      "Bhojpuri"
+    ],
+    "reliability": 3.8,
+    "truckIds": [
+      "T135",
+      "T136",
+      "T137",
+      "T138",
+      "T139",
+      "T140",
+      "T141",
+      "T142"
+    ],
+    "behavior": {
+      "respondsToCheckin": true,
+      "responseDelaySec": 20,
+      "ratePremium": 0.991,
+      "minRateMult": 0.953,
+      "honoursHoldProb": 0.86,
+      "backsOutAfterHold": false
+    }
+  },
+  {
+    "ownerId": "O050",
+    "name": "Joshi Road Carriers",
+    "phone": "+919891214453",
+    "baseCity": "Ahmedabad",
+    "languages": [
+      "Hindi",
+      "Marathi"
+    ],
+    "reliability": 4.5,
+    "truckIds": [
+      "T143",
+      "T144",
+      "T145"
+    ],
+    "behavior": {
+      "respondsToCheckin": false,
+      "responseDelaySec": 60,
+      "ratePremium": 1.042,
+      "minRateMult": 0.906,
+      "honoursHoldProb": 0.82,
+      "backsOutAfterHold": false
+    }
+  }
+]

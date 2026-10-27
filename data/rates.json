@@ -1,0 +1,60 @@
+{
+  "_comment": "All quotes derive from these drivers + lane distance. Edit here, never hardcode a lane price.",
+  "currency": "INR",
+  "dieselPerLitre": 96.5,
+  "mileageKmPerLitre": {
+    "14 ft": 6.0,
+    "17 ft": 5.5,
+    "19 ft": 5.0,
+    "22 ft": 4.5,
+    "24 ft SXL": 4.2,
+    "32 ft SXL": 4.0,
+    "32 ft MXL": 3.5,
+    "Taurus (10-tyre)": 3.4,
+    "20 ft container": 5.0
+  },
+  "axlesByType": {
+    "14 ft": 2,
+    "17 ft": 2,
+    "19 ft": 2,
+    "22 ft": 2,
+    "24 ft SXL": 2,
+    "32 ft SXL": 3,
+    "32 ft MXL": 3,
+    "Taurus (10-tyre)": 3,
+    "20 ft container": 2
+  },
+  "capacityTonByType": {
+    "14 ft": 4,
+    "17 ft": 6,
+    "19 ft": 7,
+    "22 ft": 10,
+    "24 ft SXL": 7,
+    "32 ft SXL": 9,
+    "32 ft MXL": 16,
+    "Taurus (10-tyre)": 21,
+    "20 ft container": 12
+  },
+  "tollPerKmByAxle": {
+    "2": 1.8,
+    "3": 2.5,
+    "4": 3.2
+  },
+  "driverCostPerDay": 1200,
+  "avgSpeedKmPerDay": 350,
+  "handlingMiscPerTrip": 600,
+  "returnLoadDiscountPct": 3.0,
+  "marginBand": {
+    "floorPct": 7,
+    "targetPct": 11,
+    "ceilingPct": 14
+  },
+  "sourcing": {
+    "maxDeadheadKm": 60,
+    "deadheadChargedShare": 0.25,
+    "ownersPerBroadcast": 5,
+    "ownerReplyTimeoutSec": 180,
+    "reliabilityPenaltyOnBackout": 0.4,
+    "_comment": "Owners near the pickup absorb most of a short empty run (the truck would otherwise sit idle); deadheadChargedShare is the part they price in."
+  }
+}
