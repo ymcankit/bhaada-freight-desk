@@ -89,6 +89,606 @@
    "lat": 25.59,
    "lon": 85.14,
    "src": "seed"
+  },
+  "lucknow": {
+   "name": "Lucknow",
+   "lat": 26.8381,
+   "lon": 80.9346001,
+   "src": "nominatim"
+  },
+  "nagpur": {
+   "name": "Nagpur City",
+   "lat": 21.1498134,
+   "lon": 79.0820556,
+   "src": "nominatim"
+  },
+  "nagpur city": {
+   "name": "Nagpur City",
+   "lat": 21.1498134,
+   "lon": 79.0820556,
+   "src": "nominatim"
+  },
+  "bhopal": {
+   "name": "Bhopal",
+   "lat": 23.2584857,
+   "lon": 77.401989,
+   "src": "nominatim"
+  },
+  "vadodara": {
+   "name": "Vadodara",
+   "lat": 22.2973142,
+   "lon": 73.1942567,
+   "src": "nominatim"
+  },
+  "ghaziabad": {
+   "name": "Ghaziabad",
+   "lat": 28.7749966,
+   "lon": 77.4586967,
+   "src": "nominatim"
+  },
+  "ludhiana": {
+   "name": "Ludhiana",
+   "lat": 30.9090157,
+   "lon": 75.851601,
+   "src": "nominatim"
+  },
+  "agra": {
+   "name": "Agra",
+   "lat": 27.1752554,
+   "lon": 78.0098161,
+   "src": "nominatim"
+  },
+  "faridabad": {
+   "name": "Faridabad",
+   "lat": 28.4031478,
+   "lon": 77.3105561,
+   "src": "nominatim"
+  },
+  "meerut": {
+   "name": "Meerut",
+   "lat": 29.0018557,
+   "lon": 77.7679671,
+   "src": "nominatim"
+  },
+  "rajkot": {
+   "name": "Rajkot",
+   "lat": 22.3053263,
+   "lon": 70.8028377,
+   "src": "nominatim"
+  },
+  "varanasi": {
+   "name": "Varanasi",
+   "lat": 25.3356491,
+   "lon": 83.0076292,
+   "src": "nominatim"
+  },
+  "aurangabad": {
+   "name": "Chhatrapati Sambhajinagar",
+   "lat": 19.877263,
+   "lon": 75.3390241,
+   "src": "nominatim"
+  },
+  "chhatrapati sambhajinagar": {
+   "name": "Chhatrapati Sambhajinagar",
+   "lat": 19.877263,
+   "lon": 75.3390241,
+   "src": "nominatim"
+  },
+  "amritsar": {
+   "name": "Amritsar",
+   "lat": 31.6356659,
+   "lon": 74.8787496,
+   "src": "nominatim"
+  },
+  "allahabad": {
+   "name": "Prayagraj",
+   "lat": 25.4381302,
+   "lon": 81.8338005,
+   "src": "nominatim"
+  },
+  "prayagraj": {
+   "name": "Prayagraj",
+   "lat": 25.4381302,
+   "lon": 81.8338005,
+   "src": "nominatim"
+  },
+  "ranchi": {
+   "name": "Ranchi",
+   "lat": 23.3700501,
+   "lon": 85.3250387,
+   "src": "nominatim"
+  },
+  "jabalpur": {
+   "name": "Jabalpur",
+   "lat": 23.1701522,
+   "lon": 79.9324505,
+   "src": "nominatim"
+  },
+  "gwalior": {
+   "name": "Gwalior",
+   "lat": 26.2037247,
+   "lon": 78.1573628,
+   "src": "nominatim"
+  },
+  "coimbatore": {
+   "name": "Coimbatore",
+   "lat": 11.0018115,
+   "lon": 76.9628425,
+   "src": "nominatim"
+  },
+  "vijayawada": {
+   "name": "Vijayawada",
+   "lat": 16.5115306,
+   "lon": 80.6160469,
+   "src": "nominatim"
+  },
+  "jodhpur": {
+   "name": "Jodhpur",
+   "lat": 26.2967719,
+   "lon": 73.0351433,
+   "src": "nominatim"
+  },
+  "madurai": {
+   "name": "Madurai",
+   "lat": 9.9261153,
+   "lon": 78.1140983,
+   "src": "nominatim"
+  },
+  "raipur": {
+   "name": "Raipur",
+   "lat": 21.2380912,
+   "lon": 81.6336993,
+   "src": "nominatim"
+  },
+  "kota": {
+   "name": "Kota",
+   "lat": 25.1737019,
+   "lon": 75.8574194,
+   "src": "nominatim"
+  },
+  "guwahati": {
+   "name": "Guwahati",
+   "lat": 26.1805978,
+   "lon": 91.753943,
+   "src": "nominatim"
+  },
+  "chandigarh": {
+   "name": "Chandigarh",
+   "lat": 30.7334421,
+   "lon": 76.7797143,
+   "src": "nominatim"
+  },
+  "solapur": {
+   "name": "Solapur",
+   "lat": 17.8499067,
+   "lon": 75.2763203,
+   "src": "nominatim"
+  },
+  "bareilly": {
+   "name": "Bareilly",
+   "lat": 28.4582345,
+   "lon": 79.4047452,
+   "src": "nominatim"
+  },
+  "moradabad": {
+   "name": "Moradabad",
+   "lat": 28.8796553,
+   "lon": 78.8095335,
+   "src": "nominatim"
+  },
+  "mysuru": {
+   "name": "Mysuru",
+   "lat": 12.3041464,
+   "lon": 76.6529521,
+   "src": "nominatim"
+  },
+  "gurugram": {
+   "name": "Gurugram",
+   "lat": 28.4646148,
+   "lon": 77.0299194,
+   "src": "nominatim"
+  },
+  "aligarh": {
+   "name": "Aligarh",
+   "lat": 27.8761073,
+   "lon": 78.1358153,
+   "src": "nominatim"
+  },
+  "jalandhar": {
+   "name": "Jalandhar",
+   "lat": 31.2922312,
+   "lon": 75.5678878,
+   "src": "nominatim"
+  },
+  "tiruchirappalli": {
+   "name": "Tiruchirappalli",
+   "lat": 10.8071144,
+   "lon": 78.6880939,
+   "src": "nominatim"
+  },
+  "bhubaneswar": {
+   "name": "Bhubaneswar",
+   "lat": 20.2602964,
+   "lon": 85.8394521,
+   "src": "nominatim"
+  },
+  "salem": {
+   "name": "Salem",
+   "lat": 11.6469616,
+   "lon": 78.2106958,
+   "src": "nominatim"
+  },
+  "thiruvananthapuram": {
+   "name": "Thiruvananthapuram",
+   "lat": 8.4882267,
+   "lon": 76.947551,
+   "src": "nominatim"
+  },
+  "saharanpur": {
+   "name": "Saharanpur",
+   "lat": 29.9856799,
+   "lon": 77.5040646,
+   "src": "nominatim"
+  },
+  "gorakhpur": {
+   "name": "Gorakhpur",
+   "lat": 26.6677977,
+   "lon": 83.3642334,
+   "src": "nominatim"
+  },
+  "guntur": {
+   "name": "Guntur",
+   "lat": 16.2915189,
+   "lon": 80.4541588,
+   "src": "nominatim"
+  },
+  "bikaner": {
+   "name": "Bikaner",
+   "lat": 28.0159286,
+   "lon": 73.3171367,
+   "src": "nominatim"
+  },
+  "noida": {
+   "name": "Noida",
+   "lat": 28.5706333,
+   "lon": 77.3272147,
+   "src": "nominatim"
+  },
+  "jamshedpur": {
+   "name": "Jamshedpur",
+   "lat": 22.8015194,
+   "lon": 86.2029579,
+   "src": "nominatim"
+  },
+  "bhilai": {
+   "name": "Bhilai",
+   "lat": 21.2120677,
+   "lon": 81.3732849,
+   "src": "nominatim"
+  },
+  "cuttack": {
+   "name": "Cuttack",
+   "lat": 20.4686,
+   "lon": 85.8792,
+   "src": "nominatim"
+  },
+  "kochi": {
+   "name": "Kochi",
+   "lat": 9.9679032,
+   "lon": 76.2444378,
+   "src": "nominatim"
+  },
+  "udaipur": {
+   "name": "Udaipur",
+   "lat": 24.578721,
+   "lon": 73.6862571,
+   "src": "nominatim"
+  },
+  "dehradun": {
+   "name": "Dehradun",
+   "lat": 30.3255646,
+   "lon": 78.0436813,
+   "src": "nominatim"
+  },
+  "thane": {
+   "name": "Thane",
+   "lat": 19.3653598,
+   "lon": 73.3685437,
+   "src": "nominatim"
+  },
+  "navi": {
+   "name": "New Amravati",
+   "lat": 20.9030406,
+   "lon": 77.7329016,
+   "src": "nominatim"
+  },
+  "new amravati": {
+   "name": "New Amravati",
+   "lat": 20.9030406,
+   "lon": 77.7329016,
+   "src": "nominatim"
+  },
+  "panvel": {
+   "name": "Panvel",
+   "lat": 18.9895249,
+   "lon": 73.1221935,
+   "src": "nominatim"
+  },
+  "vapi": {
+   "name": "Vapi",
+   "lat": 20.3735482,
+   "lon": 72.9084376,
+   "src": "nominatim"
+  },
+  "silvassa": {
+   "name": "Silvassa",
+   "lat": 20.2736768,
+   "lon": 73.0045787,
+   "src": "nominatim"
+  },
+  "ankleshwar": {
+   "name": "Ankleshwar",
+   "lat": 21.6293206,
+   "lon": 72.9945103,
+   "src": "nominatim"
+  },
+  "bharuch": {
+   "name": "Bharuch",
+   "lat": 21.7080427,
+   "lon": 72.9956936,
+   "src": "nominatim"
+  },
+  "jamnagar": {
+   "name": "Jamnagar",
+   "lat": 22.4732415,
+   "lon": 70.0552102,
+   "src": "nominatim"
+  },
+  "kandla": {
+   "name": "Kandla",
+   "lat": 32.6912634,
+   "lon": 76.0696792,
+   "src": "nominatim"
+  },
+  "mundra": {
+   "name": "મુન્દ્રા",
+   "lat": 22.8393153,
+   "lon": 69.7249477,
+   "src": "nominatim"
+  },
+  "મુન્દ્રા": {
+   "name": "મુન્દ્રા",
+   "lat": 22.8393153,
+   "lon": 69.7249477,
+   "src": "nominatim"
+  },
+  "gandhidham": {
+   "name": "ગાંધીધામ",
+   "lat": 23.0718743,
+   "lon": 70.131715,
+   "src": "nominatim"
+  },
+  "ગાંધીધામ": {
+   "name": "ગાંધીધામ",
+   "lat": 23.0718743,
+   "lon": 70.131715,
+   "src": "nominatim"
+  },
+  "hosur": {
+   "name": "Hosur",
+   "lat": 12.7183361,
+   "lon": 77.8229481,
+   "src": "nominatim"
+  },
+  "sriperumbudur": {
+   "name": "Sriperumbudur",
+   "lat": 12.9666144,
+   "lon": 79.9458077,
+   "src": "nominatim"
+  },
+  "manesar": {
+   "name": "Manesar",
+   "lat": 28.3247096,
+   "lon": 76.9263787,
+   "src": "nominatim"
+  },
+  "rudrapur": {
+   "name": "Rudrapur",
+   "lat": 28.9707183,
+   "lon": 79.3972845,
+   "src": "nominatim"
+  },
+  "haridwar": {
+   "name": "Haridwār",
+   "lat": 29.9384473,
+   "lon": 78.1452985,
+   "src": "nominatim"
+  },
+  "haridwār": {
+   "name": "Haridwār",
+   "lat": 29.9384473,
+   "lon": 78.1452985,
+   "src": "nominatim"
+  },
+  "baddi": {
+   "name": "Baddi",
+   "lat": 30.9763026,
+   "lon": 76.7674001,
+   "src": "nominatim"
+  },
+  "panipat": {
+   "name": "Panipat",
+   "lat": 29.391272,
+   "lon": 76.9771681,
+   "src": "nominatim"
+  },
+  "sonipat": {
+   "name": "Sonipat",
+   "lat": 28.9953758,
+   "lon": 77.0233627,
+   "src": "nominatim"
+  },
+  "kalyan": {
+   "name": "Kalyan",
+   "lat": 19.2396742,
+   "lon": 73.1366482,
+   "src": "nominatim"
+  },
+  "nellore": {
+   "name": "Nellore",
+   "lat": 14.4493717,
+   "lon": 79.9873763,
+   "src": "nominatim"
+  },
+  "hubli": {
+   "name": "Hubballi",
+   "lat": 15.3518378,
+   "lon": 75.1379848,
+   "src": "nominatim"
+  },
+  "hubballi": {
+   "name": "Hubballi",
+   "lat": 15.3518378,
+   "lon": 75.1379848,
+   "src": "nominatim"
+  },
+  "belgaum": {
+   "name": "Belagavi",
+   "lat": 15.8572666,
+   "lon": 74.5069343,
+   "src": "nominatim"
+  },
+  "belagavi": {
+   "name": "Belagavi",
+   "lat": 15.8572666,
+   "lon": 74.5069343,
+   "src": "nominatim"
+  },
+  "mangalore": {
+   "name": "Mangaluru",
+   "lat": 12.8698247,
+   "lon": 74.8430125,
+   "src": "nominatim"
+  },
+  "mangaluru": {
+   "name": "Mangaluru",
+   "lat": 12.8698247,
+   "lon": 74.8430125,
+   "src": "nominatim"
+  },
+  "kolhapur": {
+   "name": "Kolhapur",
+   "lat": 16.7028412,
+   "lon": 74.2405329,
+   "src": "nominatim"
+  },
+  "sangli": {
+   "name": "Sangli",
+   "lat": 17.1726928,
+   "lon": 74.5867654,
+   "src": "nominatim"
+  },
+  "ahmednagar": {
+   "name": "Ahilyanagar",
+   "lat": 19.092952,
+   "lon": 74.7493451,
+   "src": "nominatim"
+  },
+  "ahilyanagar": {
+   "name": "Ahilyanagar",
+   "lat": 19.092952,
+   "lon": 74.7493451,
+   "src": "nominatim"
+  },
+  "jalgaon": {
+   "name": "Jalgaon",
+   "lat": 20.8428827,
+   "lon": 75.5261246,
+   "src": "nominatim"
+  },
+  "akola": {
+   "name": "Akola",
+   "lat": 20.7618122,
+   "lon": 77.1921157,
+   "src": "nominatim"
+  },
+  "amravati": {
+   "name": "Amravati",
+   "lat": 21.1545412,
+   "lon": 77.6442962,
+   "src": "nominatim"
+  },
+  "raigad": {
+   "name": "Raigad",
+   "lat": 18.4928092,
+   "lon": 73.138071,
+   "src": "nominatim"
+  },
+  "siliguri": {
+   "name": "Siliguri",
+   "lat": 26.7164127,
+   "lon": 88.4309916,
+   "src": "nominatim"
+  },
+  "durgapur": {
+   "name": "Durgapur",
+   "lat": 23.5350475,
+   "lon": 87.3380425,
+   "src": "nominatim"
+  },
+  "asansol": {
+   "name": "Asansol",
+   "lat": 23.686864,
+   "lon": 86.9745586,
+   "src": "nominatim"
+  },
+  "dhanbad": {
+   "name": "Dhanbad",
+   "lat": 23.7952809,
+   "lon": 86.4309638,
+   "src": "nominatim"
+  },
+  "bokaro": {
+   "name": "Bokaro",
+   "lat": 23.6991279,
+   "lon": 85.9910689,
+   "src": "nominatim"
+  },
+  "rourkela": {
+   "name": "Rourkela",
+   "lat": 22.2309255,
+   "lon": 84.8678705,
+   "src": "nominatim"
+  },
+  "tirupur": {
+   "name": "tirupur",
+   "lat": 11.1671878,
+   "lon": 77.3472673,
+   "src": "nominatim"
+  },
+  "erode": {
+   "name": "Erode",
+   "lat": 11.4905282,
+   "lon": 77.3505274,
+   "src": "nominatim"
+  },
+  "karur": {
+   "name": "Karur",
+   "lat": 10.8217671,
+   "lon": 78.3828654,
+   "src": "nominatim"
+  },
+  "vellore": {
+   "name": "Vellore",
+   "lat": 12.9021849,
+   "lon": 79.061104,
+   "src": "nominatim"
+  },
+  "warangal": {
+   "name": "Warangal",
+   "lat": 17.9820644,
+   "lon": 79.5970954,
+   "src": "nominatim"
   }
  },
  "routes": {

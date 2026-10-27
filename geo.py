@@ -10,6 +10,7 @@ import requests
 CACHE_FILE = Path(__file__).parent / "data" / "geo_cache.json"
 UA = {"User-Agent": "bhaada-freight-desk/1.0 (github.com/ymcankit/bhaada-freight-desk)"}
 NOMINATIM = "https://nominatim.openstreetmap.org/search"
+PHOTON = "https://photon.komoot.io/api/"      # second OpenStreetMap geocoder: Nominatim often throttles cloud hosts
 OSRM = "https://router.project-osrm.org/route/v1/driving/{},{};{},{}?overview=false"
 ROAD_FACTOR = 1.3
 _lock = threading.Lock()
@@ -55,11 +56,24 @@ def resolve_city(text):
             hits = r.json() if r.ok else []
         except Exception:
             hits = []
-        if not hits:
+        hit = None
+        if hits:
+            h = hits[0]
+            hit = {"name": (h.get("name") or str(text)).strip(), "lat": float(h["lat"]), "lon": float(h["lon"]), "src": "nominatim"}
+        else:
+            try:
+                r = requests.get(PHOTON, params={"q": f"{text}, India", "limit": 5, "lang": "en"}, headers=UA, timeout=10)
+                feats = [f for f in (r.json().get("features", []) if r.ok else []) if f["properties"].get("country") == "India"]
+            except Exception:
+                feats = []
+            if feats:
+                f = feats[0]
+                lon, lat = f["geometry"]["coordinates"]
+                hit = {"name": (f["properties"].get("name") or str(text)).strip(), "lat": lat, "lon": lon, "src": "photon"}
+        if not hit:
+            print("geocode failed for", repr(text))
             return None
-        h = hits[0]
-        name = (h.get("name") or str(text)).strip()
-        hit = {"name": name, "lat": float(h["lat"]), "lon": float(h["lon"]), "src": "nominatim"}
+        name = hit["name"]
         _cache["cities"][key] = hit
         _cache["cities"].setdefault(name.lower(), hit)
         _save()
