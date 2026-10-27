@@ -105,10 +105,15 @@ def voice_hint():
             f"Cities: {', '.join(KNOWN_CITIES)}. Truck types: {', '.join(KNOWN_TYPES)}. "
             "Words: gaadi, kapda, bhada, ton, chahiye, kal subah, parso, se, tak, MXL, SXL, Taurus, 10 tyre.")
 
-def transcribe(audio_bytes, mime="audio/mpeg", timeout=60, retries=2):
+AUDIO_EXT = {"ogg": ".ogg", "opus": ".ogg", "mpeg": ".mp3", "mp3": ".mp3", "mp4": ".m4a", "m4a": ".m4a",
+             "aac": ".m4a", "wav": ".wav", "webm": ".webm", "amr": ".amr"}
+
+def transcribe(audio_bytes, mime="audio/mpeg", timeout=60, retries=2, name=None):
+    """name: the sender's file name, if any; its extension wins over the mime type."""
     if not LLM["key"]:
         raise RuntimeError("GROQ_API_KEY is not set")
-    ext = ".ogg" if ("ogg" in mime or "opus" in mime) else ".m4a"
+    tail = (name or "").rsplit(".", 1)[-1].lower() if name and "." in name else ""
+    ext = AUDIO_EXT.get(tail) or next((v for k, v in AUDIO_EXT.items() if k in (mime or "")), ".ogg")
     last = None
     for i in range(retries):
         try:

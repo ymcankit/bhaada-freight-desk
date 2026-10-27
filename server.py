@@ -235,11 +235,11 @@ def handle_telegram(u):
     key = f"tg:{m['chat']['id']}"
     with LOCKS.setdefault(key, threading.Lock()):
         try:
-            if m.get("voice") or m.get("audio"):
-                f = requests.get(f"{TG_API}/getFile", params={"file_id": (m.get("voice") or m.get("audio"))["file_id"]},
-                                 timeout=15).json()["result"]
+            media = m.get("voice") or m.get("audio") or m.get("video_note")
+            if media:
+                f = requests.get(f"{TG_API}/getFile", params={"file_id": media["file_id"]}, timeout=15).json()["result"]
                 audio = requests.get(f"https://api.telegram.org/file/bot{TG_TOKEN}/{f['file_path']}", timeout=60).content
-                text = E.transcribe(audio, "audio/ogg")
+                text = E.transcribe(audio, media.get("mime_type") or "audio/ogg", name=f.get("file_path"))
                 send(key, f"🎤 Heard: {text}")
             elif m.get("text"):
                 text = m["text"].strip()
