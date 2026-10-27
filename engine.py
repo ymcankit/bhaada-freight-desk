@@ -230,6 +230,10 @@ Fill load with everything known so far. If all required fields are known set com
     reply = out.get("reply", "")
     if miss and (out.get("complete") or not reply):
         reply = "Ek cheez confirm karni hai — " + ASK[miss[0]]
+    if not miss:      # read back what will be booked, from the validated fields rather than the model's wording
+        reply = (f"Theek hai ✅ {merged['origin']} → {merged['destination']}, {merged['weight_ton']:g} T, {merged['truck_type']}, "
+                 f"{merged.get('pickup_when') or 'kal'}" + (f", budget ₹{merged['budget_rs']:,.0f}" if merged.get("budget_rs") else "")
+                 + ". Owners ko message kar raha hoon.")
     return merged, reply, miss
 
 # =============================== geography and dates ===============================
