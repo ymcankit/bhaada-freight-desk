@@ -127,6 +127,8 @@ def transcribe(audio_bytes, mime="audio/mpeg", timeout=60, retries=2):
 CITY_ALIASES = {"bombay": "Mumbai", "bangalore": "Bengaluru", "bengaluru": "Bengaluru",
                 "new delhi": "Delhi", "ncr": "Delhi", "calcutta": "Kolkata", "madras": "Chennai"}
 
+CITY_RESOLVER = None      # set by the live desk to geo.resolve_city: any Indian city, not only the seeded list
+
 def norm_city(s):
     if not s:
         return None
@@ -142,7 +144,12 @@ def norm_city(s):
         if a in t:
             return c
     m = difflib.get_close_matches(str(s).strip().title(), KNOWN_CITIES, 1, 0.8)
-    return m[0] if m else None
+    if m:
+        return m[0]
+    if CITY_RESOLVER:
+        hit = CITY_RESOLVER(s)
+        return hit["name"] if hit else None
+    return None
 
 def norm_type(s):
     """Map '32 MXL', '10 tyre', '22ft' etc. to a known type. Ambiguous ('32 ft') returns None so we ask."""
@@ -202,7 +209,7 @@ def intake_turn(hist, load, user_msg):
     `hist` must already include the latest user message."""
     prompt = f"""You are Bhaada, an AI freight desk assistant chatting with a BROKER on WhatsApp.
 Collect ONE complete load over the conversation. REMEMBER everything already said - never re-ask a detail you were given.
-Known cities (map to the closest one): {", ".join(KNOWN_CITIES)}
+Common cities: {", ".join(KNOWN_CITIES)} (any other Indian city is fine: write its proper name).
 Truck types (use these exact names): {", ".join(KNOWN_TYPES)}
 Load known so far (may be partial): {json.dumps(load)}
 Conversation so far:

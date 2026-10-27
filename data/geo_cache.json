@@ -1,0 +1,101 @@
+{
+ "cities": {
+  "bhiwandi": {
+   "name": "Bhiwandi",
+   "lat": 19.3,
+   "lon": 73.06,
+   "src": "seed"
+  },
+  "mumbai": {
+   "name": "Mumbai",
+   "lat": 19.08,
+   "lon": 72.88,
+   "src": "seed"
+  },
+  "pune": {
+   "name": "Pune",
+   "lat": 18.52,
+   "lon": 73.86,
+   "src": "seed"
+  },
+  "nashik": {
+   "name": "Nashik",
+   "lat": 20.0,
+   "lon": 73.79,
+   "src": "seed"
+  },
+  "surat": {
+   "name": "Surat",
+   "lat": 21.17,
+   "lon": 72.83,
+   "src": "seed"
+  },
+  "ahmedabad": {
+   "name": "Ahmedabad",
+   "lat": 23.02,
+   "lon": 72.57,
+   "src": "seed"
+  },
+  "indore": {
+   "name": "Indore",
+   "lat": 22.72,
+   "lon": 75.86,
+   "src": "seed"
+  },
+  "delhi": {
+   "name": "Delhi",
+   "lat": 28.61,
+   "lon": 77.21,
+   "src": "seed"
+  },
+  "jaipur": {
+   "name": "Jaipur",
+   "lat": 26.91,
+   "lon": 75.79,
+   "src": "seed"
+  },
+  "kanpur": {
+   "name": "Kanpur",
+   "lat": 26.45,
+   "lon": 80.33,
+   "src": "seed"
+  },
+  "bengaluru": {
+   "name": "Bengaluru",
+   "lat": 12.97,
+   "lon": 77.59,
+   "src": "seed"
+  },
+  "chennai": {
+   "name": "Chennai",
+   "lat": 13.08,
+   "lon": 80.27,
+   "src": "seed"
+  },
+  "hyderabad": {
+   "name": "Hyderabad",
+   "lat": 17.39,
+   "lon": 78.49,
+   "src": "seed"
+  },
+  "kolkata": {
+   "name": "Kolkata",
+   "lat": 22.57,
+   "lon": 88.36,
+   "src": "seed"
+  },
+  "patna": {
+   "name": "Patna",
+   "lat": 25.59,
+   "lon": 85.14,
+   "src": "seed"
+  }
+ },
+ "routes": {
+  "Bhiwandi|Surat": {
+   "km": 250,
+   "hours": 3.2,
+   "src": "OSRM road route"
+  }
+ }
+}

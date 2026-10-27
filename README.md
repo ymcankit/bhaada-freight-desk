@@ -1,33 +1,36 @@
 # Bhaada: Agentic Freight Desk (Abhikalp 2026, Case 9)
 
-A WhatsApp-style freight desk where an LLM orchestrator takes a messy load request to a booking-ready
-quote, then re-books on its own when an owner backs out. Prices never come from the LLM.
+A freight broker's desk that takes a load from WhatsApp to a booking-ready truck: it reads the request, finds the road
+distance, messages fleet owners on WhatsApp in parallel, negotiates inside the broker's margin band, asks for one
+approval, gets the owner to hold, and re-books on its own when an owner backs out. Prices come only from code.
 
-## Run locally
+## Run
     python -m venv .venv && source .venv/bin/activate
     pip install -r requirements.txt
-    cp .streamlit/secrets.toml.example .streamlit/secrets.toml   # add a Groq key
-    streamlit run app.py
+    cp .streamlit/secrets.toml.example .streamlit/secrets.toml     # add your Groq key (and WhatsApp keys)
+    uvicorn server:app --port 8000                                   # open http://localhost:8000
 
-Without a key the app still runs: the sidebar sample loads go through the deterministic planner.
+**Live owners** works loads against real people on WhatsApp (setup in WHATSAPP.md).
+**Sandbox owners** uses persona owners from `data/owners.json` so anyone can try the desk; the console labels it.
+
+## What is real
+| Part | Source |
+|---|---|
+| Load intake (text, Hinglish, voice notes) | LLM (Groq), every field validated in code |
+| Cities and road distance | OpenStreetMap Nominatim + OSRM, any Indian city pair, cached |
+| Owners, check-in, negotiation, holds, back-outs | Real WhatsApp messages (Meta Cloud API) in Live mode |
+| Negotiation replies | LLM agent; the ceiling and round limit are enforced in code; rule-based fallback |
+| Diesel, tolls, margin band | Settings with source and date, editable in the console |
+| Price | `engine.price_quote` only |
 
 ## Files
-    whatsapp_bot.py WhatsApp Cloud API webhook: the same desk on a real WhatsApp number (see WHATSAPP.md)
-    test_whatsapp.py Offline webhook test with fake Meta payloads
-    app.py          Streamlit UI: broker chat, parallel owner chats, agent trace, approval, back-out re-plan
-    engine.py       Pricing, truck matching, simulated owner replies, tools, LLM orchestrator + fallback planner
-    test_engine.py  Offline tests (no key): matching, pricing, re-plan, orchestrator loop with a scripted model
-    smoke_test.py   Live test with the real model on every sample load (run before freezing the build)
-    data/           Synthetic owners, trucks, lanes, cost drivers (rates.json), city coordinates, sample loads
-    docs/           Case brief, Round 1 slides, master project document
-
-## How a load flows
-1. Intake (LLM) turns chat or a voice note into a load; every field is validated against known cities and truck types.
-2. The orchestrator (LLM tool-calling) calls `check_load` -> `find_trucks` -> `message_owners` -> `price_quote` ->
-   `propose_quote` or `escalate`. It substitutes a bigger truck when the requested one can't carry the weight,
-   widens the search when nobody agrees, and can't propose anything below the margin floor.
-3. If the LLM call fails or times out, the same tools run on a deterministic planner and the UI says so.
-4. Back-out: the owner's reliability drops, the shipper's price stays fixed, owners who agreed earlier are re-confirmed
-   first, and the floor is re-checked. Below the floor, it escalates instead of booking.
-
-The header clock is a modelled real-world time built from each owner's reply delay; the demo itself runs faster.
+    server.py        FastAPI: console, JSON API, WhatsApp webhook
+    live.py          The live desk: event-driven load lifecycle, owners, negotiation, re-plan
+    geo.py           Nominatim + OSRM with a cache
+    engine.py        Pricing, intake, truck types, the tool-calling orchestrator used by the tests
+    static/          The console (HTML/CSS/JS, IBM Plex Sans)
+    test_server.py   End-to-end test over fake WhatsApp traffic (no keys needed)
+    test_engine.py   Pricing, matching and orchestrator tests
+    smoke_test.py    Live check of the LLM orchestrator with your key
+    app.py           Earlier Streamlit prototype (kept until the new console is deployed)
+    render.yaml      One-click deploy on Render

@@ -8,3 +8,7 @@ venv/
 .claude/
 # team documents stay local (slides, master doc, voice note)
 docs/
+
+# live desk state (owner phone numbers, loads)
+data/live_state.json
+.taste-skill/
