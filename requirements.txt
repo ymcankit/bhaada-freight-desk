@@ -4,3 +4,4 @@ requests>=2.31
 # WhatsApp webhook (whatsapp_bot.py)
 fastapi>=0.110
 uvicorn>=0.29
+tzdata>=2024.1
