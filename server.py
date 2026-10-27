@@ -72,6 +72,7 @@ def tg_send(to, text, buttons=None):
 def send(to, text, buttons=None):
     """One sender for the desk: picks the channel from the address."""
     if str(to).startswith("tg:"):
+        text = re.sub(r"(?<!\w)_([^_\n]+)_(?!\w)", r"\1", text.replace("*", ""))   # WhatsApp *bold*/_italic_ shows literally on Telegram
         return tg_send(to, text, buttons) if TG_READY else None
     return wa_send(to, text, buttons) if WA_READY else None
 
@@ -274,6 +275,7 @@ def handle_message(msg):
             send(wa, "Something went wrong on my side. Send *new* to start again.")
 
 REGISTER = re.compile(r"^\s*(owner|register|transporter)\b[\s:,-]*(.*)$", re.I)
+AS_BROKER = re.compile(r"^\s*(broker|i am (a )?broker|main broker hoon)\s*$", re.I)
 
 def on_text(wa, text):
     m = REGISTER.match(text)
@@ -287,7 +289,12 @@ def on_text(wa, text):
             desk.save()
         return send(wa, f"Namaste {o['name']} 🙏 Registered as a fleet owner"
                            + (f" in {o['baseCity']}" if o.get("baseCity") else "") + ".\nAaj ki gaadi bhejiye: "
-                           "*32 ft MXL, Bhiwandi, aaj, ₹38/km*")
+                           "*32 ft MXL, Bhiwandi, aaj, ₹38/km*\n(Load bhejna hai? *broker* likhiye.)")
+    if AS_BROKER.match(text):
+        was = desk.remove_owner(wa) if wa in desk.owners and not desk.owners[wa].get("sandbox") else None
+        desk.brokers[wa] = {"chat": [], "load": {}}
+        return send(wa, ("Owner list se hata diya. " if was else "") + "Ab aap broker hain 👍 Load bhejiye (text ya voice note).\n"
+                        "e.g. _Kal subah Bhiwandi se Surat, 18 ton kapda, 32 MXL_")
     if wa in desk.owners and not desk.owners[wa].get("sandbox"):
         return desk.post("owner_message", key=wa, text=text)
     # anyone else is a broker
@@ -295,7 +302,8 @@ def on_text(wa, text):
     if text.lower() in ("hi", "hello", "new", "reset", "namaste", "start"):
         desk.brokers[wa] = {"chat": [], "load": {}}
         return send(wa, "Namaste 🙏 Bhaada desk. Send a load as text or a voice note.\n"
-                           "e.g. _Kal subah Bhiwandi se Surat, 18 ton kapda, 32 MXL_")
+                           "e.g. _Kal subah Bhiwandi se Surat, 18 ton kapda, 32 MXL_\n"
+                           "Truck owner ho? *owner Naam, Shehar* likhiye.")
     if not E.llm_ready():
         return send(wa, "My language model isn't configured yet.")
     s["chat"].append({"role": "user", "text": text})

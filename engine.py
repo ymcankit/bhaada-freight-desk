@@ -30,7 +30,7 @@ GROQ_CHAT = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_AUDIO = "https://api.groq.com/openai/v1/audio/transcriptions"
 LLM = {"key": os.getenv("GROQ_API_KEY", ""),
        "model": os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
-       "whisper": os.getenv("GROQ_WHISPER", "whisper-large-v3-turbo")}
+       "whisper": os.getenv("GROQ_WHISPER", "whisper-large-v3")}   # turbo garbles Hinglish city names
 
 def local_secrets():
     """Read .streamlit/secrets.toml (simple KEY = "value" lines) for scripts that run outside Streamlit."""
@@ -114,7 +114,8 @@ def transcribe(audio_bytes, mime="audio/mpeg", timeout=60, retries=2):
         try:
             r = requests.post(GROQ_AUDIO, headers={"Authorization": f"Bearer {LLM['key']}"},
                               files={"file": ("note" + ext, audio_bytes, mime)},
-                              data={"model": LLM["whisper"], "response_format": "json", "prompt": voice_hint()},
+                              data={"model": LLM["whisper"], "response_format": "json", "prompt": voice_hint(),
+                                    "language": "en"},          # romanised Hinglish: tested better than auto or "hi" on Hindi speech
                               timeout=timeout)
             r.raise_for_status()
             return r.json().get("text", "").strip()

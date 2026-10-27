@@ -71,6 +71,13 @@ end = time.time() + 8
 while time.time() < end and L["status"] != "booked":
     time.sleep(0.3)
 ok &= check("booked", L["status"] == "booked", L["status"])
+text(OWNERS[1], "broker")
+ok &= check("an owner can switch to broker", f"tg:{OWNERS[1]}" not in server.desk.owners and "Ab aap broker" in last_to(OWNERS[1]))
+before = len(server.desk.loads)
+text(OWNERS[1], "Kal Bhiwandi se Surat 14 ton 32 MXL")
+time.sleep(1)
+ok &= check("and then sends a load", len(server.desk.loads) == before + 1)
+ok &= check("no WhatsApp markup on Telegram", not any("*" in t for to, t, b in SENT))
 ok &= check("state reports Telegram", "telegram" in c.get("/api/state").json())
 print("\nALL PASS" if ok else "\nSOME FAILED")
 import sys; sys.stdout.flush(); os._exit(0 if ok else 1)

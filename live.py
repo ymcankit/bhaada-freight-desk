@@ -174,6 +174,13 @@ class Desk:
                 return th, load
         return None, None
 
+    def remove_owner(self, key):
+        """A registered owner who wants to send loads instead (e.g. one phone testing both roles)."""
+        o = self.owners.pop(key, None)
+        self.pool = [t for t in self.pool if t["ownerKey"] != key]
+        self.save()
+        return o
+
     def send_checkin(self):
         live = [o for o in self.owners.values() if not o.get("sandbox")]
         for o in live:
