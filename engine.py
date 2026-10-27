@@ -32,6 +32,13 @@ LLM = {"key": os.getenv("GROQ_API_KEY", ""),
        "model": os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
        "whisper": os.getenv("GROQ_WHISPER", "whisper-large-v3-turbo")}
 
+def local_secrets():
+    """Read .streamlit/secrets.toml (simple KEY = "value" lines) for scripts that run outside Streamlit."""
+    p = Path(__file__).parent / ".streamlit" / "secrets.toml"
+    if not p.exists():
+        return {}
+    return dict(re.findall(r'^\s*(\w+)\s*=\s*"([^"]*)"', p.read_text(encoding="utf-8"), flags=re.MULTILINE))
+
 def configure(key=None, model=None, whisper=None):
     """Set credentials from the app (st.secrets) instead of hardcoding them."""
     if key: LLM["key"] = key
@@ -179,6 +186,44 @@ def normalise_load(load):
 
 def missing_fields(load):
     return [k for k in REQUIRED if not load.get(k)]
+
+# =============================== conversational intake (shared by the web desk and WhatsApp) ===============================
+def _hist(h):
+    who = {"user": "Broker", "owner": "Owner", "bot": "Bhaada", "agent": "Bhaada"}
+    return "\n".join(f'{who.get(m["role"], m["role"])}: {m["text"]}' for m in h) or "(start of chat)"
+
+ASK = {"origin": "Kahan se load uthana hai?", "destination": "Kahan tak jaana hai?",
+       "weight_ton": "Kitna ton hai?",
+       "truck_type": "Kaunsi gaadi chahiye? (" + ", ".join(KNOWN_TYPES[:6]) + " …)"}
+
+def intake_turn(hist, load, user_msg):
+    """One broker message -> (merged load, reply, missing fields). The LLM collects the load across turns;
+    code validates every field and keeps the broker's own words for the pickup day.
+    `hist` must already include the latest user message."""
+    prompt = f"""You are Bhaada, an AI freight desk assistant chatting with a BROKER on WhatsApp.
+Collect ONE complete load over the conversation. REMEMBER everything already said - never re-ask a detail you were given.
+Known cities (map to the closest one): {", ".join(KNOWN_CITIES)}
+Truck types (use these exact names): {", ".join(KNOWN_TYPES)}
+Load known so far (may be partial): {json.dumps(load)}
+Conversation so far:
+{_hist(hist)}
+Latest broker message: "{user_msg}"
+Merge new details into the load; keep existing values unless the broker corrects them.
+Required fields: origin, destination, weight_ton, truck_type. Optional: pickup_when, budget_rs (shipper's budget in rupees, number).
+Return ONLY JSON:
+{{"reply":"<short friendly reply, Hinglish ok>","load":{{"origin":null,"destination":null,"weight_ton":null,"truck_type":null,"pickup_when":null,"budget_rs":null}},"missing":["..."],"complete":false}}
+Fill load with everything known so far. If all required fields are known set complete=true and reply that you are finding the best truck now."""
+    out = parse_json(gen(prompt, json_mode=True))
+    raw = {**(load or {}), **{k: v for k, v in (out.get("load") or {}).items() if v not in (None, "")}}
+    merged = normalise_load(raw)                      # anything that doesn't match our lists becomes missing
+    said = pickup_phrase([m["text"] for m in hist if m["role"] == "user"])
+    if said and pickup_day(said) != pickup_day(merged.get("pickup_when")):
+        merged["pickup_when"] = said                  # the broker's words win over the model's
+    miss = missing_fields(merged)
+    reply = out.get("reply", "")
+    if miss and (out.get("complete") or not reply):
+        reply = "Ek cheez confirm karni hai — " + ASK[miss[0]]
+    return merged, reply, miss
 
 # =============================== geography and dates ===============================
 def find_lane(o, d):

@@ -12,6 +12,8 @@ quote, then re-books on its own when an owner backs out. Prices never come from 
 Without a key the app still runs: the sidebar sample loads go through the deterministic planner.
 
 ## Files
+    whatsapp_bot.py WhatsApp Cloud API webhook: the same desk on a real WhatsApp number (see WHATSAPP.md)
+    test_whatsapp.py Offline webhook test with fake Meta payloads
     app.py          Streamlit UI: broker chat, parallel owner chats, agent trace, approval, back-out re-plan
     engine.py       Pricing, truck matching, simulated owner replies, tools, LLM orchestrator + fallback planner
     test_engine.py  Offline tests (no key): matching, pricing, re-plan, orchestrator loop with a scripted model

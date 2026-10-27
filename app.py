@@ -6,6 +6,7 @@ Without a key the desk still runs, on the deterministic planner (chat intake nee
 """
 import os, json, time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import streamlit as st
 import engine as E
 
@@ -21,31 +22,7 @@ E.configure(key=_secret("GROQ_API_KEY"), model=_secret("GROQ_MODEL", "openai/gpt
             whisper=_secret("GROQ_WHISPER", "whisper-large-v3-turbo"))
 MARGIN, KNOWN_CITIES, KNOWN_TYPES = E.MARGIN, E.KNOWN_CITIES, E.KNOWN_TYPES
 
-# ---------------- conversational intake (LLM, with memory) ----------------
-def _hist(h):
-    who = {"user": "Broker", "owner": "Owner", "bot": "Bhaada", "agent": "Bhaada"}
-    return "\n".join(f'{who.get(m["role"], m["role"])}: {m["text"]}' for m in h) or "(start of chat)"
-
-def broker_turn(hist, load, user_msg):
-    """Broker <-> Bhaada, remembering the whole conversation and merging the load across turns."""
-    prompt = f"""You are Bhaada, an AI freight desk assistant chatting with a BROKER on WhatsApp.
-Collect ONE complete load over the conversation. REMEMBER everything already said - never re-ask a detail you were given.
-Known cities (map to the closest one): {", ".join(KNOWN_CITIES)}
-Truck types (use these exact names): {", ".join(KNOWN_TYPES)}
-Load known so far (may be partial): {json.dumps(load)}
-Conversation so far:
-{_hist(hist)}
-Latest broker message: "{user_msg}"
-Merge new details into the load; keep existing values unless the broker corrects them.
-Required fields: origin, destination, weight_ton, truck_type. Optional: pickup_when, budget_rs (shipper's budget in rupees, number).
-Return ONLY JSON:
-{{"reply":"<short friendly reply, Hinglish ok>","load":{{"origin":null,"destination":null,"weight_ton":null,"truck_type":null,"pickup_when":null,"budget_rs":null}},"missing":["..."],"complete":false}}
-Fill load with everything known so far. If all required fields are known set complete=true and reply that you are finding the best truck now."""
-    return E.parse_json(E.gen(prompt, json_mode=True))
-
-ASK = {"origin": "Kahan se load uthana hai?", "destination": "Kahan tak jaana hai?",
-       "weight_ton": "Kitna ton hai?",
-       "truck_type": "Kaunsi gaadi chahiye? (" + ", ".join(KNOWN_TYPES[:6]) + " …)"}
+ASK = E.ASK
 
 def fmt_mmss(s):
     s = int(round(s))
@@ -140,7 +117,7 @@ st.markdown("""<style>
 
 # ---------------- html builders ----------------
 MAXLV = 8
-NOW = datetime.now().strftime("%I:%M %p").lstrip("0")
+NOW = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%I:%M %p").lstrip("0")   # IST, also on a UTC server
 
 def bub(side, text, who=None, t=True):
     cls = "b-out" if side == "out" else "b-in"
@@ -402,20 +379,11 @@ def process_broker(text, was_audio=False):
         ss["d_chat"].append({"role": "bot", "text": "Chat intake needs GROQ_API_KEY. Use a sample load from the sidebar."})
         st.rerun()
     try:
-        out = broker_turn(ss["d_chat"], ss["d_load"], text)
+        merged, reply, miss = E.intake_turn(ss["d_chat"], ss["d_load"], text)
     except Exception as e:
         ss["d_chat"].append({"role": "bot", "text": f"(model error: {str(e)[:120]}) — try again or use a sample load."})
         st.rerun()
-    raw = {**ss["d_load"], **{k: v for k, v in (out.get("load") or {}).items() if v not in (None, "")}}
-    merged = E.normalise_load(raw)                      # anything that doesn't match our lists becomes missing
-    said = E.pickup_phrase([m["text"] for m in ss["d_chat"] if m["role"] == "user"])
-    if said and E.pickup_day(said) != E.pickup_day(merged.get("pickup_when")):
-        merged["pickup_when"] = said                    # the broker's words win over the model's
     ss["d_load"] = {k: v for k, v in merged.items() if v not in (None, "")}
-    miss = E.missing_fields(merged)
-    reply = out.get("reply", "")
-    if miss and (out.get("complete") or not reply):
-        reply = "Ek cheez confirm karni hai — " + ASK[miss[0]]
     ss["d_chat"].append({"role": "bot", "text": reply})
     if not miss:
         if not E.find_lane(merged["origin"], merged["destination"]):
