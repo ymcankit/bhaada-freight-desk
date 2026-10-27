@@ -318,6 +318,7 @@ def on_text(wa, text):
     s["load"] = {k: v for k, v in merged.items() if v not in (None, "")}
     s["chat"].append({"role": "bot", "text": reply})
     if miss:
+        desk.save()                                    # a half-told load survives a restart
         return send(wa, reply)
     load = desk.start_load(merged, "telegram" if wa.startswith("tg:") else "whatsapp", broker_phone=wa,
                            raw=" / ".join(m["text"] for m in s["chat"] if m["role"] == "user"))

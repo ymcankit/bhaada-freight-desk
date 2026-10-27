@@ -10,7 +10,8 @@ the clock), so a load's state never races. What is real and what is not:
   - negotiation: an LLM agent reads each owner's reply and answers in Hinglish, inside a ceiling the code enforces;
   - price: only engine.price_quote, never the LLM.
 """
-import json, queue, re, threading, time, hashlib
+import json, os, queue, re, threading, time, hashlib
+import requests
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -19,6 +20,20 @@ import geo
 
 IST = ZoneInfo("Asia/Kolkata")
 STATE_FILE = Path(__file__).parent / "data" / "live_state.json"
+STATE_KEY = "bhaada:live_state"
+
+def _store():
+    """Upstash Redis (free, REST) when configured: free hosts wipe local files on every restart and deploy."""
+    sec = E.local_secrets()
+    url = (os.getenv("UPSTASH_REDIS_REST_URL") or sec.get("UPSTASH_REDIS_REST_URL") or "").rstrip("/")
+    tok = os.getenv("UPSTASH_REDIS_REST_TOKEN") or sec.get("UPSTASH_REDIS_REST_TOKEN") or ""
+    return (url, tok) if url.startswith("https://") and tok else None
+
+def _redis(cmd):
+    url, tok = _store()
+    r = requests.post(url, headers={"Authorization": f"Bearer {tok}"}, json=cmd, timeout=8)
+    r.raise_for_status()
+    return r.json().get("result")
 geo.seed_cities(E.CITY["cities"])
 E.CITY_RESOLVER = geo.resolve_city
 
@@ -63,25 +78,42 @@ class Desk:
 
     # ---------------- persistence ----------------
     def _load(self):
-        try:
-            s = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            return
+        s = None
+        if _store():
+            try:
+                raw = _redis(["GET", STATE_KEY])
+                s = json.loads(raw) if raw else None
+                print("state loaded from Upstash:", "found" if s else "empty")
+            except Exception as e:
+                print("Upstash load failed, using the local file:", repr(e))
+        if s is None:
+            try:
+                s = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                return
         self.settings.update(s.get("settings", {}))
         self.owners = s.get("owners", {})
         self.pool = s.get("pool", [])
         self.loads = s.get("loads", [])
         self.reliability = s.get("reliability", {})
+        self.brokers = s.get("brokers", {})
         self._seq = s.get("seq", self._seq)
 
     def save(self):
         live_owners = {k: v for k, v in self.owners.items() if not v.get("sandbox")}
         data = {"settings": self.settings, "owners": live_owners, "reliability": self.reliability, "seq": self._seq,
-                "pool": [t for t in self.pool if t.get("source") == "checkin"], "loads": self.loads[-200:]}
+                "pool": [t for t in self.pool if t.get("source") == "checkin"], "loads": self.loads[-200:],
+                "brokers": self.brokers}
+        text = json.dumps(data, ensure_ascii=False)
         try:
-            STATE_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            STATE_FILE.write_text(text, encoding="utf-8")
         except Exception:
             pass
+        if _store():
+            try:
+                _redis(["SET", STATE_KEY, text])
+            except Exception as e:
+                print("Upstash save failed:", repr(e))
 
     def _apply_settings(self):
         E.rates["dieselPerLitre"] = float(self.settings["dieselPerLitre"])
