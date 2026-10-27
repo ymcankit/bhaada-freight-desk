@@ -10,7 +10,7 @@ approval, gets the owner to hold, and re-books on its own when an owner backs ou
     cp .streamlit/secrets.toml.example .streamlit/secrets.toml     # add your Groq key (and WhatsApp keys)
     uvicorn server:app --port 8000                                   # open http://localhost:8000
 
-**Live owners** works loads against real people on WhatsApp (setup in WHATSAPP.md).
+**Live owners** works loads against real people on WhatsApp (setup in WHATSAPP.md) or Telegram: make a bot with @BotFather and set `TELEGRAM_BOT_TOKEN`; the server registers its own webhook.
 **Sandbox owners** uses persona owners from `data/owners.json` so anyone can try the desk; the console labels it.
 
 ## What is real

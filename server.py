@@ -6,8 +6,10 @@ Config (environment variables, or .streamlit/secrets.toml locally):
     GROQ_API_KEY                       language model (intake, negotiation, check-in parsing)
     WHATSAPP_TOKEN, WHATSAPP_PHONE_ID  Meta WhatsApp Cloud API (leave empty to run the console alone)
     WHATSAPP_VERIFY_TOKEN              any string; the same one goes into Meta's webhook settings
+    TELEGRAM_BOT_TOKEN                 a bot from @BotFather: the same desk on Telegram, free and with no phone number
+    PUBLIC_URL                         this server's address, for the Telegram webhook (Render sets RENDER_EXTERNAL_URL itself)
 """
-import os, re, threading
+import os, re, threading, hashlib
 from pathlib import Path
 import requests
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
@@ -26,6 +28,11 @@ WA_TOKEN, WA_PHONE_ID = cfg("WHATSAPP_TOKEN"), cfg("WHATSAPP_PHONE_ID")
 WA_VERIFY = cfg("WHATSAPP_VERIFY_TOKEN", "bhaada_verify_123")
 WA_READY = len(WA_TOKEN) > 40 and WA_PHONE_ID.isdigit()        # placeholders like "later" mean not connected
 GRAPH = "https://graph.facebook.com/v21.0"
+TG_TOKEN = cfg("TELEGRAM_BOT_TOKEN").strip()
+TG_READY = bool(re.fullmatch(r"\d+:[\w-]{30,}", TG_TOKEN))
+TG_API = f"https://api.telegram.org/bot{TG_TOKEN}"
+TG_PATH = hashlib.sha256(TG_TOKEN.encode()).hexdigest()[:24]   # unguessable webhook path, derived from the token
+TG_BOT = {"username": None}
 
 # ---------------- WhatsApp sending ----------------
 def wa_send(to, text, buttons=None):
@@ -50,7 +57,40 @@ def wa_media(media_id):
     data.raise_for_status()
     return data.content, meta.get("mime_type", "audio/ogg")
 
-desk = live.Desk(sender=wa_send if WA_READY else None)
+# ---------------- Telegram sending (chat ids are kept as "tg:<id>" so they never clash with phone numbers) ----------------
+def tg_send(to, text, buttons=None):
+    body = {"chat_id": to[3:], "text": text[:4000]}
+    if buttons:
+        body["reply_markup"] = {"inline_keyboard": [[{"text": t[:30], "callback_data": i[:64]} for i, t in buttons[:3]]]}
+    try:
+        r = requests.post(f"{TG_API}/sendMessage", json=body, timeout=20)
+        if not r.ok:
+            print("Telegram send failed:", r.status_code, r.text[:300])
+    except Exception as e:
+        print("Telegram send error:", repr(e))
+
+def send(to, text, buttons=None):
+    """One sender for the desk: picks the channel from the address."""
+    if str(to).startswith("tg:"):
+        return tg_send(to, text, buttons) if TG_READY else None
+    return wa_send(to, text, buttons) if WA_READY else None
+
+def tg_setup():
+    base = (cfg("PUBLIC_URL") or os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
+    try:
+        TG_BOT["username"] = requests.get(f"{TG_API}/getMe", timeout=15).json()["result"]["username"]
+        if base:
+            r = requests.post(f"{TG_API}/setWebhook", json={"url": f"{base}/telegram/{TG_PATH}",
+                              "allowed_updates": ["message", "callback_query"]}, timeout=15)
+            print("Telegram webhook:", r.json().get("description"))
+        else:
+            print("Telegram: set PUBLIC_URL so the bot can reach this server")
+    except Exception as e:
+        print("Telegram setup failed:", repr(e))
+
+desk = live.Desk(sender=send if (WA_READY or TG_READY) else None)
+if TG_READY:
+    threading.Thread(target=tg_setup, daemon=True).start()
 if desk.settings["mode"] == "sandbox":
     desk.sandbox_on()
 
@@ -65,6 +105,7 @@ def console():
 def state():
     v = desk.view()
     v["whatsapp"] = WA_READY
+    v["telegram"] = TG_BOT["username"] if TG_READY else None
     v["llm"] = E.llm_ready()
     return v
 
@@ -168,6 +209,48 @@ async def receive(request: Request, bg: BackgroundTasks):
                 bg.add_task(handle_message, msg)
     return {"ok": True}
 
+@app.post("/telegram/{path}")
+async def telegram(path: str, request: Request, bg: BackgroundTasks):
+    if not TG_READY or path != TG_PATH:
+        raise HTTPException(404)
+    u = await request.json()
+    if u.get("update_id") in SEEN:
+        return {"ok": True}
+    SEEN.add(u.get("update_id"))
+    bg.add_task(handle_telegram, u)
+    return {"ok": True}
+
+def handle_telegram(u):
+    if "callback_query" in u:
+        q = u["callback_query"]
+        try:
+            requests.post(f"{TG_API}/answerCallbackQuery", json={"callback_query_id": q["id"]}, timeout=10)
+        except Exception:
+            pass                                         # only stops the button's spinner; the action still runs
+        return on_button(f"tg:{q['message']['chat']['id']}", q.get("data", ""))
+    m = u.get("message") or {}
+    if not m.get("chat"):
+        return
+    key = f"tg:{m['chat']['id']}"
+    with LOCKS.setdefault(key, threading.Lock()):
+        try:
+            if m.get("voice") or m.get("audio"):
+                f = requests.get(f"{TG_API}/getFile", params={"file_id": (m.get("voice") or m.get("audio"))["file_id"]},
+                                 timeout=15).json()["result"]
+                audio = requests.get(f"https://api.telegram.org/file/bot{TG_TOKEN}/{f['file_path']}", timeout=60).content
+                text = E.transcribe(audio, "audio/ogg")
+                send(key, f"🎤 Heard: {text}")
+            elif m.get("text"):
+                text = m["text"].strip()
+                if text.startswith("/start"):
+                    text = "hi"
+            else:
+                return send(key, "I read text and voice notes for now. Please type or record it.")
+            on_text(key, text)
+        except Exception as e:
+            print("telegram message failed:", repr(e))
+            send(key, "Something went wrong on my side. Send new to start again.")
+
 def handle_message(msg):
     wa = msg["from"]
     with LOCKS.setdefault(wa, threading.Lock()):
@@ -180,15 +263,15 @@ def handle_message(msg):
             if kind == "audio":
                 audio, mime = wa_media(msg["audio"]["id"])
                 text = E.transcribe(audio, mime)
-                wa_send(wa, f"🎤 Heard: _{text}_")
+                send(wa, f"🎤 Heard: _{text}_")
             elif kind == "text":
                 text = msg["text"]["body"].strip()
             else:
-                return wa_send(wa, "I read text and voice notes for now. Please type or record it.")
+                return send(wa, "I read text and voice notes for now. Please type or record it.")
             on_text(wa, text)
         except Exception as e:
             print("message failed:", repr(e))
-            wa_send(wa, "Something went wrong on my side. Send *new* to start again.")
+            send(wa, "Something went wrong on my side. Send *new* to start again.")
 
 REGISTER = re.compile(r"^\s*(owner|register|transporter)\b[\s:,-]*(.*)$", re.I)
 
@@ -197,12 +280,12 @@ def on_text(wa, text):
     if m:
         parts = [p.strip() for p in re.split(r",|\bfrom\b|\bse\b", m.group(2)) if p.strip()]
         if not parts:
-            return wa_send(wa, "Aise likhiye: *owner Sharma Transport, Bhiwandi*")
+            return send(wa, "Aise likhiye: *owner Sharma Transport, Bhiwandi*")
         o = desk.register_owner(wa, parts[0], parts[1] if len(parts) > 1 else None)
         if desk.settings["mode"] != "live":
             desk.settings["mode"] = "live"
             desk.save()
-        return wa_send(wa, f"Namaste {o['name']} 🙏 Registered as a fleet owner"
+        return send(wa, f"Namaste {o['name']} 🙏 Registered as a fleet owner"
                            + (f" in {o['baseCity']}" if o.get("baseCity") else "") + ".\nAaj ki gaadi bhejiye: "
                            "*32 ft MXL, Bhiwandi, aaj, ₹38/km*")
     if wa in desk.owners and not desk.owners[wa].get("sandbox"):
@@ -211,24 +294,24 @@ def on_text(wa, text):
     s = desk.brokers.setdefault(wa, {"chat": [], "load": {}})
     if text.lower() in ("hi", "hello", "new", "reset", "namaste", "start"):
         desk.brokers[wa] = {"chat": [], "load": {}}
-        return wa_send(wa, "Namaste 🙏 Bhaada desk. Send a load as text or a voice note.\n"
+        return send(wa, "Namaste 🙏 Bhaada desk. Send a load as text or a voice note.\n"
                            "e.g. _Kal subah Bhiwandi se Surat, 18 ton kapda, 32 MXL_")
     if not E.llm_ready():
-        return wa_send(wa, "My language model isn't configured yet.")
+        return send(wa, "My language model isn't configured yet.")
     s["chat"].append({"role": "user", "text": text})
     merged, reply, miss = E.intake_turn(s["chat"], s["load"], text)
     s["load"] = {k: v for k, v in merged.items() if v not in (None, "")}
     s["chat"].append({"role": "bot", "text": reply})
     if miss:
-        return wa_send(wa, reply)
-    load = desk.start_load(merged, "whatsapp", broker_phone=wa,
+        return send(wa, reply)
+    load = desk.start_load(merged, "telegram" if wa.startswith("tg:") else "whatsapp", broker_phone=wa,
                            raw=" / ".join(m["text"] for m in s["chat"] if m["role"] == "user"))
     desk.brokers[wa] = {"chat": [], "load": {}}
-    wa_send(wa, f"🔍 {load['id']}: got it. Messaging owners near {merged['origin']} now…")
+    send(wa, f"🔍 {load['id']}: got it. Messaging owners near {merged['origin']} now…")
 
 def on_button(wa, bid):
     action, _, lid = bid.partition(":")
     if action in ("approve", "reject") and lid:
         desk.post(action, lid=lid)
-        return wa_send(wa, "✅ Approved. Asking the owner to hold the truck…" if action == "approve" else "Rejected. Nothing booked.")
-    wa_send(wa, "That button has expired. Send *new* to start again.")
+        return send(wa, "✅ Approved. Asking the owner to hold the truck…" if action == "approve" else "Rejected. Nothing booked.")
+    send(wa, "That button has expired. Send *new* to start again.")

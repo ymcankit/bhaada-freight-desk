@@ -73,8 +73,9 @@ poll();
 function render() {
   const d = S.data;
   $("scope").textContent = d.settings.mode === "live" ? "Freight desk · live owners" : "Freight desk · sandbox";
-  $("dot-wa").classList.toggle("on", d.whatsapp);
-  $("conn-wa").textContent = d.whatsapp ? "WhatsApp connected" : "WhatsApp not connected";
+  $("dot-wa").classList.toggle("on", !!(d.whatsapp || d.telegram));
+  $("conn-wa").textContent = [d.whatsapp ? "WhatsApp connected" : "WhatsApp not connected",
+                              d.telegram ? `Telegram @${d.telegram}` : null].filter(Boolean).join(" · ");
   $("dot-llm").classList.toggle("on", d.llm);
   $("conn-llm").textContent = d.llm ? "Language model on" : "Language model off";
   for (const m of ["live", "sandbox"]) $("mode-" + m).setAttribute("aria-pressed", String(d.settings.mode === m));
@@ -159,7 +160,7 @@ function renderOpen(l) {
       el("button", { class: "back", onclick: () => { S.sel = null; renderDesk(); }, text: "‹ All loads" }),
       el("h2", {}, `${lane.origin || f.origin} → ${lane.destination || f.destination}`),
       el("div", { class: "meta", text: [l.id, lane.distanceKm ? `${lane.distanceKm} km by road` : null, `${f.weight_ton} T`, l.searchType || f.truck_type,
-        f.pickup_when || "kal", f.budget_rs ? `budget ${rs(f.budget_rs)}` : null, l.source === "whatsapp" ? "from WhatsApp" : "from console"].filter(Boolean).join(" · ") })),
+        f.pickup_when || "kal", f.budget_rs ? `budget ${rs(f.budget_rs)}` : null, l.source === "whatsapp" ? "from WhatsApp" : l.source === "telegram" ? "from Telegram" : "from console"].filter(Boolean).join(" · ") })),
     el("span", { class: `pill ${cls}`, text: word }));
   const parts = [head];
   const threads = Object.values(l.threads);
@@ -298,7 +299,7 @@ function renderOwners() {
        (d.checkin.sentAt ? ` · check-in sent at ${clock(d.checkin.sentAt).slice(0, 5)}` : " · check-in not sent yet") : "No live owners yet. Add them here; each gets a WhatsApp welcome.")
     : `Sandbox: ${d.owners.length} persona owners with ${d.poolSize} trucks. Switch to Live owners to work with real people.`;
   $("send-checkin").textContent = live ? "Send morning check-in" : "Refresh sandbox pool";
-  $("send-checkin").disabled = live && (!d.whatsapp || !d.liveOwners);
+  $("send-checkin").disabled = live && (!(d.whatsapp || d.telegram) || !d.liveOwners);
   $("pool-count").textContent = `${d.poolSize} trucks`;
   const tb = $("owners-table").querySelector("tbody");
   if (!d.owners.length) {

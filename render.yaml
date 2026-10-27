@@ -20,3 +20,5 @@ services:
         sync: false
       - key: WHATSAPP_VERIFY_TOKEN
         sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
