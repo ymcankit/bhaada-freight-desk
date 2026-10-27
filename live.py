@@ -390,7 +390,7 @@ class Desk:
                     "If they insist above the ceiling on the last round, decline politely. A total in rupees means total/km per km.\n"
                     f"Conversation:\n{hist}\n"
                     'Return ONLY JSON {"owner_rate_per_km":null,"action":"accept|counter|decline|ask","rate_per_km":null,'
-                    '"reply":"<short Hinglish WhatsApp reply>"}')
+                    '"reply":"<short reply in Hinglish: Hindi words in Roman script, never plain English>"}')
                 d = {"action": out.get("action"), "rate": E.norm_weight(out.get("rate_per_km")),
                      "ask": E.norm_weight(out.get("owner_rate_per_km")), "reply": (out.get("reply") or "").strip()}
             except Exception as e:

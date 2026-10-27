@@ -237,8 +237,10 @@ Latest broker message: "{user_msg}"
 Merge new details into the load; keep existing values unless the broker corrects them.
 Required fields: origin, destination, weight_ton, truck_type. Optional: pickup_when, budget_rs (shipper's budget in rupees, number).
 Return ONLY JSON:
-{{"reply":"<short friendly reply, Hinglish ok>","load":{{"origin":null,"destination":null,"weight_ton":null,"truck_type":null,"pickup_when":null,"budget_rs":null}},"missing":["..."],"complete":false}}
-Fill load with everything known so far. If all required fields are known set complete=true and reply that you are finding the best truck now."""
+{{"reply":"<one or two short lines>","load":{{"origin":null,"destination":null,"weight_ton":null,"truck_type":null,"pickup_when":null,"budget_rs":null}},"missing":["..."],"complete":false}}
+Fill load with everything known so far. If all required fields are known set complete=true and reply that you are finding the best truck now.
+If anything required is missing, the reply must ASK for exactly those details (e.g. "Kahan se kahan tak?") and must not say you are finding a truck.
+Reply language: always Hinglish - Hindi words in Roman script, like "Theek hai, kitne ton maal hai?" - even if the broker wrote in English or in Devanagari. Never reply in plain English."""
     out = parse_json(gen(prompt, json_mode=True))
     raw = {**(load or {}), **{k: v for k, v in (out.get("load") or {}).items() if v not in (None, "")}}
     merged = normalise_load(raw)                      # anything that doesn't match our lists becomes missing
@@ -247,7 +249,7 @@ Fill load with everything known so far. If all required fields are known set com
         merged["pickup_when"] = said                  # the broker's words win over the model's
     miss = missing_fields(merged)
     reply = out.get("reply", "")
-    if miss and (out.get("complete") or not reply):
+    if miss and (out.get("complete") or "?" not in reply):    # a reply that doesn't ask can't move the load forward
         reply = "Ek cheez confirm karni hai — " + ASK[miss[0]]
     if not miss:      # read back what will be booked, from the validated fields rather than the model's wording
         reply = (f"Theek hai ✅ {merged['origin']} → {merged['destination']}, {merged['weight_ton']:g} T, {merged['truck_type']}, "

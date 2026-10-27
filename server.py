@@ -107,6 +107,7 @@ def state():
     v = desk.view()
     v["whatsapp"] = WA_READY
     v["telegram"] = TG_BOT["username"] if TG_READY else None
+    v["build"] = (os.getenv("RENDER_GIT_COMMIT") or "local")[:7]
     v["llm"] = E.llm_ready()
     return v
 
