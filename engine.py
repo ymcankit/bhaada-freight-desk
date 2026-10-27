@@ -105,6 +105,9 @@ def voice_hint():
             f"Cities: {', '.join(KNOWN_CITIES)}. Truck types: {', '.join(KNOWN_TYPES)}. "
             "Words: gaadi, kapda, bhada, ton, chahiye, kal subah, parso, se, tak, MXL, SXL, Taurus, 10 tyre.")
 
+HINDI_HINT = ("भिवंडी से सूरत, कल सुबह, 14 टन कपड़ा, 32 फुट MXL गाड़ी चाहिए। मुंबई, पुणे, दिल्ली, अहमदाबाद, जयपुर, इंदौर, "
+              "नागपुर। भाड़ा, रेट कितना है, 40 रुपये प्रति किलोमीटर, हाँ।")   # longer hints dilute it: Bhiwandi came out धेवंदी
+
 AUDIO_EXT = {"ogg": ".ogg", "opus": ".ogg", "mpeg": ".mp3", "mp3": ".mp3", "mp4": ".m4a", "m4a": ".m4a",
              "aac": ".m4a", "wav": ".wav", "webm": ".webm", "amr": ".amr"}
 
@@ -117,17 +120,27 @@ def transcribe(audio_bytes, mime="audio/mpeg", timeout=60, retries=2, name=None)
     last = None
     for i in range(retries):
         try:
+            # Hindi script, as the speaker said it; the Devanagari freight hint keeps city names right
             r = requests.post(GROQ_AUDIO, headers={"Authorization": f"Bearer {LLM['key']}"},
                               files={"file": ("note" + ext, audio_bytes, mime)},
-                              data={"model": LLM["whisper"], "response_format": "json", "prompt": voice_hint(),
-                                    "language": "en"},          # romanised Hinglish: tested better than auto or "hi" on Hindi speech
-                              timeout=timeout)
+                              data={"model": LLM["whisper"], "response_format": "verbose_json",
+                                    "prompt": HINDI_HINT, "language": "hi"}, timeout=timeout)
             r.raise_for_status()
-            return r.json().get("text", "").strip()
+            out = r.json()
+            break
         except Exception as e:
             last = e
             time.sleep(1.5 * (i + 1))
-    raise last
+    else:
+        raise last
+    text = (out.get("text") or "").strip()
+    segs = out.get("segments") or []
+    tokens = lambda x: re.findall(r"[^\s.,।!?;:'\"()\-]+", x.lower())
+    words = tokens(text)
+    echo = words and " ".join(words) in " ".join(tokens(HINDI_HINT))
+    silent = segs and all(sg.get("no_speech_prob", 0) > 0.5 for sg in segs)
+    # on a silent or very quiet note Whisper returns "." or repeats the tail of the vocabulary prompt
+    return "" if (len(words) == 0 or echo or silent) else text
 
 # =============================== normalising what the LLM extracted ===============================
 CITY_ALIASES = {"bombay": "Mumbai", "bangalore": "Bengaluru", "bengaluru": "Bengaluru",
@@ -260,9 +273,18 @@ def road_km(a, b):
     h = math.sin((la2 - la1) / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2
     return round(2 * 6371 * math.asin(math.sqrt(h)) * CITY["roadFactor"])
 
+HINDI_DAYS = {"परसों": "parso", "परसो": "parso", "आज": "aaj", "कल": "kal", "सुबह": "subah", "शाम": "shaam", "अभी": "abhi"}
+
+def _roman(text):
+    """Hindi-script voice notes: the day words the pickup rules look for, in Latin."""
+    t = (text or "").lower()
+    for k, v in HINDI_DAYS.items():
+        t = t.replace(k, v)
+    return t
+
 def pickup_day(text):
     """0 = today, 1 = tomorrow, 2 = day after. Defaults to tomorrow."""
-    t = (text or "").lower()
+    t = _roman(text)
     if re.search(r"parso|day after|2 din", t):
         return 2
     if re.search(r"\baaj\b|today|abhi|tonight|aaj hi", t):
@@ -273,7 +295,7 @@ def pickup_phrase(texts):
     """The broker's own words for the pickup day, latest message first, so a date the LLM dropped isn't lost."""
     for t in reversed(texts):
         m = re.search(r"\b(aaj hi|aaj|today|tonight|abhi|kal subah|kal shaam|kal|tomorrow|parso|day after tomorrow|day after)\b",
-                      (t or "").lower())
+                      _roman(t))
         if m:
             return m.group(1)
     return None

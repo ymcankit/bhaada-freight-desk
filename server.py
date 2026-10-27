@@ -240,6 +240,10 @@ def handle_telegram(u):
                 f = requests.get(f"{TG_API}/getFile", params={"file_id": media["file_id"]}, timeout=15).json()["result"]
                 audio = requests.get(f"https://api.telegram.org/file/bot{TG_TOKEN}/{f['file_path']}", timeout=60).content
                 text = E.transcribe(audio, media.get("mime_type") or "audio/ogg", name=f.get("file_path"))
+                print(f"voice {key[-4:]}: {media.get('mime_type')} {f.get('file_path')} {len(audio)} bytes "
+                      f"{media.get('duration')}s -> {text[:60]!r}")
+                if not text:
+                    return send(key, "🎤 Awaaz saaf nahi aayi. Phone muh ke paas rakh ke dobara bolo, ya type kar do.")
                 send(key, f"🎤 Heard: {text}")
             elif m.get("text"):
                 text = m["text"].strip()
@@ -264,6 +268,8 @@ def handle_message(msg):
             if kind == "audio":
                 audio, mime = wa_media(msg["audio"]["id"])
                 text = E.transcribe(audio, mime)
+                if not text:
+                    return send(wa, "🎤 Awaaz saaf nahi aayi. Phone muh ke paas rakh ke dobara bolo, ya type kar do.")
                 send(wa, f"🎤 Heard: _{text}_")
             elif kind == "text":
                 text = msg["text"]["body"].strip()
