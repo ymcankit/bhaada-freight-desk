@@ -383,7 +383,7 @@ async def intake(request: Request):
     out = {"reply": reply, "missing": miss, "load": clean}
     if not miss:
         raw = " / ".join(m["text"] for m in hist if m["role"] == "user")
-        out["loadId"] = desk.start_load(merged, "console", raw=raw)["id"]
+        out["loadId"] = desk.start_load(merged, "console", raw=raw, demo_only=judge_mode(request))["id"]
     return out
 
 @app.post("/api/loads/{lid}/{action}", dependencies=[Depends(console_auth)])

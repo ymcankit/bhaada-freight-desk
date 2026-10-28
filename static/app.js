@@ -250,7 +250,7 @@ const load_winner = (l) => l.winner;
 
 // Who decided each step: the server marks it (e.by); older saved events are read from their actor and text.
 const BY_TITLE = { AI: "A language model read or chose this; code checked it", Code: "Decided by code: pricing, guardrails, routing, timers, fixed rules",
-  Human: "A person: the broker or an owner" };
+  Human: "A person: the broker or an owner", Demo: "A simulated demo owner or broker (rule-based, not AI)" };
 function byOf(e) {
   if (e.by) return e.by;
   if (e.actor === "Broker") return "Human";
@@ -400,7 +400,7 @@ function renderOwners() {
   $("owners-finding").textContent = live
     ? (d.liveOwners ? `${d.liveOwners} owner${d.liveOwners === 1 ? "" : "s"} registered · ${d.poolSize} truck${d.poolSize === 1 ? "" : "s"} offered today` +
        (d.checkin.sentAt ? ` · check-in sent at ${clock(d.checkin.sentAt).slice(0, 5)}` : " · check-in not sent yet") : "No live owners yet. Add them here; each gets a WhatsApp welcome.")
-      + (d.aiOwners ? ` · ${d.aiOwners} AI owners also bid (marked AI owner in quotes)` : "")
+      + (d.aiOwners ? ` · ${d.aiOwners} simulated demo owners also bid (marked "demo owner" in quotes; rule-based, not AI)` : "")
     : `Sandbox: ${d.owners.length} persona owners with ${d.poolSize} trucks. Switch to Live owners to work with real people.`;
   $("send-checkin").textContent = live ? "Send morning check-in" : "Refresh sandbox pool";
   $("send-checkin").disabled = live && (!(d.whatsapp || d.telegram) || !d.liveOwners);

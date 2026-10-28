@@ -156,6 +156,7 @@ h2 { font-size: var(--fs-section); line-height: 22px; font-weight: 600; }
 .by-ai { background: var(--accent-pale); color: var(--accent); }
 .by-code { background: var(--pill-neutral-bg); color: var(--pill-neutral-ink); }
 .by-human { border: 1px solid var(--control); line-height: 16px; color: var(--text); }
+.by-demo { border: 1px dashed var(--control); line-height: 16px; color: var(--muted); }
 
 /* the strategist's decisions */
 .strat { border: 1px solid var(--border); border-radius: var(--radius-card); padding: 12px 14px; margin-bottom: var(--gap); }

@@ -27,7 +27,7 @@ it to anyone). `PUBLIC_VIEW=1` lets anyone watch while only the password approve
 | Negotiation | The LLM reads the owner; the code plans every move (concession ladder, ceiling, rival offers) and explains it with the trip's costs |
 | Recovery | AI strategist picks among moves the code lists and checks (widen, bigger truck, final offer, ask the broker, hand over) |
 | After HAAN | Payment terms, e-way bill and GST lines, vehicle and driver capture with a format check. **VAHAN, KYC, payments, POD: not built (VAHAN marked demo)** |
-| AI owners and AI broker | **Demo personas**, labelled "(AI owner)" / "Demo load"; their rates come from the same cost model, so they show the workflow, not market outcomes. Turn off with the `aiAgents` setting |
+| Demo owners and demo broker | **Simulated personas** (rule-based replies, not an AI model), labelled "(demo owner, simulated)" / "Demo load"; their rates come from the same cost model, so they show the workflow, not market outcomes. Turn off with the `aiAgents` setting |
 | Memory | Upstash Redis (free tier), local file fallback |
 
 ## Files

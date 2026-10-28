@@ -312,7 +312,7 @@ class Desk:
         if by is None:
             th = next((x for x in load["threads"].values() if x.get("name") and text.startswith(x["name"])), None)
             if actor == "Broker":
-                by = "AI" if load.get("aiBroker") else "Human"         # the AI broker approves its own demo loads
+                by = "Demo" if load.get("aiBroker") else "Human"       # the simulated demo broker approves its own loads
             elif actor == "Strategist":
                 by = "AI" if text.startswith("(AI)") else "Code"
             elif actor == "Intake":
@@ -321,7 +321,7 @@ class Desk:
                 th = next((x for x in load["threads"].values() if x.get("name") and x["name"] in text), None)
                 by = (th or {}).get("readBy") or "Code"
             elif actor in ("Booking", "Sourcing") and self.OWNER_SAID.search(text):
-                by = "AI" if th and th.get("sandbox") else "Human"      # an owner's own word (an AI persona in sandbox)
+                by = "Demo" if th and th.get("sandbox") else "Human"    # an owner's own word, or a rule-based demo persona
             else:
                 by = "Code"
         t = now()
@@ -389,7 +389,8 @@ class Desk:
         return [ewb, gst]
 
     DISPATCH_RE = re.compile(r"\b([A-Z]{2})[ -]?(\d{1,2})[ -]?([A-Z]{1,3})[ -]?(\d{3,4})\b", re.I)
-    PHONE_RE = re.compile(r"(?<!\d)(?:\+?91[ -]?)?([6-9]\d{9})(?!\d)")
+    BH_RE = re.compile(r"\b(\d{2})[ -]?BH[ -]?(\d{4})[ -]?([A-Z]{1,2})\b", re.I)   # Bharat-series plates: 22 BH 1234 AA
+    PHONE_RE = re.compile(r"(?<!\d)(?:\+?91[ -]?)?([6-9]\d{4}[ -]?\d{5})(?!\d)")   # also "98765 43210"
     STATE_CODES = set("AN AP AR AS BR CH CG DD DL GA GJ HR HP JK JH KA KL LA LD MP MH MN ML MZ NL OD OR PY PB RJ SK TN TS TR UP UK UA WB".split())
 
     def _ask_dispatch(self, load, th):
@@ -403,20 +404,22 @@ class Desk:
 
     def _take_dispatch(self, load, th, text):
         """The owner's vehicle and driver for a booked load: checked, stored, and sent to the broker as a dispatch card."""
-        v, ph = self.DISPATCH_RE.search(text), self.PHONE_RE.search(text)
+        bh = self.BH_RE.search(text)
+        v = bh or self.DISPATCH_RE.search(text)
+        ph = self.PHONE_RE.search(self.BH_RE.sub(" ", text))
         if not v and not ph:
             return False
         th["messages"].append({"dir": "in", "text": text, "t": now()})
         if v:
-            th["vehicle"] = "".join(v.groups()).upper()
+            th["vehicle"] = (f"{bh.group(1)}BH{bh.group(2)}{bh.group(3)}" if bh else "".join(v.groups())).upper()
         if ph:
-            th["driverPhone"] = ph.group(1)
+            th["driverPhone"] = re.sub(r"\D", "", ph.group(1))
         if not (th.get("vehicle") and th.get("driverPhone")):
             self._to_owner(load, th, "Shukriya 🙏 " + ("Driver ka mobile number bhi bhejiye." if th.get("vehicle") else "Gaadi number bhi bhejiye."))
             return True
         th["needDispatch"] = False
-        state = th["vehicle"][:2]
-        check = ("number ka format sahi, VAHAN check: demo (abhi juda nahi)" if state in self.STATE_CODES
+        state = "BH" if bh else th["vehicle"][:2]
+        check = ("number ka format sahi, VAHAN check: demo (abhi juda nahi)" if state in self.STATE_CODES | {"BH"}
                  else f"⚠️ '{state}' koi state code nahi, number dobara confirm karein")
         demo = " (demo gaadi)" if th.get("sandbox") else ""
         lane, f = load["lane"], load["load"]
@@ -739,14 +742,14 @@ class Desk:
             self.send_wa(o["phone"], text)
 
     # ---------------- a new load ----------------
-    def start_load(self, fields, source="console", broker_phone=None, raw=""):
+    def start_load(self, fields, source="console", broker_phone=None, raw="", demo_only=False):
         with self._seq_lock:                           # two brokers at once must not share a load number
             self._seq += 1
             lid = f"BH-{self._seq}"
         load = {"id": lid, "createdAt": now(), "source": source, "brokerPhone": broker_phone,
                 "raw": raw, "load": fields, "status": "routing", "events": [], "threads": {}, "brokerMessages": [],
                 "quote": None, "winner": None, "rounds": 0, "mode": self.settings["mode"], "phase": "quote",
-                "fixedSell": None, "contacted": [], "reason": "", "widenLeft": 1}
+                "fixedSell": None, "contacted": [], "reason": "", "widenLeft": 1, "demoOnly": demo_only}
         self.post("new_load", load=load)               # the worker owns self.loads
         return load
 
@@ -804,7 +807,7 @@ class Desk:
         day = E.pickup_day(f.get("pickup_when"))
         w = f["weight_ton"]
         seen, out = set(load["contacted"]), []
-        mode_sandbox = load["mode"] == "sandbox"
+        mode_sandbox = load["mode"] == "sandbox" or load.get("demoOnly")   # an anonymous visitor's load never reaches a real owner
         ai_ok = mode_sandbox or (self.settings.get("aiAgents") and not load.get("aiBroker"))   # demo loads are for real owners
         rows = []
         for t in list(self.pool):
@@ -1616,7 +1619,7 @@ class Desk:
         if m.get("premiumPct"):
             lines.append(f"📦 {m['label']}: +{m['premiumPct']}% rate" + (". Hazchem permit, UN number e-way bill/LR par, trained driver." if m.get("hazmat") else ""))
         lines += [f"📲 {len(ths)} owners se poocha: {n('deal')} raazi, {n('declined')} mana, {n('silent')} ka jawab nahi",
-                  f"🚛 {th['name']}{' (AI owner)' if th.get('sandbox') and load['mode'] == 'live' else ''} · {th['type']} · {th['reliability']}★",
+                  f"🚛 {th['name']}{' (demo owner, simulated)' if th.get('sandbox') and load['mode'] == 'live' else ''} · {th['type']} · {th['reliability']}★",
                   f"💰 Quote *₹{q['sell_total']:,}* (₹{q['rate_per_km']}/km) · owner ko ₹{q['buy_total']:,}",
                   f"📊 Margin *{q['margin_pct']}%* (floor {E.MARGIN['floorPct']:g}%)"]
         note = q.get("note") or ""
@@ -1684,7 +1687,9 @@ class Desk:
 
     def _view(self):
         today = datetime.now(IST).date()
-        loads = [l for l in self.loads if datetime.fromtimestamp(l["createdAt"], IST).date() == today]
+        # loads from builds before the goods rules (no material_class) were priced by an older rate card: kept, not shown
+        loads = [l for l in self.loads if datetime.fromtimestamp(l["createdAt"], IST).date() == today
+                 and "material_class" in (l.get("load") or {})]
         ready = [l for l in loads if l.get("quoteAt")]
         mins = sorted((l["quoteAt"] - l["createdAt"]) / 60 for l in ready)
         booked = [l for l in loads if l["status"] in ("booked", "recovered")]
@@ -1710,5 +1715,6 @@ class Desk:
                 "poolSize": len(pool), "liveOwners": len(live_owners),
                 "aiOwners": len({t["ownerKey"] for t in self.pool if t.get("source") == "sandbox"})
                             if self.settings["mode"] == "live" and self.settings.get("aiAgents") else 0,
-                "loads": [{k: v for k, v in l.items() if k not in ("contacted", "prefer")} for l in reversed(self.loads[-60:])],
+                "loads": [{k: v for k, v in l.items() if k not in ("contacted", "prefer")} for l in reversed(self.loads[-60:])
+                          if "material_class" in (l.get("load") or {}) or l["status"] == "routing"],
                 "whatsapp": bool(self.send_wa)}

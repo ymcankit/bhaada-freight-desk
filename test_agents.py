@@ -56,7 +56,7 @@ L = D.loads[-1]
 ok &= check("AI owners are asked in live mode", any(t["sandbox"] for t in L["threads"].values()), str(len(L["threads"])))
 st = wait(L, ("needs_approval", "escalated"), 25)
 ok &= check("AI owners produce a quote", st == "needs_approval", st)
-ok &= check("quote says the owner is AI", "(AI owner)" in last_to(7001))
+ok &= check("quote says the owner is a simulated demo owner", "(demo owner, simulated)" in last_to(7001))
 
 # 2. a real owner alone: the AI broker posts a demo load, approves it, the owner holds and is booked
 text(8001, "owner Solo Transport, Surat")
