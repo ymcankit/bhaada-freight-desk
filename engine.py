@@ -181,6 +181,8 @@ def norm_type(s):
         return "Taurus (10-tyre)"
     if "container" in t:
         return "20 ft container"
+    if re.search(r"\b407\b", t):                          # Tata 407: the common 14 ft body
+        return "14 ft"
     m = re.search(r"(\d{2})", t)
     if m:
         cands = [k for k in KNOWN_TYPES if k.startswith(m.group(1) + " ft") and "container" not in k]

@@ -198,7 +198,61 @@ class Desk:
             return self._owner_reply(load, th, text)
         o = self.owners.get(key)
         if o and not o.get("sandbox"):
-            self._parse_checkin(o, text)
+            self._owner_chat(o, text)
+
+    def _owner_story(self, key):
+        """What this owner has going on with the desk, for the model to answer from (facts only, newest first)."""
+        rows = []
+        for load in reversed(self.loads[-30:]):
+            th = load["threads"].get(key)
+            if not th:
+                continue
+            lane, f = load.get("lane") or {}, load["load"]
+            agreed = f"agreed ₹{th['agreedBuy'] / lane['distanceKm']:.1f}/km (₹{th['agreedBuy']:,} total)" \
+                if th.get("agreedBuy") and lane.get("distanceKm") else None
+            stage = {"needs_approval": "waiting for the broker's approval", "holding": "broker approved, owner asked to confirm",
+                     "booked": "booked", "recovered": "re-booked", "rejected": "broker rejected", "escalated": "closed",
+                     "sourcing": "collecting rates", "waiting_trucks": "waiting for trucks"}.get(load["status"], load["status"])
+            won = "this owner was chosen" if load.get("winner") == key else ("another owner was chosen" if load.get("winner") else "")
+            rows.append(f"- {load['id']}: {lane.get('origin')} → {lane.get('destination')}, {lane.get('distanceKm')} km, "
+                        f"{f.get('weight_ton')} T, {th['type']}, pickup {f.get('pickup_when') or 'kal'}. Load stage: {stage}. "
+                        f"Owner's thread: {th['status']}" + (f", owner asked ₹{th['ask']}/km" if th.get("ask") else "")
+                        + (f", desk countered ₹{th['counter']}/km" if th.get("counter") else "")
+                        + (f", {agreed}" if agreed else "") + (f". {won}" if won else ""))
+            if len(rows) >= 4:
+                break
+        trucks = [f"{t['type']} in {t['city']} ({t['available']})" + (f" at ₹{t['ratePerKm']}/km" if t.get("ratePerKm") else "")
+                  for t in self.pool if t["ownerKey"] == key]
+        return rows, trucks
+
+    def _owner_chat(self, o, text):
+        """An owner message outside a live negotiation: a truck report, or a question to answer from the facts."""
+        rows, trucks = self._owner_story(o["key"])
+        try:
+            out = self._llm_json(
+                "You are Bhaada, a freight desk talking to a TRUCK OWNER on chat. Decide what their message is and answer.\n"
+                f"Owner: {o['name']}, base {o.get('baseCity') or 'unknown'}.\n"
+                f"Their trucks reported today: {'; '.join(trucks) or 'none yet'}.\n"
+                "Their loads with the desk (newest first):\n" + ("\n".join(rows) or "- none yet") + "\n"
+                f'Owner\'s message: "{text}"\n'
+                "Rules:\n"
+                "- If the message reports a free/empty truck, its type, location or rate, set intent=\"checkin\" and leave reply empty.\n"
+                "- Otherwise intent=\"reply\": answer their actual question in 1-3 short lines using ONLY the facts above. "
+                "Quote agreed or countered prices exactly as given. Never invent a load, a price or a promise. If a deal is "
+                "waiting for the broker's approval, say so and that they'll be told. If you don't know, say the desk will update them. "
+                "If they have no load yet, say loads come here as soon as one fits, and ask them to send their truck as "
+                "'32 ft MXL, Surat, aaj, ₹38/km' only if they haven't reported one.\n"
+                "- Payment, advance, documents, loading time and anything else not in the facts: the broker handles it; "
+                "say the broker will tell them. Don't guess.\n"
+                "- Reply in Hinglish: Hindi words in Roman script, like \"Aapka rate ₹33/km tay hua hai, broker ka approval "
+                "aate hi bata denge.\" Never write plain English sentences.\n"
+                'Return ONLY JSON {"intent":"checkin|reply","reply":""}')
+        except Exception as e:
+            print("owner chat failed, reading it as a check-in:", repr(e))
+            return self._parse_checkin(o, text)
+        if out.get("intent") == "reply" and (out.get("reply") or "").strip():
+            return self._wa(o, out["reply"].strip()[:600])
+        self._parse_checkin(o, text)
 
     def _open_thread(self, key):
         for load in reversed(self.loads):
@@ -251,7 +305,8 @@ class Desk:
                           "city": city["name"], "available": t.get("available") if t.get("available") in E.AVAIL_DAY else "today",
                           "ratePerKm": rate if rate and 10 < rate < 200 else None, "source": "checkin", "at": now()})
         if not added:
-            return self._wa(o, "Kaunsi gaadi hai aur kahan khadi hai? 🙏 Aise bhejiye: *32 ft MXL, Surat, aaj, ₹38/km*")
+            return self._wa(o, "Gaadi ka type samajh nahi aaya 🙏 Inme se kaunsi hai: " + ", ".join(E.KNOWN_TYPES[:-1])
+                               + "? Aur kahan khadi hai? e.g. *32 ft MXL, Surat, aaj, ₹38/km*")
         self.pool = [t for t in self.pool if t["ownerKey"] != o["key"]] + added
         self.save()
         lines = ", ".join(f"{t['type']} in {t['city']} ({t['available']})" for t in added)
