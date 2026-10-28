@@ -13,7 +13,7 @@ services:
       - key: GROQ_API_KEY
         sync: false
       - key: GROQ_MODEL
-        value: openai/gpt-oss-20b
+        value: openai/gpt-oss-120b
       - key: WHATSAPP_TOKEN
         sync: false
       - key: WHATSAPP_PHONE_ID
