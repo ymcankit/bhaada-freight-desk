@@ -113,7 +113,45 @@ def run_tests():
                     E.MARGIN["floorPct"] <= sim["margin_min"] and sim["margin_max"] <= E.MARGIN["ceilingPct"], str(sim))
     finally:
         E.chat, E.LLM["key"] = real_chat, real_key
+    ok &= rate_limit_tests()
     print("\nALL PASS" if ok else "\nSOME FAILED")
+    return ok
+
+def rate_limit_tests():
+    """A 429 makes every caller wait or fail fast together; a bad key is not retried."""
+    class R:
+        def __init__(self, code, text="", headers=None):
+            self.status_code, self.text, self.headers, self.ok = code, text, headers or {}, code < 400
+        def json(self):
+            return {"choices": [{"message": {"content": "{}"}}]}
+    calls, real_post, real_key = [], E.requests.post, E.LLM["key"]
+    def post(*a, **k):
+        calls.append(1)
+        return replies.pop(0)
+    E.requests.post, E.LLM["key"] = post, "test"
+    ok = True
+    try:
+        replies = [R(429, headers={"retry-after": "40"})]
+        try:
+            E.chat([{"role": "user", "content": "x"}], max_wait=8)
+        except RuntimeError:
+            pass
+        n = len(calls)
+        try:
+            E.chat([{"role": "user", "content": "x"}], max_wait=8)
+            failed_fast = False
+        except RuntimeError:
+            failed_fast = True
+        ok &= check("rate limit: later calls fail fast without a request", failed_fast and len(calls) == n == 1)
+        E.LLM["coolUntil"] = 0
+        replies = [R(401, "bad key")] * 3
+        try:
+            E.chat([{"role": "user", "content": "x"}])
+        except Exception:
+            pass
+        ok &= check("bad key is not retried", len(calls) == 2)
+    finally:
+        E.requests.post, E.LLM["key"], E.LLM["coolUntil"] = real_post, real_key, 0
     return ok
 
 if __name__ == "__main__":

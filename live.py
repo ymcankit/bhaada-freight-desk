@@ -769,7 +769,8 @@ class Desk:
         return {"action": "decline", "rate": None, "ask": ask, "reply": ""}
 
     def _llm_json(self, prompt):
-        msg = E.chat([{"role": "user", "content": prompt}], json_mode=True, retries=2, max_wait=8)
+        # timeout 12: negotiation calls this on the worker, so one slow reply must not stall every other load
+        msg = E.chat([{"role": "user", "content": prompt}], json_mode=True, timeout=12, retries=2, max_wait=8)
         return E.parse_json(msg.get("content") or "")
 
     def _all_answered(self, load):

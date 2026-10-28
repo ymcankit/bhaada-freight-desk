@@ -392,7 +392,7 @@ def on_text(wa, text):
         return
     if not E.llm_ready():
         return send(wa, "Desk abhi load padh nahi sakta (language model band hai) 🙏 Thodi der baad bhejiye.")
-    intent, said = broker_brain(wa, text, s)
+    intent, said = ("load", None) if plainly_load(text) else broker_brain(wa, text, s)
     if intent == "reply":
         return send(wa, said)
     s["chat"].append({"role": "user", "text": text})
@@ -422,13 +422,24 @@ def broker_facts(wa):
             continue
     return []
 
+TONS = re.compile(r"\b\d+(?:\.\d+)?\s*(?:ton|tonne|tan|t|mt)\b", re.I)
+
+def plainly_load(text):
+    """Load details nobody would mistake for small talk ("Bhiwandi se Surat 14 ton 32 MXL"): skip the routing call,
+    which saves a model call per message against Groq's per-minute cap."""
+    if "?" in text or len(text) > 300:
+        return False
+    low = text.lower()
+    cities = sum(bool(re.search(r"\b" + re.escape(c.lower()) + r"\b", low)) for c in E.KNOWN_CITIES)
+    return (min(cities, 2) + bool(TONS.search(text)) + bool(E.norm_type(text))) >= 2
+
 def broker_brain(wa, text, s):
     """What does the broker mean? ("load", None): load details or a truck request, for intake.
     ("reply", text): thanks, small talk or a question, answered from their own loads. Falls back to intake."""
     loads = broker_facts(wa)
     asked = next((m["text"] for m in reversed(s["chat"]) if m["role"] == "bot"), None)
     try:
-        out = E.parse_json(E.gen(
+        out = E.parse_json((E.chat([{"role": "user", "content":
             "You are Bhaada, an AI freight desk chatting with a BROKER (they send loads; you find trucks and quote).\n"
             "Their recent loads (newest last):\n" + ("\n".join("- " + x for x in loads) or "- none") + "\n"
             + (f"A new load is being collected: known so far {json.dumps(s['load'], ensure_ascii=False)}; "
@@ -443,7 +454,8 @@ def broker_brain(wa, text, s):
             "and never a question about tons or cities. If a load is being collected, you may gently remind what is "
             "still needed. To cancel a quote they write *reject BH-xxxx*; a booked trip is changed by calling the owner.\n"
             "Reply in Hinglish (Hindi words in Roman script), never plain English.\n"
-            'Return ONLY JSON {"intent":"load|reply","reply":""}', json_mode=True))
+            'Return ONLY JSON {"intent":"load|reply","reply":""}'}],
+            json_mode=True, timeout=12, retries=2, max_wait=5).get("content") or ""))   # on any trouble intake reads it
     except Exception as e:
         print("broker brain failed, reading it as a load:", repr(e))
         return "load", None
