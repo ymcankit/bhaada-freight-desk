@@ -106,6 +106,26 @@ ok &= check("broker told about the recovery", "re-booked" in last_to(BROKER))
 state = c.get("/api/state").json()
 ok &= check("state API reports the day", state["kpis"]["received"] == 1 and state["kpis"]["booked"] == 1, str(state["kpis"]))
 ok &= check("owner phones masked in the API", all(o["phone"].startswith("••••") for o in state["owners"]))
+raw_state = c.get("/api/state").text
+ok &= check("no phone number anywhere in the API", not any(p in raw_state for p in [BROKER] + OWNERS))
+# Upstash down at boot: the blank desk must not overwrite what Upstash holds, and merges it once it answers
+REMOTE = {"up": False, "sets": [], "state": {"owners": {"91999": {"key": "91999", "phone": "91999", "name": "Old Owner"}}, "seq": 1500}}
+def fake_redis(cmd):
+    if not REMOTE["up"]:
+        raise ConnectionError("upstash down")
+    if cmd[0] == "SET":
+        REMOTE["sets"].append(cmd[2])
+    return live.json.dumps(REMOTE["state"]) if cmd[0] == "GET" else "OK"
+real_store, real_redis = live._store, live._redis
+live._store, live._redis = (lambda: ("https://x", "t")), fake_redis
+d2 = live.Desk()
+d2.save()
+ok &= check("Upstash down at boot: nothing overwritten", not d2.remote_ok and not REMOTE["sets"])
+REMOTE["up"] = True
+d2.save()
+ok &= check("Upstash back: old owners merged, then saved", "91999" in d2.owners and d2._seq >= 1500 and len(REMOTE["sets"]) == 1)
+live._store, live._redis = real_store, real_redis
+
 R = live.Desk._owner_rate
 ok &= check("owner rates read in context", R("₹38/km lagega", 280) == 38 and R("38k", 1000) == 38 and R("35 hazaar total", 1000) == 35
             and R("32 ft hai, 36 per km, 1500 toll alag", 280) == 36 and R("14 ton ka 40", 280) == 40 and R("kal 10 baje", 280) is None)

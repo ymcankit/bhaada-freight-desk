@@ -72,6 +72,7 @@ class Desk:
         self.reliability = {}                # learned penalties, ownerKey -> delta
         self.checkin = {"sentAt": None, "asked": 0}
         self._seq = 1000
+        self._seq_lock = threading.Lock()
         self._load()
         self._apply_settings()
         threading.Thread(target=self._worker, daemon=True).start()
@@ -80,13 +81,19 @@ class Desk:
     # ---------------- persistence ----------------
     def _load(self):
         s = None
+        self.remote_ok = True
         if _store():
-            try:
-                raw = _redis(["GET", STATE_KEY])
-                s = json.loads(raw) if raw else None
-                print("state loaded from Upstash:", "found" if s else "empty")
-            except Exception as e:
-                print("Upstash load failed, using the local file:", repr(e))
+            for i in range(3):
+                try:
+                    raw = _redis(["GET", STATE_KEY])
+                    s = json.loads(raw) if raw else None
+                    print("state loaded from Upstash:", "found" if s else "empty")
+                    break
+                except Exception as e:
+                    print("Upstash load failed:", repr(e))
+                    time.sleep(i + 1 if i < 2 else 0)
+            else:
+                self.remote_ok = False         # never overwrite what Upstash holds with a blank desk; merge once it answers
         if s is None:
             try:
                 s = json.loads(STATE_FILE.read_text(encoding="utf-8"))
@@ -100,17 +107,53 @@ class Desk:
         self.brokers = s.get("brokers", {})
         self._seq = s.get("seq", self._seq)
 
+    def _merge_remote(self, s):
+        """Upstash was down at boot: fold what it holds into what this process learned since."""
+        for k, o in s.get("owners", {}).items():
+            self.owners.setdefault(k, o)
+        for name in ("reliability", "brokers"):
+            for k, v in s.get(name, {}).items():
+                getattr(self, name).setdefault(k, v)
+        mine = {t["ownerKey"] for t in self.pool}
+        self.pool = self.pool + [t for t in s.get("pool", []) if t["ownerKey"] not in mine]
+        ids = {l["id"] for l in self.loads}
+        self.loads = sorted([l for l in s.get("loads", []) if l["id"] not in ids] + self.loads, key=lambda l: l["createdAt"])
+        self._seq = max(self._seq, s.get("seq", 0))
+        print("merged the Upstash state:", len(s.get("owners", {})), "owners")
+
+    CLOSED = ("escalated", "rejected", "booked", "recovered")
+
+    def _on_save(self):
+        self.save()
+
     def save(self):
-        live_owners = {k: v for k, v in self.owners.items() if not v.get("sandbox")}
-        data = {"settings": self.settings, "owners": live_owners, "reliability": self.reliability, "seq": self._seq,
-                "pool": [t for t in self.pool if t.get("source") == "checkin"], "loads": self.loads[-200:],
-                "brokers": self.brokers}
-        text = json.dumps(data, ensure_ascii=False)
+        if len(self.loads) > 300:                      # memory and the stored blob stay bounded; open loads are kept
+            self.loads = [l for l in self.loads[:-200] if l["status"] not in self.CLOSED] + self.loads[-200:]
+        if _store() and not self.remote_ok:
+            try:
+                raw = _redis(["GET", STATE_KEY])
+                if raw:
+                    self._merge_remote(json.loads(raw))
+                self.remote_ok = True
+            except Exception as e:
+                print("Upstash still unreachable, saving locally only:", repr(e))
+        for attempt in range(5):                       # the server thread may add an owner or a broker chat meanwhile
+            try:
+                live_owners = {k: v for k, v in list(self.owners.items()) if not v.get("sandbox")}
+                data = {"settings": self.settings, "owners": live_owners, "reliability": self.reliability, "seq": self._seq,
+                        "pool": [t for t in self.pool if t.get("source") == "checkin"], "loads": self.loads,
+                        "brokers": self.brokers}
+                text = json.dumps(data, ensure_ascii=False)
+                break
+            except RuntimeError:
+                time.sleep(0.02)
+        else:
+            return print("save skipped: state kept changing")
         try:
             STATE_FILE.write_text(text, encoding="utf-8")
         except Exception:
             pass
-        if _store():
+        if _store() and self.remote_ok:
             try:
                 _redis(["SET", STATE_KEY, text])
             except Exception as e:
@@ -166,26 +209,28 @@ class Desk:
         self.owners[phone] = {"key": phone, "phone": phone, "name": name.strip()[:40],
                               "baseCity": hit["name"] if hit else (city or ""), "reliability": 4.5,
                               "registeredAt": now(), "sandbox": False}
-        self.save()
-        self.post("retry_waiting")                     # a new owner is asked about loads still waiting for a truck
+        self.post("save")                              # called from the server thread: the worker does the writing
+        self.post("retry_waiting")                   # a new owner is asked about loads still waiting for a truck
         return self.owners[phone]
 
     def sandbox_on(self):
-        """Load the persona owners and their trucks as today's pool, marked sandbox."""
-        self.owners = {k: v for k, v in self.owners.items() if not v.get("sandbox")}
-        self.pool = [t for t in self.pool if t.get("source") != "sandbox"]
+        """Load the persona owners and their trucks as today's pool, marked sandbox. Built aside, then swapped in,
+        because the console calls this while the worker may be reading the owners."""
+        owners = {k: v for k, v in list(self.owners.items()) if not v.get("sandbox")}
+        pool = [t for t in self.pool if t.get("source") != "sandbox"]
         for o in E.owners:
             if not o["behavior"]["respondsToCheckin"]:
                 continue
             key = "sb:" + o["ownerId"]
-            self.owners[key] = {"key": key, "phone": None, "name": o["name"], "baseCity": o["baseCity"],
-                                "reliability": o["reliability"], "sandbox": True, "behavior": o["behavior"]}
+            owners[key] = {"key": key, "phone": None, "name": o["name"], "baseCity": o["baseCity"],
+                           "reliability": o["reliability"], "sandbox": True, "behavior": o["behavior"]}
             for tid in o["truckIds"]:
                 t = E.TRUCKS_BY_ID.get(tid)
                 if t:
-                    self.pool.append({"ownerKey": key, "type": t["type"], "capacityTon": t["capacityTon"],
-                                      "city": t["currentCity"], "available": t["availableFrom"], "ratePerKm": None,
-                                      "source": "sandbox", "at": now()})
+                    pool.append({"ownerKey": key, "type": t["type"], "capacityTon": t["capacityTon"],
+                                 "city": t["currentCity"], "available": t["availableFrom"], "ratePerKm": None,
+                                 "source": "sandbox", "at": now()})
+        self.owners, self.pool = owners, pool
 
     def reliability_of(self, key):
         o = self.owners.get(key, {})
@@ -295,7 +340,7 @@ class Desk:
         """A registered owner who wants to send loads instead (e.g. one phone testing both roles)."""
         o = self.owners.pop(key, None)
         self.pool = [t for t in self.pool if t["ownerKey"] != key]
-        self.save()
+        self.post("save")
         return o
 
     def send_checkin(self):
@@ -365,26 +410,37 @@ class Desk:
 
     # ---------------- a new load ----------------
     def start_load(self, fields, source="console", broker_phone=None, raw=""):
-        self._seq += 1
-        load = {"id": f"BH-{self._seq}", "createdAt": now(), "source": source, "brokerPhone": broker_phone,
+        with self._seq_lock:                           # two brokers at once must not share a load number
+            self._seq += 1
+            lid = f"BH-{self._seq}"
+        load = {"id": lid, "createdAt": now(), "source": source, "brokerPhone": broker_phone,
                 "raw": raw, "load": fields, "status": "routing", "events": [], "threads": {}, "brokerMessages": [],
                 "quote": None, "winner": None, "rounds": 0, "mode": self.settings["mode"], "phase": "quote",
                 "fixedSell": None, "contacted": [], "reason": "", "widenLeft": 1}
-        self.loads.append(load)
-        self.post("route", lid=load["id"])
+        self.post("new_load", load=load)               # the worker owns self.loads
         return load
+
+    def _on_new_load(self, load):
+        self.loads.append(load)
+        self._on_route(load["id"])
 
     def _find(self, lid):
         return next((l for l in self.loads if l["id"] == lid), None)
 
     def _on_route(self, lid):
         load = self._find(lid)
+        if not load or load["status"] != "routing":
+            return
         f = load["load"]
         o, d = geo.resolve_city(f["origin"]), geo.resolve_city(f["destination"])
         self._event(load, "Intake", f"{f['origin']} → {f['destination']} · {f['weight_ton']:g} T · {f['truck_type']} · "
                                    f"{f.get('pickup_when') or 'kal'}" + (f" · budget ₹{f['budget_rs']:,.0f}" if f.get("budget_rs") else ""))
         if not o or not d:
-            return self._escalate(load, f"Couldn't find {'origin' if not o else 'destination'} on the map.")
+            return self._escalate(load, f"Couldn't find {'origin' if not o else 'destination'} on the map.",
+                                  f"{f['origin'] if not o else f['destination']} naksha (map) par nahi mila. Shehar ka naam check karke dobara bhejiye.")
+        if o["name"] == d["name"]:
+            return self._escalate(load, f"Origin and destination are both {o['name']}.",
+                                  f"Pickup aur drop dono {o['name']} likha hai. Sahi shehar ke saath dobara bhejiye.")
         r = geo.road_km(o, d)
         known = E.find_lane(o["name"], d["name"])
         load["lane"] = {"laneId": f"{o['name']}-{d['name']}", "origin": o["name"], "destination": d["name"],
@@ -398,7 +454,8 @@ class Desk:
         tc = E.type_check(f)
         load["searchType"] = f["truck_type"] if tc["fits"] else (tc["suggest"][0] if tc["suggest"] else None)
         if not load["searchType"]:
-            return self._escalate(load, f"No truck type carries {f['weight_ton']:g} T. Split the load or quote a trailer.")
+            return self._escalate(load, f"No truck type carries {f['weight_ton']:g} T. Split the load or quote a trailer.",
+                                  f"{f['weight_ton']:g} T kisi bhi gaadi mein nahi aayega. Load do gaadiyon mein baantiye ya trailer ka rate lijiye.")
         if load["searchType"] != f["truck_type"]:
             self._event(load, "Orchestrator", f"{f['truck_type']} carries max {tc['capacity_ton']} T, so sourcing a {load['searchType']}.")
         self._broadcast(load)
@@ -429,7 +486,7 @@ class Desk:
             out.append({**t, "deadheadKm": dh})
         if not mode_sandbox and len(out) < E.SRC["ownersPerBroadcast"]:
             # broadcast on demand: registered owners who haven't answered today's check-in yet
-            for k, o in self.owners.items():
+            for k, o in list(self.owners.items()):    # a snapshot: owners register from the server thread
                 if o.get("sandbox") or k in seen or k in {x["ownerKey"] for x in out}:
                     continue
                 out.append({"ownerKey": k, "type": load["searchType"], "capacityTon": E.rates["capacityTonByType"][load["searchType"]],
@@ -450,7 +507,9 @@ class Desk:
         f, lane = load["load"], load["lane"]
         for c in cands:
             key = c["ownerKey"]
-            o = self.owners[key]
+            o = self.owners.get(key)
+            if not o:                                   # removed a moment ago (switched to broker)
+                continue
             sell = load["fixedSell"] or E.target_sell(lane, c["type"])
             th = {"ownerKey": key, "name": o["name"], "sandbox": bool(o.get("sandbox")), "type": c["type"],
                   "city": c["city"], "deadheadKm": c["deadheadKm"], "checkinRate": c.get("ratePerKm"),
@@ -622,7 +681,10 @@ class Desk:
     def _on_tick(self):
         t = now()
         for load in self.loads:
-            if load["status"] in ("sourcing",) and t > load.get("deadline", t + 1):
+            if load["status"] == "routing" and t - load["createdAt"] > 180:     # the route event failed or never ran
+                self._escalate(load, "Routing did not finish (map service or an internal error).",
+                               "Route nahi nikal paaya (map service ka jawab nahi aaya). Thodi der baad dobara bhejiye.")
+            elif load["status"] in ("sourcing",) and t > load.get("deadline", t + 1):
                 for th in load["threads"].values():
                     if th["status"] in ("sent", "countered", "reconfirm") and th["round"] == load["rounds"]:
                         th["status"] = "declined" if th["status"] == "countered" else "silent"
@@ -652,8 +714,10 @@ class Desk:
                 load["widenLeft"] -= 1
                 self._event(load, "Orchestrator", "No offer clears the floor yet. Widening the search.")
                 return self._broadcast(load)
-            return self._escalate(load, "No owner agreed a rate that clears the margin floor."
-                                  if load["threads"] else "No owner replied.")
+            if any(t["status"] in ("deal", "declined", "countered") for t in load["threads"].values()):
+                return self._escalate(load, "No owner agreed a rate that clears the margin floor.",
+                                      "Kisi owner ka rate margin floor ke andar nahi baitha.")
+            return self._escalate(load, "No owner replied.", "Kisi owner ne jawab nahi diya.")
         offers.sort(reverse=True)
         best = offers[0]
         for m, rel, key in offers[1:]:              # a clearly more reliable owner wins a near tie
@@ -684,11 +748,18 @@ class Desk:
             self._to_broker(load, self.quote_text(load), [("approve:" + load["id"], "Approve ✅"), ("reject:" + load["id"], "Reject ❌")])
         self.save()
 
-    def _escalate(self, load, reason):
+    def _escalate(self, load, reason, hi=None):
+        """reason: English, for the console; hi: the same in Hinglish for the broker's chat."""
+        replan = load["phase"] == "replan"
         load["status"], load["reason"] = "escalated", reason
         load["closedAt"] = now()
         self._event(load, "Orchestrator", f"Escalated to you: {reason}")
-        self._to_broker(load, f"❌ {load['id']}: abhi quote nahi ban paaya. {reason}\nAap khud dekh lijiye, ya thodi der baad phir bhejiye.")
+        if replan:                                     # the shipper already has this price: this one is urgent
+            lane = load.get("lane") or {}
+            self._to_broker(load, f"🚨 {load['id']} {lane.get('origin')} → {lane.get('destination')}: backup gaadi nahi mili. "
+                                  f"{hi or reason}\nShipper ko ₹{load['fixedSell']:,} bola hua hai. Turant khud kisi owner ko call kijiye.")
+        else:
+            self._to_broker(load, f"❌ {load['id']}: abhi quote nahi ban paaya. {hi or reason}\nAap khud dekh lijiye, ya thodi der baad phir bhejiye.")
         self.save()
 
     # ---------------- approval, hold, back-out ----------------
@@ -828,6 +899,28 @@ class Desk:
         return "\n".join(lines)
 
     def view(self):
+        """A copy for the console, taken while the worker keeps changing loads; phone numbers and chat ids never leave."""
+        for attempt in range(5):
+            try:
+                v = json.loads(json.dumps(self._view(), ensure_ascii=False))
+                break
+            except RuntimeError:
+                time.sleep(0.02)
+        else:
+            v = json.loads(json.dumps(self._view(), ensure_ascii=False))
+        alias = lambda k: k if not k or str(k).startswith("sb:") else "o-" + hashlib.sha1(str(k).encode()).hexdigest()[:8]
+        for o in v["owners"]:
+            o["key"] = alias(o["key"])
+            for t in o["trucks"]:
+                t["ownerKey"] = alias(t["ownerKey"])
+        for l in v["loads"]:
+            l["threads"] = {alias(k): {**th, "ownerKey": alias(th["ownerKey"])} for k, th in l["threads"].items()}
+            l["winner"] = alias(l.get("winner"))
+            if l.get("brokerPhone"):
+                l["brokerPhone"] = "•••• " + str(l["brokerPhone"])[-4:]
+        return v
+
+    def _view(self):
         today = datetime.now(IST).date()
         loads = [l for l in self.loads if datetime.fromtimestamp(l["createdAt"], IST).date() == today]
         ready = [l for l in loads if l.get("quoteAt")]
@@ -839,7 +932,7 @@ class Desk:
                 "escalated": sum(l["status"] == "escalated" for l in loads),
                 "medianQuoteMin": round(mins[len(mins) // 2], 1) if mins else None,
                 "avgMargin": round(sum(margins) / len(margins), 1) if margins else None}
-        live_owners = [o for o in self.owners.values() if not o.get("sandbox")]
+        live_owners = [o for o in list(self.owners.values()) if not o.get("sandbox")]
         pool = [t for t in self.pool if (t.get("source") == "sandbox") == (self.settings["mode"] == "sandbox")]
         return {"now": now(), "settings": self.settings, "kpis": kpis, "checkin": self.checkin,
                 "owners": [{**{k: o.get(k) for k in ("key", "name", "baseCity", "sandbox")},
@@ -847,7 +940,7 @@ class Desk:
                             "reliability": self.reliability_of(o["key"]),
                             "trucks": [t for t in pool if t["ownerKey"] == o["key"]]}
                            for o in (live_owners if self.settings["mode"] == "live" else
-                                     [o for o in self.owners.values() if o.get("sandbox")])],
+                                     [o for o in list(self.owners.values()) if o.get("sandbox")])],
                 "poolSize": len(pool), "liveOwners": len(live_owners),
                 "loads": [{k: v for k, v in l.items() if k not in ("contacted", "prefer")} for l in reversed(self.loads[-60:])],
                 "whatsapp": bool(self.send_wa)}

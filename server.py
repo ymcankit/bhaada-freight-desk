@@ -149,7 +149,7 @@ async def set_mode(request: Request):
     desk.settings["mode"] = mode
     if mode == "sandbox":
         desk.sandbox_on()
-    desk.save()
+    desk.post("save")
     return {"mode": mode}
 
 @app.post("/api/settings")
@@ -166,7 +166,7 @@ async def set_settings(request: Request):
     if not (0 < s["floorPct"] <= s["targetPct"] <= s["ceilingPct"] < 50):
         raise HTTPException(400, "Need 0 < floor ≤ target ≤ ceiling < 50")
     desk._apply_settings()
-    desk.save()
+    desk.post("save")
     return s
 
 @app.post("/api/owners")
@@ -294,7 +294,7 @@ def on_text(wa, text):
         o = desk.register_owner(wa, parts[0], parts[1] if len(parts) > 1 else None)
         if desk.settings["mode"] != "live":
             desk.settings["mode"] = "live"
-            desk.save()
+            desk.post("save")
         return send(wa, f"Namaste {o['name']} 🙏 Registered as a fleet owner"
                            + (f" in {o['baseCity']}" if o.get("baseCity") else "") + ".\nAaj ki gaadi bhejiye: "
                            "*32 ft MXL, Bhiwandi, aaj, ₹38/km*\n(Load bhejna hai? *broker* likhiye.)")
@@ -319,7 +319,7 @@ def on_text(wa, text):
     s["load"] = {k: v for k, v in merged.items() if v not in (None, "")}
     s["chat"].append({"role": "bot", "text": reply})
     if miss:
-        desk.save()                                    # a half-told load survives a restart
+        desk.post("save")                                    # a half-told load survives a restart
         return send(wa, reply)
     load = desk.start_load(merged, "telegram" if wa.startswith("tg:") else "whatsapp", broker_phone=wa,
                            raw=" / ".join(m["text"] for m in s["chat"] if m["role"] == "user"))
