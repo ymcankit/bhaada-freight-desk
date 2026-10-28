@@ -140,6 +140,7 @@ def stuck(lid, ask_mult, phase="quote"):
     D.loads.append(L)
     return L, ask
 D.settings["aiAgents"] = False
+D.settings["approvalExpireSec"]["live"] = 3600         # section 5 shortened it; quotes here must not expire mid-check
 S1, ask1 = stuck("BH-9001", 1.05)
 D._decide(S1, final=True)
 ok &= check("strategist makes a final offer to a near owner", "final offer" in S1["events"][-1]["text"] and S1["threads"]["tg:8001"]["finalOffer"]
