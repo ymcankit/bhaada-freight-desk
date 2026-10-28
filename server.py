@@ -6,13 +6,15 @@ Config (environment variables, or .streamlit/secrets.toml locally):
     GROQ_API_KEY                       language model (intake, negotiation, check-in parsing)
     WHATSAPP_TOKEN, WHATSAPP_PHONE_ID  Meta WhatsApp Cloud API (leave empty to run the console alone)
     WHATSAPP_VERIFY_TOKEN              any string; the same one goes into Meta's webhook settings
+    WHATSAPP_APP_SECRET                Meta app secret; when set, webhook POSTs without a valid signature are refused
+    CONSOLE_PASSWORD                   when set, the console and its API ask for it (leave empty for an open demo)
     TELEGRAM_BOT_TOKEN                 a bot from @BotFather: the same desk on Telegram, free and with no phone number
     PUBLIC_URL                         this server's address, for the Telegram webhook (Render sets RENDER_EXTERNAL_URL itself)
 """
-import os, re, threading, hashlib
+import os, re, json, threading, hashlib, hmac, collections
 from pathlib import Path
 import requests
-from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
+from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Depends
 from fastapi.responses import PlainTextResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import engine as E
@@ -98,12 +100,28 @@ if desk.settings["mode"] == "sandbox":
 app = FastAPI(title="Bhaada freight desk")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
+CONSOLE_PW = cfg("CONSOLE_PASSWORD").strip()        # empty: the console is open (sandbox demos)
+
+def console_ok(request: Request):
+    got = request.headers.get("x-console-key", "")
+    return not CONSOLE_PW or hmac.compare_digest(got.encode(), CONSOLE_PW.encode())
+
+def console_auth(request: Request):
+    if not console_ok(request):
+        raise HTTPException(401, "Console password needed")
+
 @app.get("/")
 def console():
     return FileResponse(ROOT / "static" / "index.html")
 
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
+
 @app.get("/api/state")
-def state():
+def state(request: Request):
+    if not console_ok(request):
+        return {"locked": True}                    # 200, so a health check on this path keeps passing
     v = desk.view()
     v["whatsapp"] = WA_READY
     v["telegram"] = TG_BOT["username"] if TG_READY else None
@@ -113,7 +131,7 @@ def state():
     return v
 
 # ---------------- console intake: a short chat that turns text into a load ----------------
-@app.post("/api/intake")
+@app.post("/api/intake", dependencies=[Depends(console_auth)])
 async def intake(request: Request):
     body = await request.json()
     hist = [m for m in body.get("chat", []) if m.get("role") in ("user", "bot")][-12:]
@@ -134,14 +152,14 @@ async def intake(request: Request):
         out["loadId"] = desk.start_load(merged, "console", raw=raw)["id"]
     return out
 
-@app.post("/api/loads/{lid}/{action}")
+@app.post("/api/loads/{lid}/{action}", dependencies=[Depends(console_auth)])
 def load_action(lid: str, action: str):
     if action not in ("approve", "reject", "backout"):
         raise HTTPException(404)
     desk.post(action, lid=lid)
     return {"ok": True}
 
-@app.post("/api/mode")
+@app.post("/api/mode", dependencies=[Depends(console_auth)])
 async def set_mode(request: Request):
     mode = (await request.json()).get("mode")
     if mode not in ("live", "sandbox"):
@@ -152,24 +170,31 @@ async def set_mode(request: Request):
     desk.post("save")
     return {"mode": mode}
 
-@app.post("/api/settings")
+@app.post("/api/settings", dependencies=[Depends(console_auth)])
 async def set_settings(request: Request):
     b = await request.json()
-    s = desk.settings
-    for k in ("dieselPerLitre", "floorPct", "targetPct", "ceilingPct", "maxDeadheadKm"):
-        if k in b:
-            s[k] = float(b[k])
+    s = dict(desk.settings)                        # checked as a whole before any of it goes live
+    try:
+        for k in ("dieselPerLitre", "floorPct", "targetPct", "ceilingPct", "maxDeadheadKm"):
+            if k in b:
+                s[k] = float(b[k])
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Numbers only for diesel, margins and deadhead")
     if "dieselSource" in b:
         s["dieselSource"] = str(b["dieselSource"])[:120]
     if "dieselAsOf" in b:
         s["dieselAsOf"] = str(b["dieselAsOf"])[:20]
     if not (0 < s["floorPct"] <= s["targetPct"] <= s["ceilingPct"] < 50):
         raise HTTPException(400, "Need 0 < floor ≤ target ≤ ceiling < 50")
+    if not (0 < s["dieselPerLitre"] < 500 and 0 < s["maxDeadheadKm"] <= 1000):
+        raise HTTPException(400, "Diesel must be ₹/L and deadhead a distance in km")
+    desk.settings.update(s)
+    s = desk.settings
     desk._apply_settings()
     desk.post("save")
     return s
 
-@app.post("/api/owners")
+@app.post("/api/owners", dependencies=[Depends(console_auth)])
 async def add_owner(request: Request):
     b = await request.json()
     phone = re.sub(r"\D", "", str(b.get("phone", "")))
@@ -183,7 +208,7 @@ async def add_owner(request: Request):
                        "ki gaadi khaali hai ya nahi; loads seedhe WhatsApp par aayenge.")
     return {"ok": True}
 
-@app.post("/api/checkin")
+@app.post("/api/checkin", dependencies=[Depends(console_auth)])
 def checkin():
     if desk.settings["mode"] == "sandbox":
         desk.sandbox_on()
@@ -191,7 +216,20 @@ def checkin():
     return {"asked": desk.send_checkin(), "mode": "live"}
 
 # ---------------- WhatsApp webhook ----------------
-SEEN, LOCKS = set(), {}
+SEEN, SEEN_ORDER, LOCKS = set(), collections.deque(), {}
+WA_SECRET = cfg("WHATSAPP_APP_SECRET").strip()      # Meta app secret: proves a webhook POST came from Meta
+if WA_READY and not WA_SECRET:
+    print("WARNING: WHATSAPP_APP_SECRET is not set, so WhatsApp webhook POSTs are not verified")
+
+def first_time(mid):
+    """Meta and Telegram retry deliveries; remember the last few thousand ids, not every id forever."""
+    if mid in SEEN:
+        return False
+    SEEN.add(mid)
+    SEEN_ORDER.append(mid)
+    if len(SEEN_ORDER) > 5000:
+        SEEN.discard(SEEN_ORDER.popleft())
+    return True
 
 @app.get("/webhook")
 def verify(request: Request):
@@ -202,14 +240,17 @@ def verify(request: Request):
 
 @app.post("/webhook")
 async def receive(request: Request, bg: BackgroundTasks):
-    body = await request.json()
+    raw = await request.body()
+    if WA_SECRET:
+        good = "sha256=" + hmac.new(WA_SECRET.encode(), raw, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(request.headers.get("x-hub-signature-256", "").encode(), good.encode()):
+            raise HTTPException(403, "bad signature")
+    body = json.loads(raw or b"{}")
     for entry in body.get("entry", []):
         for change in entry.get("changes", []):
             for msg in change.get("value", {}).get("messages", []):
-                if msg.get("id") in SEEN:
-                    continue
-                SEEN.add(msg.get("id"))
-                bg.add_task(handle_message, msg)
+                if first_time("wa:" + str(msg.get("id"))):
+                    bg.add_task(handle_message, msg)
     return {"ok": True}
 
 @app.post("/telegram/{path}")
@@ -217,11 +258,12 @@ async def telegram(path: str, request: Request, bg: BackgroundTasks):
     if not TG_READY or path != TG_PATH:
         raise HTTPException(404)
     u = await request.json()
-    if u.get("update_id") in SEEN:
-        return {"ok": True}
-    SEEN.add(u.get("update_id"))
-    bg.add_task(handle_telegram, u)
+    if first_time("tg:" + str(u.get("update_id"))):
+        bg.add_task(handle_telegram, u)
     return {"ok": True}
+
+ONLY_TEXT = "Abhi sirf text aur voice note samajh pata hoon 🙏 Type kijiye ya bol ke bhejiye."
+OOPS = "Maaf kijiye, mere taraf se kuch gadbad hui 🙏 Thodi der baad wahi message dobara bhejiye."
 
 def handle_telegram(u):
     if "callback_query" in u:
@@ -242,21 +284,20 @@ def handle_telegram(u):
                 f = requests.get(f"{TG_API}/getFile", params={"file_id": media["file_id"]}, timeout=15).json()["result"]
                 audio = requests.get(f"https://api.telegram.org/file/bot{TG_TOKEN}/{f['file_path']}", timeout=60).content
                 text = E.transcribe(audio, media.get("mime_type") or "audio/ogg", name=f.get("file_path"))
-                print(f"voice {key[-4:]}: {media.get('mime_type')} {f.get('file_path')} {len(audio)} bytes "
-                      f"{media.get('duration')}s -> {text[:60]!r}")
+                print(f"voice {key[-4:]}: {media.get('mime_type')} {len(audio)} bytes {media.get('duration')}s -> {len(text)} chars")
                 if not text:
                     return send(key, "🎤 Awaaz saaf nahi aayi. Phone muh ke paas rakh ke dobara bolo, ya type kar do.")
-                send(key, f"🎤 Heard: {text}")
+                send(key, f"🎤 Suna: {text}")
             elif m.get("text"):
                 text = m["text"].strip()
                 if text.startswith("/start"):
                     text = "hi"
             else:
-                return send(key, "I read text and voice notes for now. Please type or record it.")
+                return send(key, ONLY_TEXT)
             on_text(key, text)
         except Exception as e:
             print("telegram message failed:", repr(e))
-            send(key, "Something went wrong on my side. Send new to start again.")
+            send(key, OOPS)
 
 def handle_message(msg):
     wa = msg["from"]
@@ -272,22 +313,28 @@ def handle_message(msg):
                 text = E.transcribe(audio, mime)
                 if not text:
                     return send(wa, "🎤 Awaaz saaf nahi aayi. Phone muh ke paas rakh ke dobara bolo, ya type kar do.")
-                send(wa, f"🎤 Heard: _{text}_")
+                send(wa, f"🎤 Suna: _{text}_")
             elif kind == "text":
                 text = msg["text"]["body"].strip()
             else:
-                return send(wa, "I read text and voice notes for now. Please type or record it.")
+                return send(wa, ONLY_TEXT)
             on_text(wa, text)
         except Exception as e:
             print("message failed:", repr(e))
-            send(wa, "Something went wrong on my side. Send *new* to start again.")
+            send(wa, OOPS)
 
 REGISTER = re.compile(r"^\s*(owner|register|transporter)\b[\s:,-]*(.*)$", re.I)
+NOT_A_NAME = re.compile(r"\?|\d+\s*(ton|tonne|t|mt|kg)\b|chahiye|chaiye|chahie|chiye|\bkya\b|\bkab\b|\bne\b|\bka\b|\bko\b", re.I)
 AS_BROKER = re.compile(r"^\s*(broker|i am (a )?broker|main broker hoon)\s*$", re.I)
+APPROVE = re.compile(r"^\s*(?:(approved?|haan|haa|ha|yes|ok|okay|done|book|confirm|pakka|theek hai|thik hai|chalega)\b|👍|✅)", re.I)
+REJECT = re.compile(r"^\s*(?:(reject(ed)?|nahi|nahin|nhi|no|mat|rehne do|cancel)\b|❌|👎)", re.I)
+STATUS_Q = re.compile(r"\b(status|update|kya hua|kya scene|kahan tak pahunch|progress)\b", re.I)
+LOAD_ID = re.compile(r"\bBH[-\s]?(\d{4,})\b", re.I)
 
 def on_text(wa, text):
     m = REGISTER.match(text)
-    if m:
+    # "owner ne cancel kiya?" or "transporter chahiye Surat se 14 ton" is a broker talking, not a registration
+    if m and not NOT_A_NAME.search(m.group(2)) and ("," in m.group(2) or not desk.broker_loads(wa)):
         parts = [p.strip() for p in re.split(r",|\bfrom\b|\bse\b", m.group(2)) if p.strip()]
         if not parts:
             return send(wa, "Aise likhiye: *owner Sharma Transport, Bhiwandi*")
@@ -295,8 +342,8 @@ def on_text(wa, text):
         if desk.settings["mode"] != "live":
             desk.settings["mode"] = "live"
             desk.post("save")
-        return send(wa, f"Namaste {o['name']} 🙏 Registered as a fleet owner"
-                           + (f" in {o['baseCity']}" if o.get("baseCity") else "") + ".\nAaj ki gaadi bhejiye: "
+        return send(wa, f"Namaste {o['name']} 🙏 Aap fleet owner ke roop mein jud gaye"
+                           + (f" ({o['baseCity']})" if o.get("baseCity") else "") + ".\nAaj ki gaadi bhejiye: "
                            "*32 ft MXL, Bhiwandi, aaj, ₹38/km*\n(Load bhejna hai? *broker* likhiye.)")
     if AS_BROKER.match(text):
         was = desk.remove_owner(wa) if wa in desk.owners and not desk.owners[wa].get("sandbox") else None
@@ -309,13 +356,20 @@ def on_text(wa, text):
     s = desk.brokers.setdefault(wa, {"chat": [], "load": {}})
     if text.lower() in ("hi", "hello", "new", "reset", "namaste", "start"):
         desk.brokers[wa] = {"chat": [], "load": {}}
-        return send(wa, "Namaste 🙏 Bhaada desk. Send a load as text or a voice note.\n"
+        return send(wa, "Namaste 🙏 Bhaada desk. Load text ya voice note mein bhejiye.\n"
                            "e.g. _Kal subah Bhiwandi se Surat, 18 ton kapda, 32 MXL_\n"
                            "Truck owner ho? *owner Naam, Shehar* likhiye.")
+    if broker_command(wa, text):
+        return
     if not E.llm_ready():
-        return send(wa, "My language model isn't configured yet.")
+        return send(wa, "Desk abhi load padh nahi sakta (language model band hai) 🙏 Thodi der baad bhejiye.")
     s["chat"].append({"role": "user", "text": text})
-    merged, reply, miss = E.intake_turn(s["chat"], s["load"], text)
+    try:
+        merged, reply, miss = E.intake_turn(s["chat"], s["load"], text)
+    except Exception as e:                                 # Groq busy (429), timeout or a reply that isn't JSON
+        print("intake failed:", repr(e))
+        s["chat"].pop()
+        return send(wa, "Abhi system thoda busy hai 🙏 1 minute baad wahi message dobara bhejiye.")
     s["load"] = {k: v for k, v in merged.items() if v not in (None, "")}
     s["chat"].append({"role": "bot", "text": reply})
     if miss:
@@ -325,11 +379,44 @@ def on_text(wa, text):
                            raw=" / ".join(m["text"] for m in s["chat"] if m["role"] == "user"))
     desk.brokers[wa] = {"chat": [], "load": {}}
     send(wa, f"🔍 {load['id']}: {merged['origin']} ke paas ke truck owners ko message kar raha hoon…\n"
-                f"({load['id']} is load ka number hai; isi se updates aayenge.)")
+                f"({load['id']} is load ka number hai; isi se updates aayenge. Haal jaanna ho to *status* likhiye.)")
+
+def broker_command(wa, text):
+    """A reply to a quote typed instead of tapped, or a question about loads already sent. True if handled."""
+    mine = desk.broker_loads(wa)
+    hit = LOAD_ID.search(text)
+    named = next((l for l in mine if l["id"] == f"BH-{hit.group(1)}"), None) if hit else None
+    short = len(text.split()) <= 5
+    mid_intake = bool(desk.brokers.get(wa, {}).get("chat"))   # then a bare "haan"/"nahi" answers the intake question
+    yes_no = APPROVE.match(text) or (REJECT.match(text) and not re.search(r"\d", LOAD_ID.sub("", text)))
+    if short and yes_no and (named or not mid_intake):
+        pending = [l for l in mine if l["status"] == "needs_approval"]
+        target = named or (pending[0] if len(pending) == 1 else None)
+        if not target and len(pending) > 1:
+            send(wa, "Kaunsa load? " + ", ".join(l["id"] for l in pending) + ". Quote ke neeche button dabaiye ya "
+                     f"*approve {pending[0]['id']}* likhiye.")
+            return True
+        if target:
+            act = "approve" if APPROVE.match(text) else "reject"
+            on_button(wa, f"{act}:{target['id']}")
+            return True
+    if STATUS_Q.search(text) or (named and short):
+        if not mine:
+            send(wa, "Aapka koi load abhi chal nahi raha. Naya load bhejiye, e.g. _Kal Bhiwandi se Surat, 18 ton, 32 MXL_")
+            return True
+        recent = [l for l in mine if l["status"] not in live.Desk.CLOSED or live.now() - l["createdAt"] < 12 * 3600]
+        for l in ([named] if named else (recent or mine)[-3:]):
+            send(wa, *desk.broker_status(l))
+        return True
+    return False
 
 def on_button(wa, bid):
     action, _, lid = bid.partition(":")
-    if action in ("approve", "reject") and lid:
+    load = desk._find(lid) if lid else None
+    if action in ("approve", "reject") and load and load.get("brokerPhone") == wa:
+        if load["status"] != "needs_approval":
+            text, buttons = desk.broker_status(load)
+            return send(wa, "Ye quote ab khula nahi hai. " + text, buttons)
         desk.post(action, lid=lid)
         return send(wa, "✅ Approve ho gaya. Owner se gaadi hold karwa raha hoon…" if action == "approve" else "Reject kar diya. Kuch book nahi hua.")
-    send(wa, "That button has expired. Send *new* to start again.")
+    send(wa, "Ye button ab kaam ka nahi hai. Load ka haal jaanne ke liye *status* likhiye, ya naya load seedha bhejiye.")

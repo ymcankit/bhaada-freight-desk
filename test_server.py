@@ -55,7 +55,7 @@ ok &= check("console page served", c.get("/").status_code == 200 and "Bhaada" in
 for i, ph in enumerate(OWNERS):
     text(ph, f"owner Test Owner {i + 1}, Bhiwandi")
 ok &= check("owners register over WhatsApp", len([o for o in server.desk.owners.values() if not o.get("sandbox")]) == 3)
-ok &= check("owner gets a welcome", "Registered as a fleet owner" in last_to(OWNERS[0]))
+ok &= check("owner gets a welcome", "fleet owner ke roop mein jud gaye" in last_to(OWNERS[0]))
 
 for ph in OWNERS:
     text(ph, "32 ft MXL, Bhiwandi, aaj, ₹38/km")
@@ -82,6 +82,13 @@ quote_msg = next(((t, b) for to, t, b in reversed(SENT) if to == BROKER and b), 
 ok &= check("broker gets the quote with buttons", quote_msg[1] and quote_msg[1][0][0].startswith("approve:"))
 ok &= check("quote clears the floor", load()["quote"]["above_floor"], f"{load()['quote']['margin_pct']}%")
 
+before = len(server.desk.loads)
+text(BROKER, "status?")                                     # a question, not a new load
+ok &= check("broker 'status?' gets the quote back, not a new intake", len(server.desk.loads) == before
+            and "Margin" in last_to(BROKER) and bool(SENT[-1][2]), last_to(BROKER)[:60])
+wa("919800000099", type="interactive", interactive={"type": "button_reply", "button_reply": {"id": f"approve:{load()['id']}", "title": "Approve"}})
+time.sleep(0.5)
+ok &= check("someone else's approve is refused", load()["status"] == "needs_approval" and "button" in last_to("919800000099"))
 winner = load()["winner"]
 wa(BROKER, type="interactive", interactive={"type": "button_reply", "button_reply": {"id": f"approve:{load()['id']}", "title": "Approve"}})
 time.sleep(1)
@@ -102,7 +109,7 @@ st = wait(("recovered", "escalated"), 15)
 ok &= check("back-out re-booked with the backup", st == "recovered" and load()["winner"] == backup, st)
 ok &= check("shipper price unchanged", load()["quote"]["sell_total"] == load()["fixedSell"])
 ok &= check("backed-out owner penalised", server.desk.reliability.get(winner, 0) < 0)
-ok &= check("broker told about the recovery", "re-booked" in last_to(BROKER))
+ok &= check("broker told about the recovery", "dobara book" in last_to(BROKER))
 state = c.get("/api/state").json()
 ok &= check("state API reports the day", state["kpis"]["received"] == 1 and state["kpis"]["booked"] == 1, str(state["kpis"]))
 ok &= check("owner phones masked in the API", all(o["phone"].startswith("••••") for o in state["owners"]))
@@ -125,6 +132,25 @@ REMOTE["up"] = True
 d2.save()
 ok &= check("Upstash back: old owners merged, then saved", "91999" in d2.owners and d2._seq >= 1500 and len(REMOTE["sets"]) == 1)
 live._store, live._redis = real_store, real_redis
+text(BROKER, "owner ne rate kya bola?")                    # after the day's checks: the stubbed intake makes it a load
+ok &= check("a broker saying 'owner ...' is not registered as an owner", BROKER not in server.desk.owners)
+
+# webhook signature, console password and settings validation
+import hmac, hashlib, json as _json
+server.WA_SECRET = "s3cret"
+body = _json.dumps({"entry": []}).encode()
+sig = "sha256=" + hmac.new(b"s3cret", body, hashlib.sha256).hexdigest()
+ok &= check("unsigned WhatsApp POST refused", c.post("/webhook", content=body).status_code == 403)
+ok &= check("signed WhatsApp POST accepted", c.post("/webhook", content=body, headers={"X-Hub-Signature-256": sig}).status_code == 200)
+server.WA_SECRET = ""
+server.CONSOLE_PW = "pw"
+ok &= check("console locked without the password", c.get("/api/state").json() == {"locked": True}
+            and c.post("/api/mode", json={"mode": "live"}).status_code == 401 and c.get("/healthz").status_code == 200)
+ok &= check("console opens with the password", "kpis" in c.get("/api/state", headers={"X-Console-Key": "pw"}).json())
+server.CONSOLE_PW = ""
+floor = server.desk.settings["floorPct"]
+ok &= check("bad margins refused and not kept", c.post("/api/settings", json={"floorPct": 60}).status_code == 400
+            and server.desk.settings["floorPct"] == floor and c.post("/api/settings", json={"floorPct": "abc"}).status_code == 400)
 
 R = live.Desk._owner_rate
 ok &= check("owner rates read in context", R("₹38/km lagega", 280) == 38 and R("38k", 1000) == 38 and R("35 hazaar total", 1000) == 35

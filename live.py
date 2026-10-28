@@ -384,7 +384,8 @@ class Desk:
                                + "? Aur kahan khadi hai? e.g. *32 ft MXL, Surat, aaj, ₹38/km*")
         self.pool = [t for t in self.pool if t["ownerKey"] != o["key"]] + added
         self.save()
-        lines = ", ".join(f"{t['type']} in {t['city']} ({t['available']})" for t in added)
+        day = {"today": "aaj", "tomorrow": "kal", "in 2 days": "parso"}
+        lines = ", ".join(f"{t['type']}, {t['city']} ({day.get(t['available'], t['available'])})" for t in added)
         self._wa(o, f"Noted ✅ {lines}. Load aate hi message karenge.")
         self._on_retry_waiting()
 
@@ -739,8 +740,8 @@ class Desk:
             self._to_owner(load, th, f"Booked ✅ {lane['origin']} → {lane['destination']} at ₹{round(th['agreedBuy'] / lane['distanceKm'], 1)}/km. "
                                      "Pickup details jaldi bhejte hain.")
             self._event(load, "Booking", f"Re-booked with {th['name']}: margin {q['margin_pct']}% at the shipper's fixed ₹{q['sell_total']:,}.")
-            self._to_broker(load, f"✅ {load['id']} re-booked with {th['name']} · margin {q['margin_pct']}% "
-                                  f"(floor {E.MARGIN['floorPct']:g}%). Shipper still pays ₹{q['sell_total']:,}. No action needed.")
+            self._to_broker(load, f"✅ {load['id']} dobara book ho gaya: {th['name']} · margin {q['margin_pct']}% "
+                                  f"(floor {E.MARGIN['floorPct']:g}%). Shipper ka rate wahi ₹{q['sell_total']:,}. Aapko kuch nahi karna.")
         else:
             load["status"], load["quoteAt"] = "needs_approval", now()
             self._event(load, "Pricing", f"Buy ₹{q['buy_total']:,} → sell ₹{q['sell_total']:,}, margin {q['margin_pct']}% "
@@ -812,8 +813,8 @@ class Desk:
             secs = load["bookedAt"] - load["createdAt"]
             self._event(load, "Booking", f"{th['name']} confirmed the hold. Booking-ready in {int(secs // 60)}:{int(secs % 60):02d}.")
             self._to_owner(load, th, "Dhanyavaad ✅ Booking pakki. Pickup details jaldi bhejte hain.")
-            self._to_broker(load, f"✅ {load['id']} booking-ready: {th['name']} confirmed the hold. Quote ₹{load['quote']['sell_total']:,} "
-                                  f"can go to the shipper.")
+            self._to_broker(load, f"✅ {load['id']} booking pakki: {th['name']} ne gaadi hold kar di. "
+                                  f"Shipper ko ₹{load['quote']['sell_total']:,} ka quote bhej dijiye.")
             self.save()
         elif th["status"] == "hold_requested":
             self._to_owner(load, th, "Gaadi hold karni hai? *HAAN* ya *NAHI* likhiye 🙏")
@@ -837,7 +838,8 @@ class Desk:
         load["prefer"] = {k: t["agreedBuy"] for k, t in load["threads"].items() if t["status"] == "deal" and k != dropped}
         self._event(load, "Orchestrator", f"{name} dropped out; reliability now {self.reliability_of(dropped)}/5. Goal unchanged: "
                                           f"re-book at the shipper's ₹{load['fixedSell']:,} above the {E.MARGIN['floorPct']:g}% floor.")
-        self._to_broker(load, f"⚠️ {name} backed out of {load['id']}. Re-planning on my own; I'll tell you only if the floor is at risk.")
+        self._to_broker(load, f"⚠️ {name} ne {load['id']} chhod diya. Main khud backup gaadi dhoondh raha hoon, shipper ka rate "
+                              f"wahi ₹{load['fixedSell']:,} rahega. Margin floor khatre mein aaya tabhi aapko bolunga.")
         if load["prefer"]:
             load["rounds"] += 1
             load["deadline"] = now() + self.timeout()
@@ -889,14 +891,49 @@ class Desk:
         n = lambda s: sum(t["status"] == s for t in ths)
         lines = [f"*{load['id']}* {lane['origin']} → {lane['destination']} · {lane['distanceKm']} km · {f['weight_ton']:g} T"]
         if load["searchType"] != f["truck_type"]:
-            lines.append(f"🔄 Using a {load['searchType']} ({f['truck_type']} can't carry {f['weight_ton']:g} T)")
-        lines += [f"📲 {len(ths)} owners asked: {n('deal')} agreed, {n('declined')} declined, {n('silent')} no reply",
+            lines.append(f"🔄 {f['truck_type']} mein {f['weight_ton']:g} T nahi aayega, isliye {load['searchType']} li hai")
+        lines += [f"📲 {len(ths)} owners se poocha: {n('deal')} raazi, {n('declined')} mana, {n('silent')} ka jawab nahi",
                   f"🚛 {th['name']} · {th['type']} · {th['reliability']}★",
-                  f"💰 Quote *₹{q['sell_total']:,}* (₹{q['rate_per_km']}/km) · buy ₹{q['buy_total']:,}",
+                  f"💰 Quote *₹{q['sell_total']:,}* (₹{q['rate_per_km']}/km) · owner ko ₹{q['buy_total']:,}",
                   f"📊 Margin *{q['margin_pct']}%* (floor {E.MARGIN['floorPct']:g}%)"]
-        if q.get("note"):
-            lines.append(f"ℹ️ {q['note']}")
+        note = q.get("note") or ""
+        if note.startswith("shipper budget"):
+            note = f"Shipper ka budget ₹{f.get('budget_rs') or 0:,.0f} floor se kam hai, isliye floor wala rate lagaya"
+        elif note.startswith("capped"):
+            note = f"Rate {E.MARGIN['ceilingPct']:g}% ceiling pe roka"
+        elif note == "matched shipper budget":
+            note = "Shipper ke budget jitna rate rakha"
+        if note:
+            lines.append(f"ℹ️ {note}")
+        lines.append("Approve / Reject button dabaiye (ya *approve* likhiye).")
         return "\n".join(lines)
+
+    STAGE_HI = {"routing": "route nikal raha hoon", "sourcing": "owners se rate le raha hoon",
+                "holding": "approve ho gaya, owner se gaadi hold karwa raha hoon", "rejected": "aapne reject kiya, kuch book nahi hua"}
+
+    def broker_loads(self, wa, open_only=False):
+        return [l for l in list(self.loads) if l.get("brokerPhone") == wa
+                and (not open_only or l["status"] not in ("escalated", "rejected"))]
+
+    def broker_status(self, load):
+        """One load, as the broker should hear it: (text, buttons). Read-only, so the server thread may call it."""
+        lane, f, s = load.get("lane") or {}, load["load"], load["status"]
+        head = f"{load['id']} {lane.get('origin') or f.get('origin')} → {lane.get('destination') or f.get('destination')}: "
+        if s == "needs_approval":
+            return self.quote_text(load), [("approve:" + load["id"], "Approve ✅"), ("reject:" + load["id"], "Reject ❌")]
+        if s == "sourcing":
+            cur = [t for t in load["threads"].values() if t["round"] == load["rounds"]]
+            done = sum(t["status"] in ("deal", "declined", "silent") for t in cur)
+            word = "backup gaadi dhoondh raha hoon" if load["phase"] == "replan" else "owners se rate le raha hoon"
+            return head + f"{word} ({done}/{len(cur)} ne jawab diya).", None
+        if s == "waiting_trucks":
+            return head + f"abhi gaadi khaali nahi, {clock(load.get('watchUntil'))[:5]} tak intezaar karunga.", None
+        if s in ("booked", "recovered"):
+            th = load["threads"].get(load["winner"]) or {}
+            return head + f"booking pakki: {th.get('name')}, shipper rate ₹{load['quote']['sell_total']:,}.", None
+        if s == "escalated":
+            return head + f"quote nahi bana. {load.get('reason') or ''}", None
+        return head + self.STAGE_HI.get(s, s) + ".", None
 
     def view(self):
         """A copy for the console, taken while the worker keeps changing loads; phone numbers and chat ids never leave."""

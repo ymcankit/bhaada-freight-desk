@@ -43,7 +43,7 @@ text(BROKER, "/start")
 ok &= check("/start greets the broker", "Bhaada desk" in last_to(BROKER))
 for i, ch in enumerate(OWNERS):
     text(ch, f"owner TG Owner {i + 1}, Bhiwandi")
-ok &= check("owners register over Telegram", "Registered as a fleet owner" in last_to(OWNERS[0]))
+ok &= check("owners register over Telegram", "fleet owner ke roop mein jud gaye" in last_to(OWNERS[0]))
 for ch in OWNERS:
     text(ch, "32 ft MXL, Bhiwandi, aaj, ₹38/km")
 time.sleep(1)
@@ -61,11 +61,14 @@ while time.time() < end and L["status"] not in ("needs_approval", "escalated"):
 ok &= check("quote ready", L["status"] == "needs_approval", L["status"])
 btn = next((b for to, t, b in reversed(SENT) if to == f"tg:{BROKER}" and b), None)
 ok &= check("broker gets inline buttons", bool(btn) and btn[0][0].startswith("approve:"))
-n[0] += 1
-c.post(URL, json={"update_id": n[0], "callback_query": {"id": "q1", "data": btn[0][0], "message": {"chat": {"id": BROKER}}}})
+text(BROKER, "haan")                                        # typed instead of tapping the button
 time.sleep(1)
 w = L["winner"]
-ok &= check("button approves and owner is asked to hold", "HAAN" in last_to(w[3:]))
+ok &= check("typed 'haan' approves and owner is asked to hold", L["status"] == "holding" and "HAAN" in last_to(w[3:]), L["status"])
+n[0] += 1
+c.post(URL, json={"update_id": n[0], "callback_query": {"id": "q1", "data": btn[0][0], "message": {"chat": {"id": BROKER}}}})
+time.sleep(0.5)
+ok &= check("a second tap says the quote is no longer open", "ab khula nahi" in last_to(BROKER), last_to(BROKER)[:60])
 text(int(w[3:]), "haan")
 end = time.time() + 8
 while time.time() < end and L["status"] != "booked":
