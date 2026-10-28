@@ -24,7 +24,7 @@ import live
 ROOT = Path(__file__).parent
 _sec = E.local_secrets()
 def cfg(k, default=""):
-    return os.getenv(k) or _sec.get(k, default)
+    return (os.getenv(k) or _sec.get(k, default)).strip().strip('"').strip("'")   # a pasted key often brings quotes
 
 E.configure(key=cfg("GROQ_API_KEY"), model=cfg("GROQ_MODEL"), whisper=cfg("GROQ_WHISPER"),
             openai_key=cfg("OPENAI_API_KEY"), openai_model=cfg("OPENAI_MODEL"))
@@ -168,7 +168,7 @@ async def healthz():
     """Liveness for Render's health check and keep_awake. async: answered even when the thread pool is full.
     503 only when the desk's worker is stuck, so a restart is the right cure; the rest is for a human to read."""
     h = desk.health()
-    h.update(ok=h["worker"] == "ok", llm=E.llm_ready(), llmCoolingSec=max(0, round(E.LLM.get("coolUntil", 0) - time.time())),
+    h.update(ok=h["worker"] == "ok", llm=E.llm_ready(), llmChain=[n for n, *_ in E._providers("smart")], llmCoolingSec=max(0, round(E.LLM.get("coolUntil", 0) - time.time())),
              telegram=("webhook set" if TG_BOT["hooked"] else "webhook not set") if TG_READY else None,
              outbox=OUTBOX.qsize())
     return JSONResponse(h, status_code=200 if h["ok"] else 503)
