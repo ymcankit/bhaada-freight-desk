@@ -278,6 +278,8 @@ class Desk:
 
     # ---------------- messaging ----------------
     def _to_owner(self, load, th, text):
+        if load["id"] not in text:                     # an owner with two loads open can see (and say) which one this is
+            text = f"{load['id']}: {text}"
         th["messages"].append({"dir": "out", "text": text, "t": now()})
         o = self.owners.get(th["ownerKey"])
         if not o:
