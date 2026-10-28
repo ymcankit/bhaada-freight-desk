@@ -10,7 +10,7 @@ the clock), so a load's state never races. What is real and what is not:
   - negotiation: an LLM agent reads each owner's reply and answers in Hinglish, inside a ceiling the code enforces;
   - price: only engine.price_quote, never the LLM.
 """
-import json, os, queue, re, threading, time, hashlib
+import json, os, queue, re, threading, time, hashlib, traceback
 import requests
 from datetime import datetime
 from pathlib import Path
@@ -22,9 +22,13 @@ IST = ZoneInfo("Asia/Kolkata")
 STATE_FILE = Path(__file__).parent / "data" / "live_state.json"
 STATE_KEY = "bhaada:live_state"
 
+ARCHIVE_KEY = "bhaada:archive"                 # closed loads, one hash field each, written once and never re-sent
+ARCHIVE_FILE = Path(__file__).parent / "data" / "live_archive.jsonl"
+_SEC = E.local_secrets()
+
 def _store():
     """Upstash Redis (free, REST) when configured: free hosts wipe local files on every restart and deploy."""
-    sec = E.local_secrets()
+    sec = _SEC
     url = (os.getenv("UPSTASH_REDIS_REST_URL") or sec.get("UPSTASH_REDIS_REST_URL") or "").rstrip("/")
     tok = os.getenv("UPSTASH_REDIS_REST_TOKEN") or sec.get("UPSTASH_REDIS_REST_TOKEN") or ""
     return (url, tok) if url.startswith("https://") and tok else None
@@ -76,8 +80,14 @@ class Desk:
         self.checkin = {"sentAt": None, "asked": 0}
         self._seq = 1000
         self._seq_lock = threading.Lock()
+        self.ai_due = {}                     # ownerKey -> when the AI broker posts them a demo load (clock-driven)
+        self._dirty, self._saved_at, self._saved_hash, self._remote_retry = False, 0.0, None, 0.0
+        self.store_error, self.beat, self.busy_since, self._tick_due = None, time.time(), None, False
         self._load()
         self._apply_settings()
+        for l in self.loads:                 # a restart between intake and routing: route it now, not escalate in 3 min
+            if l["status"] == "routing":
+                self.post("route", lid=l["id"])
         threading.Thread(target=self._worker, daemon=True).start()
         threading.Thread(target=self._clock, daemon=True).start()
 
@@ -108,6 +118,7 @@ class Desk:
         self.loads = s.get("loads", [])
         self.reliability = s.get("reliability", {})
         self.brokers = s.get("brokers", {})
+        self.ai_due = s.get("aiDue", {})
         self._seq = s.get("seq", self._seq)
 
     def _merge_remote(self, s):
@@ -129,38 +140,99 @@ class Desk:
     def _on_save(self):
         self.save()
 
+    SAVE_GAP = 5                                       # seconds between writes: Upstash free is 500K commands, 10 GB a month
+    HOT_DAYS, HOT_MAX = 3, 150                         # closed loads older than this leave the state blob for the archive
+
     def save(self):
-        if len(self.loads) > 300:                      # memory and the stored blob stay bounded; open loads are kept
-            self.loads = [l for l in self.loads[:-200] if l["status"] not in self.CLOSED] + self.loads[-200:]
-        if _store() and not self.remote_ok:
+        """Ask for a write. A burst of changes becomes one write; the clock writes whatever is left (_on_tick)."""
+        self._dirty = True
+        if now() - self._saved_at >= self.SAVE_GAP:
+            self.flush()
+
+    def _archive(self):
+        """Move old closed loads out of the blob that is re-sent on every save; each one is written once."""
+        old = now() - self.HOT_DAYS * 86400
+        last = lambda l: max(l.get("closedAt") or 0, l.get("bookedAt") or 0, l["createdAt"])
+        out = [l for l in self.loads if l["status"] in self.CLOSED and last(l) < old]
+        spare = len(self.loads) - len(out) - self.HOT_MAX
+        if spare > 0:
+            ids = {l["id"] for l in out}
+            out += [l for l in self.loads if l["status"] in self.CLOSED and l["id"] not in ids][:spare]
+        if not out:
+            return
+        try:
+            if _store():
+                if not self.remote_ok:
+                    return
+                _redis(["HSET", ARCHIVE_KEY] + [x for l in out for x in (l["id"], json.dumps(l, ensure_ascii=False))])
+            else:
+                with ARCHIVE_FILE.open("a", encoding="utf-8") as f:
+                    f.writelines(json.dumps(l, ensure_ascii=False) + "\n" for l in out)
+        except Exception as e:
+            return print("archive failed, loads kept:", repr(e))
+        gone = {l["id"] for l in out}
+        self.loads = [l for l in self.loads if l["id"] not in gone]
+
+    def flush(self):
+        self._dirty, self._saved_at = False, now()
+        if _store() and not self.remote_ok and now() >= self._remote_retry:
             try:
                 raw = _redis(["GET", STATE_KEY])
                 if raw:
                     self._merge_remote(json.loads(raw))
                 self.remote_ok = True
             except Exception as e:
+                self._remote_retry = now() + 30           # not on every save: each try holds the worker up to the timeout
+                self.store_error = repr(e)[:120]
                 print("Upstash still unreachable, saving locally only:", repr(e))
+        self._archive()
         for attempt in range(5):                       # the server thread may add an owner or a broker chat meanwhile
             try:
                 live_owners = {k: v for k, v in list(self.owners.items()) if not v.get("sandbox")}
                 data = {"settings": self.settings, "owners": live_owners, "reliability": self.reliability, "seq": self._seq,
                         "pool": [t for t in self.pool if t.get("source") == "checkin"], "loads": self.loads,
-                        "brokers": self.brokers}
+                        "brokers": self.brokers, "aiDue": self.ai_due}
                 text = json.dumps(data, ensure_ascii=False)
                 break
             except RuntimeError:
                 time.sleep(0.02)
         else:
+            self._dirty = True
             return print("save skipped: state kept changing")
+        digest = hashlib.sha1(text.encode()).hexdigest()
+        if digest == self._saved_hash:                 # nothing changed since the last write: no request at all
+            return
         try:
             STATE_FILE.write_text(text, encoding="utf-8")
         except Exception:
             pass
-        if _store() and self.remote_ok:
+        if not _store():
+            self._saved_hash = digest
+        elif self.remote_ok:
             try:
                 _redis(["SET", STATE_KEY, text])
+                self._saved_hash, self.store_error = digest, None
             except Exception as e:
+                self._dirty, self.store_error = True, repr(e)[:120]
+                self._saved_at = now() + 25                # try again in ~30 s, not on every change
                 print("Upstash save failed:", repr(e))
+
+    def _on_flush(self, done=None):
+        self.flush()
+        if done:
+            done.set()
+
+    def flush_now(self, wait=10):
+        """From another thread (shutdown): the worker writes what it has, then this returns."""
+        done = threading.Event()
+        self.post("flush", done=done)
+        return done.wait(wait)
+
+    def health(self):
+        busy = time.time() - self.busy_since if self.busy_since else 0
+        return {"worker": "stalled" if busy > 90 else "ok", "busySec": round(busy), "queue": self.q.qsize(),
+                "store": ("upstash" if self.remote_ok else "upstash unreachable") if _store() else "local file",
+                "storeError": self.store_error, "unsavedSec": round(now() - self._saved_at) if self._dirty else 0}
 
     def _apply_settings(self):
         E.rates["dieselPerLitre"] = float(self.settings["dieselPerLitre"])
@@ -177,15 +249,19 @@ class Desk:
     def _clock(self):
         while True:
             time.sleep(1)
-            self.post("tick")
+            if not self._tick_due:                      # a busy worker gets one tick when it is free, not a backlog
+                self._tick_due = True
+                self.post("tick")
 
     def _worker(self):
         while True:
             kind, data = self.q.get()
+            self.busy_since = time.time()
             try:
                 getattr(self, "_on_" + kind)(**data)
             except Exception as e:
-                print("desk event failed:", kind, repr(e))
+                print("desk event failed:", kind, repr(e), traceback.format_exc(limit=-2).strip().splitlines()[-3:])
+            self.busy_since, self.beat = None, time.time()
 
     # ---------------- messaging ----------------
     def _to_owner(self, load, th, text):
@@ -439,7 +515,7 @@ class Desk:
         self._wa(o, f"Noted ✅ {lines}. Load aate hi message karenge.")
         self._on_retry_waiting()
         if self.settings.get("aiAgents"):               # nothing real for them yet: a demo load in a few seconds
-            threading.Timer(20, lambda: self.post("ai_broker", key=o["key"])).start()
+            self.ai_due[o["key"]] = now() + 20
 
     def _checkin_rules(self, o, text):
         """Fallback when the model is unavailable: one truck per line, '32 ft MXL, Bhiwandi, aaj, ₹38/km'."""
@@ -780,6 +856,11 @@ class Desk:
     # ---------------- deciding ----------------
     def _on_tick(self):
         t = now()
+        self._tick_due = False
+        for key, due in list(self.ai_due.items()):      # persisted, so a restart doesn't drop the promised demo load
+            if t >= due:
+                self.ai_due.pop(key, None)
+                self._on_ai_broker(key)
         for load in self.loads:
             if load["status"] == "routing" and t - load["createdAt"] > 180:     # the route event failed or never ran
                 self._escalate(load, "Routing did not finish (map service or an internal error).",
@@ -798,6 +879,8 @@ class Desk:
                 th = load["threads"][load["winner"]]
                 mins = max(1, int((load["deadline"] - t) // 60))
                 self._to_owner(load, th, f"⏰ {load['id']}: gaadi hold karni hai? {mins} min mein *HAAN* likhiye, warna load kisi aur ko jayega.")
+            elif load["status"] == "needs_approval" and t >= load.get("autoApproveAt", t + 1):
+                self._on_approve(load["id"])                # the AI broker's own demo load
             elif load["status"] == "needs_approval" and load.get("quoteAt"):
                 ttl = self.settings.get("approvalExpireSec", {}).get(load["mode"], 3600)
                 if t - load["quoteAt"] > ttl:
@@ -812,6 +895,8 @@ class Desk:
                 th["status"] = "backed_out"
                 self._event(load, "Booking", f"{th['name']} didn't confirm the hold in time.")
                 self._replan(load, load["winner"])
+        if (self._dirty and t - self._saved_at >= self.SAVE_GAP) or t - self._saved_at >= 30:
+            self.flush()                                # coalesced saves, and changes made without a save() call
 
     def _decide(self, load, final=False):
         if load["status"] not in ("sourcing",):
@@ -859,7 +944,7 @@ class Desk:
         else:
             load["status"], load["quoteAt"] = "needs_approval", now()
             if load.get("aiBroker"):                     # the AI broker approves its own demo load after a short think
-                threading.Timer(8, lambda: self.post("approve", lid=load["id"])).start()
+                load["autoApproveAt"] = now() + 8        # on the clock, so it survives a restart
             self._event(load, "Pricing", f"Buy ₹{q['buy_total']:,} → sell ₹{q['sell_total']:,}, margin {q['margin_pct']}% "
                                          f"(floor {E.MARGIN['floorPct']:g}%)." + (f" {q['note']}." if q.get("note") else ""))
             self._to_broker(load, self.quote_text(load), [("approve:" + load["id"], "Approve ✅"), ("reject:" + load["id"], "Reject ❌")])

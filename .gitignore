@@ -12,3 +12,4 @@ docs/
 # live desk state (owner phone numbers, loads)
 data/live_state.json
 .taste-skill/
+data/live_archive.jsonl

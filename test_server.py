@@ -128,6 +128,8 @@ def fake_redis(cmd):
         raise ConnectionError("upstash down")
     if cmd[0] == "SET":
         REMOTE["sets"].append(cmd[2])
+    if cmd[0] == "HSET":
+        REMOTE.setdefault("archived", []).extend(cmd[2::2])
     return live.json.dumps(REMOTE["state"]) if cmd[0] == "GET" else "OK"
 real_store, real_redis = live._store, live._redis
 live._store, live._redis = (lambda: ("https://x", "t")), fake_redis
@@ -135,8 +137,26 @@ d2 = live.Desk()
 d2.save()
 ok &= check("Upstash down at boot: nothing overwritten", not d2.remote_ok and not REMOTE["sets"])
 REMOTE["up"] = True
-d2.save()
+d2._remote_retry = 0                                        # skip the 30 s back-off between reconnect tries
+d2.flush()
 ok &= check("Upstash back: old owners merged, then saved", "91999" in d2.owners and d2._seq >= 1500 and len(REMOTE["sets"]) == 1)
+d2.flush()
+ok &= check("unchanged state is not re-sent", len(REMOTE["sets"]) == 1)
+for i in range(20):
+    d2.reliability[f"x{i}"] = -0.1
+    d2.save()
+ok &= check("a burst of saves is coalesced", len(REMOTE["sets"]) == 1 and d2._dirty)
+d2.flush()
+ok &= check("and written once", len(REMOTE["sets"]) == 2 and not d2._dirty)
+old = live.now() - 5 * 86400
+d2.loads.append({"id": "BH-1", "createdAt": old, "closedAt": old, "status": "booked"})
+d2.loads.append({"id": "BH-2", "createdAt": old, "status": "waiting_trucks"})
+d2.flush()
+ok &= check("old closed loads move to the archive, open ones stay", REMOTE.get("archived") == ["BH-1"]
+            and "BH-2" in [l["id"] for l in d2.loads] and "BH-1" not in [l["id"] for l in d2.loads]
+            and '"BH-1"' not in REMOTE["sets"][-1])
+h = d2.health()
+ok &= check("health reports the worker and the store", h["worker"] == "ok" and h["store"] == "upstash", str(h))
 live._store, live._redis = real_store, real_redis
 text(BROKER, "owner ne rate kya bola?")                    # after the day's checks: the stubbed intake makes it a load
 ok &= check("a broker saying 'owner ...' is not registered as an owner", BROKER not in server.desk.owners)
