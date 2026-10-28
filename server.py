@@ -308,7 +308,7 @@ async def healthz():
         h["storeError"] = h["storeError"].split("(")[0]
     h.update(ok=h["worker"] == "ok", llm=E.llm_ready(), llmChain=[n for n, *_ in E._providers("smart")], llmCoolingSec=max(0, round(E.LLM.get("coolUntil", 0) - time.time())),
              telegram=("webhook set" if TG_BOT["hooked"] else "webhook not set") if TG_READY else None,
-             outbox=OUTBOX.qsize())
+             outbox=OUTBOX.qsize(), llmStats=E.llm_stats())   # counts, tokens and cost only: no message text, no keys
     return JSONResponse(h, status_code=200 if h["ok"] else 503)
 
 @app.on_event("shutdown")

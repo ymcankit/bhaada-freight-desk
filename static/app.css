@@ -143,11 +143,36 @@ h2 { font-size: var(--fs-section); line-height: 22px; font-weight: 600; }
 .msg.out { align-self: flex-end; background: var(--accent-pale); border-color: transparent; }
 .msg time { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
 
-.log h3 { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
-.log ol { list-style: none; margin: 0; padding: 0; }
-.log li { display: grid; grid-template-columns: 64px 96px minmax(0, 1fr); gap: 10px; padding: 7px 0; border-top: 1px solid var(--rule); font-size: 13px; }
-.log time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.log h3, .strat h3 { font-size: 14px; font-weight: 600; }
+.log-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.log-head .muted { font-size: var(--fs-small); }
+.log ol, .strat ol { list-style: none; margin: 0; padding: 0; }
+.log li { display: grid; grid-template-columns: 64px 96px 50px minmax(0, 1fr); gap: 10px; padding: 7px 0; border-top: 1px solid var(--rule); font-size: 13px; }
+.log time, .strat time { color: var(--muted); font-variant-numeric: tabular-nums; }
 .log .actor { color: var(--muted); }
+
+/* who decided a step: AI (the one accent, it is the data here), Code (neutral), Human (outlined) */
+.by { display: inline-block; height: 18px; padding: 0 6px; border-radius: 9px; font-size: 11px; line-height: 18px; font-weight: 500; white-space: nowrap; }
+.by-ai { background: var(--accent-pale); color: var(--accent); }
+.by-code { background: var(--pill-neutral-bg); color: var(--pill-neutral-ink); }
+.by-human { border: 1px solid var(--control); line-height: 16px; color: var(--text); }
+
+/* the strategist's decisions */
+.strat { border: 1px solid var(--border); border-radius: var(--radius-card); padding: 12px 14px; margin-bottom: var(--gap); }
+.strat > ol > li { padding: 8px 0; border-top: 1px solid var(--rule); font-size: 13px; }
+.strat-head { display: flex; gap: 10px; align-items: center; }
+.strat-head b { font-weight: 600; }
+.moves { list-style: none; margin: 6px 0 0; padding: 0 0 0 74px; display: flex; flex-direction: column; gap: 3px; }
+.moves li { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; color: var(--muted); }
+.moves .mv { font-weight: 500; }
+.moves li.chosen { color: var(--text); }
+.moves li.chosen .mv { color: var(--accent); font-weight: 600; }
+.why { margin: 6px 0 0 74px; color: var(--muted); }
+
+/* inquiry → booking-ready stopwatch */
+.sw { font-variant-numeric: tabular-nums; }
+.sw b { font-weight: 600; color: var(--text); }
+.sw.done b { color: var(--accent); }
 
 /* quote column */
 .detail-col { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 0; }
@@ -233,8 +258,10 @@ dialog::backdrop { background: rgba(19, 20, 22, .28); }
   .back { display: inline-flex; align-items: center; height: 36px; padding: 0; border: 0; background: none; color: var(--accent); font-weight: 500; cursor: pointer; margin-bottom: 8px; }
   .race-row, .race-axis { grid-template-columns: 112px minmax(0, 1fr) 72px; gap: 8px; }
   .thread { padding-left: 14px; }
-  .log li { grid-template-columns: 58px minmax(0, 1fr); }
+  .log li { grid-template-columns: 58px 50px minmax(0, 1fr); }
   .log .actor { display: none; }
+  .moves, .why { padding-left: 0; margin-left: 0; }
+  .moves li { grid-template-columns: 1fr; gap: 0; }
   .owners-grid { grid-template-columns: 1fr; }
   fieldset { grid-template-columns: 1fr; }
   .table th:nth-child(2), .table td:nth-child(2) { display: none; }
