@@ -11,11 +11,12 @@ Config (environment variables, or .streamlit/secrets.toml locally):
     TELEGRAM_BOT_TOKEN                 a bot from @BotFather: the same desk on Telegram, free and with no phone number
     PUBLIC_URL                         this server's address, for the Telegram webhook (Render sets RENDER_EXTERNAL_URL itself)
 """
-import os, re, json, threading, hashlib, hmac, collections
+import os, re, json, threading, hashlib, hmac, collections, queue, time
 from pathlib import Path
 import requests
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Depends
-from fastapi.responses import PlainTextResponse, FileResponse
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import engine as E
 import live
@@ -34,7 +35,13 @@ TG_TOKEN = cfg("TELEGRAM_BOT_TOKEN").strip()
 TG_READY = bool(re.fullmatch(r"\d+:[\w-]{30,}", TG_TOKEN))
 TG_API = f"https://api.telegram.org/bot{TG_TOKEN}"
 TG_PATH = hashlib.sha256(TG_TOKEN.encode()).hexdigest()[:24]   # unguessable webhook path, derived from the token
-TG_BOT = {"username": None}
+TG_SECRET = hashlib.sha256(("secret:" + TG_TOKEN).encode()).hexdigest()[:48]   # sent back by Telegram in a header
+TG_BOT = {"username": None, "hooked": False}
+
+def safe(e):
+    """An error for the logs: requests puts the URL in its errors, and Telegram's URLs carry the bot token."""
+    s = repr(e)
+    return s.replace(TG_TOKEN, "<bot-token>") if TG_TOKEN else s
 
 # ---------------- WhatsApp sending ----------------
 def wa_send(to, text, buttons=None):
@@ -69,7 +76,7 @@ def tg_send(to, text, buttons=None):
         if not r.ok:
             print("Telegram send failed:", r.status_code, r.text[:300])
     except Exception as e:
-        print("Telegram send error:", repr(e))
+        print("Telegram send error:", safe(e))
 
 def send(to, text, buttons=None):
     """One sender for the desk: picks the channel from the address."""
@@ -79,19 +86,39 @@ def send(to, text, buttons=None):
     return wa_send(to, text, buttons) if WA_READY else None
 
 def tg_setup():
+    """Point the bot at this server, with a secret header; retried, since a cold boot often meets a slow network."""
     base = (cfg("PUBLIC_URL") or os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
-    try:
-        TG_BOT["username"] = requests.get(f"{TG_API}/getMe", timeout=15).json()["result"]["username"]
-        if base:
-            r = requests.post(f"{TG_API}/setWebhook", json={"url": f"{base}/telegram/{TG_PATH}",
-                              "allowed_updates": ["message", "callback_query"]}, timeout=15)
-            print("Telegram webhook:", r.json().get("description"))
-        else:
-            print("Telegram: set PUBLIC_URL so the bot can reach this server")
-    except Exception as e:
-        print("Telegram setup failed:", repr(e))
+    for wait in (0, 5, 20, 60):
+        threading.Event().wait(wait)
+        try:
+            TG_BOT["username"] = requests.get(f"{TG_API}/getMe", timeout=15).json()["result"]["username"]
+            if not base:
+                return print("Telegram: set PUBLIC_URL so the bot can reach this server")
+            r = requests.post(f"{TG_API}/setWebhook", json={"url": f"{base}/telegram/{TG_PATH}", "secret_token": TG_SECRET,
+                              "allowed_updates": ["message", "callback_query"]}, timeout=15).json()
+            print("Telegram webhook:", r.get("description"))
+            if r.get("ok"):
+                TG_BOT["hooked"] = True
+                return
+        except Exception as e:
+            print("Telegram setup failed:", safe(e))
 
-desk = live.Desk(sender=send if (WA_READY or TG_READY) else None)
+OUTBOX = queue.Queue()
+
+def outbox():
+    """The desk's messages go out from here, in order, so a slow Telegram or Meta call never holds up its worker."""
+    while True:
+        to, text, buttons = OUTBOX.get()
+        try:
+            send(to, text, buttons)
+        except Exception as e:
+            print("send failed:", safe(e))
+
+def desk_send(to, text, buttons=None):
+    OUTBOX.put((to, text, buttons))
+
+threading.Thread(target=outbox, daemon=True).start()
+desk = live.Desk(sender=desk_send if (WA_READY or TG_READY) else None)
 if TG_READY:
     threading.Thread(target=tg_setup, daemon=True).start()
 def keep_awake():
@@ -112,6 +139,8 @@ app = FastAPI(title="Bhaada freight desk")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
 CONSOLE_PW = cfg("CONSOLE_PASSWORD").strip()        # empty: the console is open (sandbox demos)
+if not CONSOLE_PW and os.getenv("RENDER"):
+    print("WARNING: CONSOLE_PASSWORD is not set: anyone with the URL can read every chat and approve or change settings")
 
 def console_ok(request: Request):
     got = request.headers.get("x-console-key", "")
@@ -126,8 +155,22 @@ def console():
     return FileResponse(ROOT / "static" / "index.html")
 
 @app.get("/healthz")
-def healthz():
-    return {"ok": True}
+async def healthz():
+    """Liveness for Render's health check and keep_awake. async: answered even when the thread pool is full.
+    503 only when the desk's worker is stuck, so a restart is the right cure; the rest is for a human to read."""
+    h = desk.health()
+    h.update(ok=h["worker"] == "ok", llm=E.llm_ready(), llmCoolingSec=max(0, round(E.LLM.get("coolUntil", 0) - time.time())),
+             telegram=("webhook set" if TG_BOT["hooked"] else "webhook not set") if TG_READY else None,
+             outbox=OUTBOX.qsize())
+    return JSONResponse(h, status_code=200 if h["ok"] else 503)
+
+@app.on_event("shutdown")
+def shutdown():
+    """Render stops the old instance on every deploy: write the last few seconds of changes first."""
+    desk.flush_now(wait=10)
+    end = time.time() + 5
+    while not OUTBOX.empty() and time.time() < end:
+        time.sleep(0.1)
 
 @app.get("/api/state")
 def state(request: Request):
@@ -153,7 +196,8 @@ async def intake(request: Request):
         return {"reply": "The language model isn't configured (GROQ_API_KEY), so I can't read free text yet.", "missing": ["all"]}
     hist.append({"role": "user", "text": text})
     try:
-        merged, reply, miss = E.intake_turn(hist, body.get("load") or {}, text)
+        # a model call (and geocoding) off the event loop, or every webhook and poll waits for it
+        merged, reply, miss = await run_in_threadpool(E.intake_turn, hist, body.get("load") or {}, text)
     except Exception as e:
         return {"reply": f"I couldn't read that ({str(e)[:80]}). Try again.", "missing": ["all"], "load": body.get("load") or {}}
     clean = {k: v for k, v in merged.items() if v not in (None, "")}
@@ -215,9 +259,9 @@ async def add_owner(request: Request):
         phone = "91" + phone
     if len(phone) < 11 or not (b.get("name") or "").strip():
         raise HTTPException(400, "Name and a WhatsApp number with country code are needed")
-    o = desk.register_owner(phone, b["name"], b.get("city"))
+    o = await run_in_threadpool(desk.register_owner, phone, b["name"], b.get("city"))   # geocoding is a network call
     if WA_READY:
-        wa_send(phone, f"Namaste {o['name']} 🙏 Aap Bhaada freight desk se jud gaye hain. Roz subah hum poochenge "
+        desk_send(phone, f"Namaste {o['name']} 🙏 Aap Bhaada freight desk se jud gaye hain. Roz subah hum poochenge "
                        "ki gaadi khaali hai ya nahi; loads seedhe WhatsApp par aayenge.")
     return {"ok": True}
 
@@ -232,7 +276,7 @@ def checkin():
 SEEN, SEEN_ORDER, LOCKS = set(), collections.deque(), {}
 WA_SECRET = cfg("WHATSAPP_APP_SECRET").strip()      # Meta app secret: proves a webhook POST came from Meta
 if WA_READY and not WA_SECRET:
-    print("WARNING: WHATSAPP_APP_SECRET is not set, so WhatsApp webhook POSTs are not verified")
+    print("WARNING: WHATSAPP_APP_SECRET is not set, so WhatsApp webhook POSTs are refused")
 
 def first_time(mid):
     """Meta and Telegram retry deliveries; remember the last few thousand ids, not every id forever."""
@@ -254,10 +298,11 @@ def verify(request: Request):
 @app.post("/webhook")
 async def receive(request: Request, bg: BackgroundTasks):
     raw = await request.body()
-    if WA_SECRET:
-        good = "sha256=" + hmac.new(WA_SECRET.encode(), raw, hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(request.headers.get("x-hub-signature-256", "").encode(), good.encode()):
-            raise HTTPException(403, "bad signature")
+    if not WA_SECRET:                                   # unsigned, anyone could pose as any number and message real owners
+        raise HTTPException(403, "WHATSAPP_APP_SECRET is not set")
+    good = "sha256=" + hmac.new(WA_SECRET.encode(), raw, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(request.headers.get("x-hub-signature-256", "").encode(), good.encode()):
+        raise HTTPException(403, "bad signature")
     body = json.loads(raw or b"{}")
     for entry in body.get("entry", []):
         for change in entry.get("changes", []):
@@ -268,8 +313,12 @@ async def receive(request: Request, bg: BackgroundTasks):
 
 @app.post("/telegram/{path}")
 async def telegram(path: str, request: Request, bg: BackgroundTasks):
-    if not TG_READY or path != TG_PATH:
+    if not TG_READY or not hmac.compare_digest(path.encode(), TG_PATH.encode()):
         raise HTTPException(404)
+    got = request.headers.get("x-telegram-bot-api-secret-token")
+    # once setWebhook took our secret, every real update carries it; a path seen in a log is not enough to post
+    if (TG_BOT["hooked"] or got is not None) and not hmac.compare_digest((got or "").encode(), TG_SECRET.encode()):
+        raise HTTPException(403)
     u = await request.json()
     if first_time("tg:" + str(u.get("update_id"))):
         bg.add_task(handle_telegram, u)
@@ -309,7 +358,7 @@ def handle_telegram(u):
                 return send(key, ONLY_TEXT)
             on_text(key, text)
         except Exception as e:
-            print("telegram message failed:", repr(e))
+            print("telegram message failed:", safe(e))
             send(key, OOPS)
 
 def handle_message(msg):
@@ -392,7 +441,7 @@ def on_text(wa, text):
         return
     if not E.llm_ready():
         return send(wa, "Desk abhi load padh nahi sakta (language model band hai) 🙏 Thodi der baad bhejiye.")
-    intent, said = broker_brain(wa, text, s)
+    intent, said = ("load", None) if plainly_load(text) else broker_brain(wa, text, s)
     if intent == "reply":
         return send(wa, said)
     s["chat"].append({"role": "user", "text": text})
@@ -422,13 +471,24 @@ def broker_facts(wa):
             continue
     return []
 
+TONS = re.compile(r"\b\d+(?:\.\d+)?\s*(?:ton|tonne|tan|t|mt)\b", re.I)
+
+def plainly_load(text):
+    """Load details nobody would mistake for small talk ("Bhiwandi se Surat 14 ton 32 MXL"): skip the routing call,
+    which saves a model call per message against Groq's per-minute cap."""
+    if "?" in text or len(text) > 300:
+        return False
+    low = text.lower()
+    cities = sum(bool(re.search(r"\b" + re.escape(c.lower()) + r"\b", low)) for c in E.KNOWN_CITIES)
+    return (min(cities, 2) + bool(TONS.search(text)) + bool(E.norm_type(text))) >= 2
+
 def broker_brain(wa, text, s):
     """What does the broker mean? ("load", None): load details or a truck request, for intake.
     ("reply", text): thanks, small talk or a question, answered from their own loads. Falls back to intake."""
     loads = broker_facts(wa)
     asked = next((m["text"] for m in reversed(s["chat"]) if m["role"] == "bot"), None)
     try:
-        out = E.parse_json(E.gen(
+        out = E.parse_json((E.chat([{"role": "user", "content":
             "You are Bhaada, an AI freight desk chatting with a BROKER (they send loads; you find trucks and quote).\n"
             "Their recent loads (newest last):\n" + ("\n".join("- " + x for x in loads) or "- none") + "\n"
             + (f"A new load is being collected: known so far {json.dumps(s['load'], ensure_ascii=False)}; "
@@ -443,7 +503,8 @@ def broker_brain(wa, text, s):
             "and never a question about tons or cities. If a load is being collected, you may gently remind what is "
             "still needed. To cancel a quote they write *reject BH-xxxx*; a booked trip is changed by calling the owner.\n"
             "Reply in Hinglish (Hindi words in Roman script), never plain English.\n"
-            'Return ONLY JSON {"intent":"load|reply","reply":""}', json_mode=True))
+            'Return ONLY JSON {"intent":"load|reply","reply":""}'}],
+            json_mode=True, timeout=12, retries=2, max_wait=5).get("content") or ""))   # on any trouble intake reads it
     except Exception as e:
         print("broker brain failed, reading it as a load:", repr(e))
         return "load", None

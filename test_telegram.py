@@ -10,6 +10,7 @@ import engine as E
 import live
 live.STATE_FILE = Path(tempfile.gettempdir()) / "bhaada_tg_test_state.json"
 live.STATE_FILE.unlink(missing_ok=True)
+live._store = lambda: None                            # never the real Upstash, even with its keys in the shell
 import server
 from fastapi.testclient import TestClient
 
@@ -107,5 +108,13 @@ text(OWNERS[0], "owner Nikunj Transport, Surat")
 time.sleep(2)
 ok &= check("an owner who joins later gets the waiting load", W["status"] == "sourcing" and "Load:" in last_to(OWNERS[0]), W["status"])
 ok &= check("state reports Telegram", "telegram" in c.get("/api/state").json())
+server.TG_BOT["hooked"] = True                                 # setWebhook took the secret: the header is required
+upd = {"update_id": 99999, "message": {"chat": {"id": 7777}, "text": "hi"}}
+ok &= check("webhook without the secret header refused", c.post(URL, json=upd).status_code == 403
+            and c.post(URL, json=upd, headers={"X-Telegram-Bot-Api-Secret-Token": "nope"}).status_code == 403)
+ok &= check("webhook with the secret header accepted",
+            c.post(URL, json=upd, headers={"X-Telegram-Bot-Api-Secret-Token": server.TG_SECRET}).status_code == 200)
+ok &= check("bot token kept out of logged errors", server.TG_TOKEN not in server.safe(
+            ConnectionError(f"Max retries exceeded with url: /bot{server.TG_TOKEN}/sendMessage")))
 print("\nALL PASS" if ok else "\nSOME FAILED")
 import sys; sys.stdout.flush(); os._exit(0 if ok else 1)

@@ -73,19 +73,28 @@ def chat(messages, tools=None, json_mode=False, timeout=25, retries=3, max_wait=
         body["response_format"] = {"type": "json_object"}
     last = None
     for i in range(retries):
+        left = LLM.get("coolUntil", 0) - time.time()   # some thread already hit the limit: don't spend a request on it
+        if left > max_wait:
+            raise last or RuntimeError(f"Groq rate limit (cooling down {left:.0f}s)")
+        if left > 0:
+            time.sleep(left)
         try:
             r = requests.post(GROQ_CHAT, headers={"Authorization": f"Bearer {LLM['key']}"},
                               json=body, timeout=timeout)
             if r.status_code == 429:
                 wait = _wait_secs(r)
+                LLM["coolUntil"] = max(LLM.get("coolUntil", 0), time.time() + wait + 0.5)
                 last = RuntimeError(f"Groq rate limit (wait {wait:.0f}s)")
                 if wait > max_wait:
                     break
-                time.sleep(wait + 0.5)
                 continue
+            if r.status_code in (401, 403, 404, 413):   # a bad key, model or prompt: retrying won't help
+                raise PermissionError(f"Groq {r.status_code}: {r.text[:200]}")
             if not r.ok:
                 raise RuntimeError(f"Groq {r.status_code}: {r.text[:200]}")
             return r.json()["choices"][0]["message"]
+        except PermissionError:
+            raise
         except Exception as e:
             last = e
             time.sleep(1.5 * (i + 1))

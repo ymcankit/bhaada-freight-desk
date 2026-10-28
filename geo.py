@@ -13,8 +13,10 @@ NOMINATIM = "https://nominatim.openstreetmap.org/search"
 PHOTON = "https://photon.komoot.io/api/"      # second OpenStreetMap geocoder: Nominatim often throttles cloud hosts
 OSRM = "https://router.project-osrm.org/route/v1/driving/{},{};{},{}?overview=false"
 ROAD_FACTOR = 1.3
-_lock = threading.Lock()
+_lock = threading.Lock()                       # the cache
+_net = threading.Lock()                        # geocoder requests, one at a time
 _last_geocode = [0.0]
+_missed = {}                                   # lookups that just failed -> when
 
 def _load():
     try:
@@ -43,17 +45,25 @@ def resolve_city(text):
     with _lock:
         if key in _cache["cities"]:
             return _cache["cities"][key]
-        for k, v in _cache["cities"].items():          # 'Bhiwandi (Mumbai)' contains a known name
+        for k, v in list(_cache["cities"].items()):    # 'Bhiwandi (Mumbai)' contains a known name
             if len(k) > 3 and k in key:
                 return v
+        if time.time() - _missed.get(key, 0) < 600:    # just failed: don't spend another 20 s on it
+            return None
+    with _net:                                         # only lookups wait on lookups; cached cities never do
+        with _lock:
+            if key in _cache["cities"] or time.time() - _missed.get(key, 0) < 600:
+                return _cache["cities"].get(key)
         wait = 1.05 - (time.time() - _last_geocode[0])  # Nominatim policy: at most 1 request a second
         if wait > 0:
             time.sleep(wait)
         _last_geocode[0] = time.time()
+        answered = False                               # "no such place" is remembered; "service down" is not
         try:
             r = requests.get(NOMINATIM, params={"q": text, "countrycodes": "in", "format": "json", "limit": 1},
                              headers=UA, timeout=10)
             hits = r.json() if r.ok else []
+            answered = r.ok
         except Exception:
             hits = []
         hit = None
@@ -64,20 +74,25 @@ def resolve_city(text):
             try:
                 r = requests.get(PHOTON, params={"q": f"{text}, India", "limit": 5, "lang": "en"}, headers=UA, timeout=10)
                 feats = [f for f in (r.json().get("features", []) if r.ok else []) if f["properties"].get("country") == "India"]
+                answered = answered or r.ok
             except Exception:
                 feats = []
             if feats:
                 f = feats[0]
                 lon, lat = f["geometry"]["coordinates"]
                 hit = {"name": (f["properties"].get("name") or str(text)).strip(), "lat": lat, "lon": lon, "src": "photon"}
-        if not hit:
-            print("geocode failed for", repr(text))
-            return None
-        name = hit["name"]
+    if not hit:
+        print("geocode failed for", repr(text)[:60], "" if answered else "(services unreachable)")
+        if answered:
+            if len(_missed) > 500:
+                _missed.clear()
+            _missed[key] = time.time()
+        return None
+    with _lock:
         _cache["cities"][key] = hit
-        _cache["cities"].setdefault(name.lower(), hit)
+        _cache["cities"].setdefault(hit["name"].lower(), hit)
         _save()
-        return hit
+    return hit
 
 def _haversine_km(a, b):
     la1, lo1, la2, lo2 = map(math.radians, (a["lat"], a["lon"], b["lat"], b["lon"]))
