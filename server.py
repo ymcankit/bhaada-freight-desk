@@ -167,8 +167,45 @@ threading.Thread(target=keep_awake, daemon=True).start()
 if desk.settings["mode"] == "sandbox" or desk.settings.get("aiAgents"):
     desk.sandbox_on()                                   # the persona owners: sandbox mode, and AI owners in live mode
 
-app = FastAPI(title="Bhaada freight desk")
+app = FastAPI(title="Bhaada freight desk", docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
+
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+       "font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; "
+       "base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+HEADERS = [(b"content-security-policy", CSP.encode()), (b"x-content-type-options", b"nosniff"),
+           (b"x-frame-options", b"DENY"), (b"referrer-policy", b"no-referrer"),
+           (b"strict-transport-security", b"max-age=31536000"),
+           (b"permissions-policy", b"camera=(), microphone=(), geolocation=()")]
+MAX_BODY = 1_000_000                                   # webhooks and console posts are a few KB
+
+class Guard:
+    """Security headers on every response (no framing, no sniffing, scripts only from this site; the console's
+    text never becomes HTML anyway) and a cap on request bodies, which are read whole before a signature check."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        size = dict(scope.get("headers") or []).get(b"content-length", b"0")
+        if not size.isdigit() or int(size) > MAX_BODY:
+            return await PlainTextResponse("request too large", status_code=413)(scope, receive, send)
+        seen = [0]
+        async def capped():
+            msg = await receive()
+            seen[0] += len(msg.get("body", b""))
+            if seen[0] > MAX_BODY:                       # chunked, with no length up front
+                raise HTTPException(413)
+            return msg
+        api = scope["path"].startswith("/api/")
+        async def with_headers(msg):
+            if msg["type"] == "http.response.start":
+                msg["headers"] = list(msg.get("headers") or []) + HEADERS + ([(b"cache-control", b"no-store")] if api else [])
+            await send(msg)
+        await self.app(scope, capped, with_headers)
+
+app.add_middleware(Guard)
 
 CONSOLE_PW = cfg("CONSOLE_PASSWORD").strip()        # set: reading and acting need it (unless PUBLIC_VIEW)
 YES_WORDS = ("1", "true", "yes", "on")
@@ -205,6 +242,8 @@ async def healthz():
     """Liveness for Render's health check and keep_awake. async: answered even when the thread pool is full.
     503 only when the desk's worker is stuck, so a restart is the right cure; the rest is for a human to read."""
     h = desk.health()
+    if h.get("storeError"):                           # public: the kind of failure, not the Upstash host in the message
+        h["storeError"] = h["storeError"].split("(")[0]
     h.update(ok=h["worker"] == "ok", llm=E.llm_ready(), llmChain=[n for n, *_ in E._providers("smart")], llmCoolingSec=max(0, round(E.LLM.get("coolUntil", 0) - time.time())),
              telegram=("webhook set" if TG_BOT["hooked"] else "webhook not set") if TG_READY else None,
              outbox=OUTBOX.qsize())

@@ -58,6 +58,11 @@ def check(name, cond, detail=""):
 
 ok = True
 ok &= check("console page served", c.get("/").status_code == 200 and "Bhaada" in c.get("/").text)
+hd = c.get("/").headers
+ok &= check("security headers on the console", "frame-ancestors 'none'" in hd.get("content-security-policy", "")
+            and hd.get("x-content-type-options") == "nosniff" and c.get("/api/state").headers.get("cache-control") == "no-store")
+ok &= check("oversized request bodies refused", c.post("/webhook", content=b"x" * 1_100_000).status_code == 413
+            and c.get("/docs").status_code == 404)
 for i, ph in enumerate(OWNERS):
     text(ph, f"owner Test Owner {i + 1}, Bhiwandi")
 ok &= check("owners register over WhatsApp", len([o for o in server.desk.owners.values() if not o.get("sandbox")]) == 3)
