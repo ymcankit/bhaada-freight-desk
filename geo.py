@@ -60,7 +60,7 @@ def resolve_city(text):
         _last_geocode[0] = time.time()
         answered = False                               # "no such place" is remembered; "service down" is not
         try:
-            r = requests.get(NOMINATIM, params={"q": text, "countrycodes": "in", "format": "json", "limit": 1},
+            r = requests.get(NOMINATIM, params={"q": text, "countrycodes": "in", "format": "json", "limit": 1, "accept-language": "en"},
                              headers=UA, timeout=10)
             hits = r.json() if r.ok else []
             answered = r.ok

@@ -555,6 +555,9 @@ def role_menu(wa):
              "📦 *Broker*: load bhejo (text ya voice), hum truck dhoondh ke quote denge\n" + PRIVACY, ROLE_BUTTONS)
 
 def join_as_owner(wa, name, city):
+    # "Rahul I am" / "main Rahul hoon" / "my name is Rahul": keep the name, not the sentence around it
+    name = re.sub(r"^\s*(i am|i'm|im|main|mai|mera naam|my name is|naam)\s+|\s+(i am|hoon|hu|hun|here|bol raha hoon)\s*$", "",
+                  name, flags=re.I).strip() or name
     o = desk.register_owner(wa, name, city)
     desk.brokers.pop(wa, None)
     if desk.settings["mode"] != "live":

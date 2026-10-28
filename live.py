@@ -856,6 +856,8 @@ class Desk:
         d = self._negotiate(load, th, text, ec)
         if d["action"] == "accept":
             th["status"], th["agreedBuy"] = "deal", round(d["rate"] * ec["km"])
+            if d["rate"] <= ec["target"] and load["status"] == "sourcing":   # a good offer is in: give the rest 45 s, not the full window
+                load["deadline"] = min(load.get("deadline", now() + 45), now() + 45)
             reply = d["reply"] or f"Done ✅ ₹{d['rate']}/km. Confirm karke batate hain."
             self._event(load, "Negotiation", f"{th['name']} agreed at ₹{d['rate']}/km.")
         elif d["action"] == "counter":

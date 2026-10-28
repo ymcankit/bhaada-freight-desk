@@ -66,6 +66,9 @@ def run_tests():
         ok &= check("Indian truck names", E.norm_type("32 ft container") is None and E.norm_type("32 ft MXL container") == "32 ft MXL"
                     and E.norm_type("14 wheeler") is None and E.norm_type("10 chakka") == "Taurus (10-tyre)" and E.norm_type("Tata Ace") is None
                     and E.rates["axlesByType"]["32 ft SXL"] == 2)
+        ok &= check("'100 ton' stays 100 tons and is split, not priced as 0.1 T",
+                    E.norm_tons("100 ton") == 100 and E.norm_tons("14 टन") == 14 and E.norm_tons("18000") == 18
+                    and E.truck_fit({"weight_ton": 100, "material_class": "general"})["type"] is None)
         ok &= check("volume and lengths are not weights", E.norm_tons("1500 cft") is None and E.norm_tons("800 carton 4 ton") == 4
                     and E.norm_tons("32 ft") is None and E.norm_tons("14 ton 1500 cft") == 14)
         fit = lambda w, words, asked=None: E.truck_fit({"weight_ton": w, "material_class": E.material_class(words), "truck_type": asked})

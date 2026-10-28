@@ -217,8 +217,21 @@ def norm_city(s):
         return m[0]
     if CITY_RESOLVER:
         hit = CITY_RESOLVER(s)
+        if hit and hit.get("src") != "seed":
+            NEW_PLACES[hit["name"]] = hit             # found by a geocoder: the broker confirms it before owners are messaged
         return hit["name"] if hit else None
     return None
+
+NEW_PLACES = {}
+YES_TEXT = re.compile(r"^\s*(haan|haa|ha|han|hn|yes|y|ok|okay|sahi|sahi hai|theek|thik|correct|ji|ji haan|bilkul)\b", re.I)
+
+def _km_guess(a, b):
+    pts = [CITY["cities"].get(x) or ([NEW_PLACES[x]["lat"], NEW_PLACES[x]["lon"]] if x in NEW_PLACES else None) for x in (a, b)]
+    if not all(pts):
+        return None
+    (la1, lo1), (la2, lo2) = [map(math.radians, p) for p in pts]
+    h = math.sin((la2 - la1) / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2
+    return round(2 * 6371 * math.asin(math.sqrt(h)) * 1.3)
 
 def norm_type(s):
     """Map '32 MXL', '10 tyre', '22ft' etc. to a known type. Ambiguous ('32 ft') returns None so we ask."""
@@ -275,7 +288,11 @@ def norm_tons(x):
     s = str(x).lower()
     if "quintal" in s:
         v /= 10
-    elif "kg" in s or "kilo" in s or v >= 100:
+    elif "kg" in s or "kilo" in s:
+        v /= 1000
+    elif re.search(r"\bton|\btonne|\bmt\b|\d\s*t\b|टन", s):
+        pass                                            # "100 ton" is 100 tons: too big for one truck, and the adviser says so
+    elif v >= 100:                                      # a bare 18000 is kilograms: no truck carries 100 T
         v /= 1000
     return round(v, 2) or None
 
@@ -359,6 +376,15 @@ Reply language: always Hinglish - Hindi words in Roman script, like "Theek hai, 
     if said and pickup_day(said) != pickup_day(merged.get("pickup_when")):
         merged["pickup_when"] = said                  # the broker's words win over the model's
     miss = missing_fields(merged)
+    unsure = [c for c in (merged.get("origin"), merged.get("destination")) if c and c in NEW_PLACES]
+    if unsure and not miss:
+        if (load or {}).get("placesAsked") == unsure and YES_TEXT.search(user_msg):
+            merged["placesOk"] = unsure                 # the broker confirmed the places the geocoder found
+        elif merged.get("placesOk") != unsure:
+            merged["placesAsked"] = unsure
+            km = _km_guess(merged["origin"], merged["destination"])
+            return merged, (f"Ek baar confirm kar lijiye: *{merged['origin']} → {merged['destination']}*"
+                            + (f" (~{km:,} km)" if km else "") + " sahi hai? 🙏 *Haan* likhiye, ya shehar ka sahi naam bhejiye."), ["confirm"]
     reply = out.get("reply", "")
     if miss and (out.get("complete") or "?" not in reply or "hazard" in miss):   # a reply that doesn't ask can't move the load forward
         reply = ("Ek cheez confirm karni hai — " if len(miss) == 1 else "") + " ".join(ASK[k] for k in miss[:2])
@@ -536,7 +562,9 @@ def truck_fit(load):
     if asked:                                       # keep at least the size they asked for
         options = [t for t in options if caps[t] >= caps.get(asked, 0)] or options
     if not options:
-        why = (f"{w:g} T" + (f" aur ~{vol:,} cft" if vol else "") + f" ek {m['hi']} wali gaadi mein nahi aayega; load do gaadiyon mein baantna padega")
+        n = max(2, -(-int(w) // max(caps[t] for t in KNOWN_TYPES if body_ok(t, m["body"]) or m["body"] == "reefer")))
+        why = (f"{w:g} T" + (f" aur ~{vol:,} cft" if vol else "") + f" ek {m['hi']} wali gaadi mein nahi aayega; "
+               f"load kam se kam {n} gaadiyon mein baantna padega. Ek gaadi ka load bhejiye (e.g. {min(w, 16):g} T)")
         return {"type": None, "why": why, "material": m, "volume": vol}
     best = options[0]
     bits = []
