@@ -25,11 +25,15 @@ TRUCKS_BY_ID = {t["truckId"]: t for t in trucks}
 OWNERS_BY_ID = {o["ownerId"]: o for o in owners}
 REQUIRED = ["origin", "destination", "weight_ton", "truck_type"]
 
-# =============================== LLM (Groq, OpenAI-compatible) ===============================
+# =============================== LLM: OpenAI (paid credit) first for what people read, then free Groq ===============================
 GROQ_CHAT = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_AUDIO = "https://api.groq.com/openai/v1/audio/transcriptions"
+OPENAI_CHAT = "https://api.openai.com/v1/chat/completions"
 LLM = {"key": os.getenv("GROQ_API_KEY", ""),
-       "model": os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
+       "model": os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
+       "fallback": os.getenv("GROQ_FALLBACK_MODEL", "openai/gpt-oss-20b"),   # its own per-minute quota on Groq
+       "openai_key": os.getenv("OPENAI_API_KEY", ""),
+       "openai_model": os.getenv("OPENAI_MODEL", "gpt-5.4-mini"),
        "whisper": os.getenv("GROQ_WHISPER", "whisper-large-v3")}   # turbo garbles Hinglish city names
 
 def local_secrets():
@@ -37,16 +41,35 @@ def local_secrets():
     p = Path(__file__).parent / ".streamlit" / "secrets.toml"
     if not p.exists():
         return {}
-    return dict(re.findall(r'^\s*(\w+)\s*=\s*"([^"]*)"', p.read_text(encoding="utf-8"), flags=re.MULTILINE))
+    return {k: (q or bare).strip() for k, q, bare in      # KEY = "value", or KEY = value without quotes
+            re.findall(r'^\s*(\w+)\s*=\s*(?:"([^"]*)"|([^"#\s][^#\n]*))', p.read_text(encoding="utf-8"), flags=re.MULTILINE)}
 
-def configure(key=None, model=None, whisper=None):
-    """Set credentials from the app (st.secrets) instead of hardcoding them."""
+def configure(key=None, model=None, whisper=None, openai_key=None, openai_model=None):
+    """Set credentials from the app (env or secrets) instead of hardcoding them."""
     if key: LLM["key"] = key
     if model: LLM["model"] = model
     if whisper: LLM["whisper"] = whisper
+    if openai_key: LLM["openai_key"] = openai_key
+    if openai_model: LLM["openai_model"] = openai_model
 
 def llm_ready():
-    return bool(LLM["key"])
+    return bool(LLM["key"] or LLM["openai_key"])
+
+def _cool(name, until=None):
+    """Seconds-since-epoch until which a provider is rate limited; "groq" keeps the original LLM["coolUntil"]."""
+    box, k = (LLM, "coolUntil") if name == "groq" else (LLM.setdefault("cools", {}), name)
+    if until is not None:
+        box[k] = max(box.get(k, 0), until)
+    return box.get(k, 0)
+
+def _providers(tier):
+    """Who answers, in order. "smart": words people read (chat, negotiation, strategy) go to OpenAI first.
+    "cheap": routine extraction stays on free Groq and uses OpenAI only when Groq is out."""
+    groq = [("groq", GROQ_CHAT, LLM["key"], LLM["model"])] if LLM["key"] else []
+    if LLM["key"] and LLM.get("fallback") and LLM["fallback"] != LLM["model"]:
+        groq.append(("groq-fallback", GROQ_CHAT, LLM["key"], LLM["fallback"]))
+    oa = [("openai", OPENAI_CHAT, LLM["openai_key"], LLM["openai_model"])] if LLM["openai_key"] else []
+    return oa + groq if tier == "smart" else groq + oa
 
 def _wait_secs(r):
     """Seconds Groq asks us to wait after a 429 (header or 'try again in 7.5s' in the message)."""
@@ -59,39 +82,56 @@ def _wait_secs(r):
         secs = float(m.group(2)) / (1000 if m.group(3) == "ms" else 1)
         return secs + 60 * int(m.group(1) or 0)
 
-def chat(messages, tools=None, json_mode=False, timeout=25, retries=3, max_wait=30):
-    """One chat completion with a timeout and retries, so a slow call cannot freeze the demo.
-    On a rate limit (free tier: 8,000 tokens/min) it waits as long as Groq asks, up to max_wait seconds."""
-    if not LLM["key"]:
-        raise RuntimeError("GROQ_API_KEY is not set")
-    body = {"model": LLM["model"], "temperature": 0, "messages": messages, "max_completion_tokens": 700}
-    if "gpt-oss" in LLM["model"]:
-        body["reasoning_effort"] = "low"          # fewer hidden reasoning tokens against the per-minute cap
+def chat(messages, tools=None, json_mode=False, timeout=25, retries=3, max_wait=30, tier="cheap"):
+    """One chat completion, trying each configured provider in turn, each with a timeout and retries, so a slow
+    call or a used-up quota cannot freeze the demo. Raises only when every provider failed."""
+    chain = _providers(tier)
+    if not chain:
+        raise RuntimeError("No language model key is set (GROQ_API_KEY or OPENAI_API_KEY)")
+    last = None
+    for name, url, key, model in chain:
+        try:
+            return _complete(name, url, key, model, messages, tools, json_mode, timeout, retries, max_wait)
+        except Exception as e:
+            last = e
+            print(f"LLM {name} failed, trying the next one:", str(e)[:160])
+    raise last
+
+def _complete(name, url, key, model, messages, tools, json_mode, timeout, retries, max_wait):
+    body = {"model": model, "messages": messages, "max_completion_tokens": 700}
+    if name == "openai":
+        body["reasoning_effort"] = "low"                # GPT-5-family models take only the default temperature
+        body["max_completion_tokens"] = 1500           # reasoning tokens count against this too
+    else:
+        body["temperature"] = 0
+        if "gpt-oss" in model:
+            body["reasoning_effort"] = "low"          # fewer hidden reasoning tokens against the per-minute cap
     if tools:
         body["tools"], body["tool_choice"] = tools, "auto"
     if json_mode:
         body["response_format"] = {"type": "json_object"}
     last = None
     for i in range(retries):
-        left = LLM.get("coolUntil", 0) - time.time()   # some thread already hit the limit: don't spend a request on it
+        left = _cool(name) - time.time()               # some thread already hit the limit: don't spend a request on it
         if left > max_wait:
-            raise last or RuntimeError(f"Groq rate limit (cooling down {left:.0f}s)")
+            raise last or RuntimeError(f"{name} rate limit (cooling down {left:.0f}s)")
         if left > 0:
             time.sleep(left)
         try:
-            r = requests.post(GROQ_CHAT, headers={"Authorization": f"Bearer {LLM['key']}"},
-                              json=body, timeout=timeout)
+            r = requests.post(url, headers={"Authorization": f"Bearer {key}"}, json=body, timeout=timeout)
             if r.status_code == 429:
                 wait = _wait_secs(r)
-                LLM["coolUntil"] = max(LLM.get("coolUntil", 0), time.time() + wait + 0.5)
-                last = RuntimeError(f"Groq rate limit (wait {wait:.0f}s)")
+                if "insufficient_quota" in r.text:     # the prepaid credit is used up: stop asking for a while
+                    wait = 3600
+                _cool(name, time.time() + wait + 0.5)
+                last = RuntimeError(f"{name} rate limit (wait {wait:.0f}s)")
                 if wait > max_wait:
                     break
                 continue
-            if r.status_code in (401, 403, 404, 413):   # a bad key, model or prompt: retrying won't help
-                raise PermissionError(f"Groq {r.status_code}: {r.text[:200]}")
+            if r.status_code in (400, 401, 403, 404, 413):   # a bad key, model or request: retrying won't help
+                raise PermissionError(f"{name} {r.status_code}: {r.text[:200]}")
             if not r.ok:
-                raise RuntimeError(f"Groq {r.status_code}: {r.text[:200]}")
+                raise RuntimeError(f"{name} {r.status_code}: {r.text[:200]}")
             return r.json()["choices"][0]["message"]
         except PermissionError:
             raise
@@ -100,8 +140,8 @@ def chat(messages, tools=None, json_mode=False, timeout=25, retries=3, max_wait=
             time.sleep(1.5 * (i + 1))
     raise last
 
-def gen(prompt, json_mode=False):
-    return chat([{"role": "user", "content": prompt}], json_mode=json_mode).get("content") or ""
+def gen(prompt, json_mode=False, tier="cheap"):
+    return chat([{"role": "user", "content": prompt}], json_mode=json_mode, tier=tier).get("content") or ""
 
 def parse_json(t):
     t = re.sub(r"^```[a-zA-Z]*|```$", "", (t or "").strip(), flags=re.MULTILINE).strip()
@@ -280,7 +320,7 @@ Return ONLY JSON:
 Fill load with everything known so far. If all required fields are known set complete=true and reply that you are finding the best truck now.
 If anything required is missing, the reply must ASK for exactly those details (e.g. "Kahan se kahan tak?") and must not say you are finding a truck.
 Reply language: always Hinglish - Hindi words in Roman script, like "Theek hai, kitne ton maal hai?" - even if the broker wrote in English or in Devanagari. Never reply in plain English."""
-    out = parse_json(gen(prompt, json_mode=True))
+    out = parse_json(gen(prompt, json_mode=True, tier="smart"))
     raw = {**(load or {}), **{k: v for k, v in (out.get("load") or {}).items() if v not in (None, "")}}
     merged = normalise_load(raw)                      # anything that doesn't match our lists becomes missing
     said = pickup_phrase([m["text"] for m in hist if m["role"] == "user"])

@@ -129,7 +129,8 @@ def rate_limit_tests():
     def post(*a, **k):
         calls.append(1)
         return replies.pop(0)
-    E.requests.post, E.LLM["key"] = post, "test"
+    real_oa, real_fb = E.LLM["openai_key"], E.LLM["fallback"]
+    E.requests.post, E.LLM["key"], E.LLM["openai_key"], E.LLM["fallback"] = post, "test", "", ""
     ok = True
     try:
         replies = [R(429, headers={"retry-after": "40"})]
@@ -153,6 +154,7 @@ def rate_limit_tests():
         ok &= check("bad key is not retried", len(calls) == 2)
     finally:
         E.requests.post, E.LLM["key"], E.LLM["coolUntil"] = real_post, real_key, 0
+        E.LLM["openai_key"], E.LLM["fallback"] = real_oa, real_fb
     return ok
 
 def geo_tests():

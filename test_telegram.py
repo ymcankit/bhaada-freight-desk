@@ -14,7 +14,7 @@ live._store = lambda: None                            # never the real Upstash, 
 import server
 from fastapi.testclient import TestClient
 
-E.LLM["key"] = ""
+E.LLM["key"] = E.LLM["openai_key"] = ""          # no real model calls: rules take over
 E.llm_ready = lambda: True
 SENT = []
 server.tg_send = lambda to, text, buttons=None: SENT.append((to, text, buttons))

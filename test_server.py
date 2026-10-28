@@ -14,7 +14,7 @@ live._store = lambda: None                            # never the real Upstash, 
 import server
 from fastapi.testclient import TestClient
 
-E.LLM["key"] = ""
+E.LLM["key"] = E.LLM["openai_key"] = ""          # no real model calls: rules take over
 E.llm_ready = lambda: True                           # intake is stubbed below; every other model call fails fast to the rules
 SENT = []
 server.WA_READY = True

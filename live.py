@@ -407,6 +407,9 @@ class Desk:
                 f"Owner: {o['name']}, base {o.get('baseCity') or 'unknown'}.\n"
                 f"Their trucks reported today: {'; '.join(trucks) or 'none yet'}.\n"
                 "Their loads with the desk (newest first):\n" + ("\n".join(rows) or "- none yet") + "\n"
+                "Recent chat (oldest first):\n" + ("\n".join(list(getattr(self, "convo", {}).get(o["key"], []))[:-1][-8:])
+                                                   or "(new chat)") + "\n"
+                "Mention a load only when the message is about it; don't repeat what they were just told.\n"
                 f'Owner\'s message: "{text}"\n'
                 "Rules:\n"
                 "- If the message reports a free/empty truck, its type, location or rate, set intent=\"checkin\" and leave reply empty.\n"
@@ -478,7 +481,7 @@ class Desk:
             return None                                # "nahi": nothing free today
         trucks = []
         try:
-            out = self._llm_json(
+            out = self._llm_json(tier="cheap", prompt=
                 "An Indian truck owner answered 'is your truck free today?'. Extract every truck they offer.\n"
                 f"Truck types (exact names): {', '.join(E.KNOWN_TYPES)}\n"
                 'Return ONLY JSON {"trucks":[{"type":null,"city":null,"available":"today|tomorrow|in 2 days","rate_per_km":null}]}\n'
@@ -888,9 +891,9 @@ class Desk:
         n = max(nums)
         return n / km if n > 300 else n
 
-    def _llm_json(self, prompt):
+    def _llm_json(self, prompt, tier="smart"):
         # timeout 12: negotiation calls this on the worker, so one slow reply must not stall every other load
-        msg = E.chat([{"role": "user", "content": prompt}], json_mode=True, timeout=12, retries=2, max_wait=8)
+        msg = E.chat([{"role": "user", "content": prompt}], json_mode=True, timeout=12, retries=2, max_wait=8, tier=tier)
         return E.parse_json(msg.get("content") or "")
 
     def _all_answered(self, load):

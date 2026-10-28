@@ -26,7 +26,8 @@ _sec = E.local_secrets()
 def cfg(k, default=""):
     return os.getenv(k) or _sec.get(k, default)
 
-E.configure(key=cfg("GROQ_API_KEY"), model=cfg("GROQ_MODEL"), whisper=cfg("GROQ_WHISPER"))
+E.configure(key=cfg("GROQ_API_KEY"), model=cfg("GROQ_MODEL"), whisper=cfg("GROQ_WHISPER"),
+            openai_key=cfg("OPENAI_API_KEY"), openai_model=cfg("OPENAI_MODEL"))
 WA_TOKEN, WA_PHONE_ID = cfg("WHATSAPP_TOKEN"), cfg("WHATSAPP_PHONE_ID")
 WA_VERIFY = cfg("WHATSAPP_VERIFY_TOKEN", "bhaada_verify_123")
 WA_READY = len(WA_TOKEN) > 40 and WA_PHONE_ID.isdigit()        # placeholders like "later" mean not connected
@@ -78,8 +79,15 @@ def tg_send(to, text, buttons=None):
     except Exception as e:
         print("Telegram send error:", safe(e))
 
+CONVO = {}                                            # address -> the last few lines both ways, so replies follow the chat
+
+def remember(who, role, text):
+    log = CONVO.setdefault(who, collections.deque(maxlen=12))
+    log.append(f"{role}: {str(text)[:300]}")
+
 def send(to, text, buttons=None):
     """One sender for the desk: picks the channel from the address."""
+    remember(to, "Bhaada", text)
     if str(to).startswith("tg:"):
         text = re.sub(r"(?<!\w)_([^_\n]+)_(?!\w)", r"\1", text.replace("*", ""))   # WhatsApp *bold*/_italic_ shows literally on Telegram
         return tg_send(to, text, buttons) if TG_READY else None
@@ -119,6 +127,7 @@ def desk_send(to, text, buttons=None):
 
 threading.Thread(target=outbox, daemon=True).start()
 desk = live.Desk(sender=desk_send if (WA_READY or TG_READY) else None)
+desk.convo = CONVO
 if TG_READY:
     threading.Thread(target=tg_setup, daemon=True).start()
 def keep_awake():
@@ -413,6 +422,7 @@ def join_as_owner(wa, name, city):
              + ".\nGaadi khaali ho to aise bhejiye: *32 ft MXL, Bhiwandi, aaj, ₹38/km*\n(Role badalna ho to *hi* likhiye.)")
 
 def on_text(wa, text):
+    remember(wa, "Them", text)
     if GREETING.match(text):
         return role_menu(wa)
     waiting = desk.brokers.get(wa) or {}
@@ -487,9 +497,15 @@ def broker_brain(wa, text, s):
     ("reply", text): thanks, small talk or a question, answered from their own loads. Falls back to intake."""
     loads = broker_facts(wa)
     asked = next((m["text"] for m in reversed(s["chat"]) if m["role"] == "bot"), None)
+    recent = list(CONVO.get(wa, []))[:-1][-8:]          # the chat so far, without the message being answered
     try:
         out = E.parse_json((E.chat([{"role": "user", "content":
-            "You are Bhaada, an AI freight desk chatting with a BROKER (they send loads; you find trucks and quote).\n"
+            "You are Bhaada, an AI freight desk chatting with a BROKER on Telegram/WhatsApp.\n"
+            "How the desk works (explain only if asked): the broker sends a load by text or voice note; the desk messages "
+            "nearby truck owners at once, negotiates their rate inside the broker's margin band, and sends a quote with "
+            "Approve/Reject buttons; on approval the owner holds the truck; if an owner backs out the desk re-books a "
+            "backup at the same shipper price. *status* shows their loads; *reject BH-xxxx* cancels a quote.\n"
+            "Recent chat (oldest first):\n" + ("\n".join(recent) or "(new chat)") + "\n"
             "Their recent loads (newest last):\n" + ("\n".join("- " + x for x in loads) or "- none") + "\n"
             + (f"A new load is being collected: known so far {json.dumps(s['load'], ensure_ascii=False)}; "
                f"your last question was: \"{asked}\"\n" if s["chat"] else "")
@@ -500,11 +516,12 @@ def broker_brain(wa, text, s):
             "- intent=\"reply\" for everything else: thanks, greetings, ok, small talk, questions about their loads, owners, "
             "prices or how the desk works. Answer in 1-3 short lines using ONLY the facts above; never invent a load, "
             "truck, owner or price. Thanks/ok gets a short warm reply (e.g. \"Shukriya ji 🙏 Aur koi load ho to bhejiye.\") "
-            "and never a question about tons or cities. If a load is being collected, you may gently remind what is "
-            "still needed. To cancel a quote they write *reject BH-xxxx*; a booked trip is changed by calling the owner.\n"
+            "and never a question about tons or cities. Mention their loads only when the message is about them; don't "
+            "repeat a load status they already got. Market or rate trends: you have no market feed, say so briefly and "
+            "offer to quote a lane. If a load is being collected, you may gently remind what is still needed. To cancel a quote they write *reject BH-xxxx*; a booked trip is changed by calling the owner.\n"
             "Reply in Hinglish (Hindi words in Roman script), never plain English.\n"
             'Return ONLY JSON {"intent":"load|reply","reply":""}'}],
-            json_mode=True, timeout=12, retries=2, max_wait=5).get("content") or ""))   # on any trouble intake reads it
+            json_mode=True, timeout=12, retries=2, max_wait=5, tier="smart").get("content") or ""))   # on any trouble intake reads it
     except Exception as e:
         print("broker brain failed, reading it as a load:", repr(e))
         return "load", None
