@@ -284,8 +284,32 @@ class Desk:
         if load.get("brokerPhone") and self.send_wa:
             self.send_wa(load["brokerPhone"], text, buttons)
 
-    def _event(self, load, actor, text):
-        load["events"].append({"t": now(), "actor": actor, "text": text})
+    OWNER_SAID = re.compile(r" (cancelled|backed out|confirmed the|is no longer free)|^Dispatch:")
+
+    def _event(self, load, actor, text, by=None, **extra):
+        """One step in a load's log. `by` says who decided it, for the console: "AI" (a model's reading or choice),
+        "Code" (pricing, guardrails, routing, timers, the fixed-order strategist) or "Human" (the broker, an owner)."""
+        if by is None:
+            th = next((x for x in load["threads"].values() if x.get("name") and text.startswith(x["name"])), None)
+            if actor == "Broker":
+                by = "AI" if load.get("aiBroker") else "Human"         # the AI broker approves its own demo loads
+            elif actor == "Strategist":
+                by = "AI" if text.startswith("(AI)") else "Code"
+            elif actor == "Intake":
+                by = "Code" if text.startswith("Budget") else "AI"      # the model read the broker's words; code did the sum
+            elif actor == "Negotiation":                                 # did the model read the owner's reply, or the rules?
+                th = next((x for x in load["threads"].values() if x.get("name") and x["name"] in text), None)
+                by = (th or {}).get("readBy") or "Code"
+            elif actor in ("Booking", "Sourcing") and self.OWNER_SAID.search(text):
+                by = "AI" if th and th.get("sandbox") else "Human"      # an owner's own word (an AI persona in sandbox)
+            else:
+                by = "Code"
+        t = now()
+        prev = load["events"][-1]["t"] if load["events"] else load.get("createdAt", t)
+        load["events"].append({"t": t, "actor": actor, "text": text, "by": by, **extra})
+        # one structured line per lifecycle step: no names, phone numbers or message text
+        print(json.dumps({"log": "load", "load": load.get("id"), "step": actor, "by": by, "status": load.get("status"),
+                          "ms": round((t - prev) * 1000), "sinceStartMs": round((t - load.get("createdAt", t)) * 1000)}))
 
     # ---------------- owners ----------------
     def register_owner(self, phone, name, city=None):
@@ -895,12 +919,20 @@ class Desk:
                     "Roman script, e.g. \"Rate mein diesel aur toll dono shaamil hain.\"), never English. Else empty.\n"
                     'Return ONLY JSON {"intent":"quote|accept_offer|refuse|question|other","owner_rate_per_km":null,'
                     '"owner_total_rs":null,"answer":""}')
-                rate = E.norm_weight(out.get("owner_rate_per_km"))
-                total = E.norm_weight(out.get("owner_total_rs"))
-                read = {"intent": out.get("intent"), "ask": rate or (total / km if total and total > 300 else None),
-                        "answer": (out.get("answer") or "").strip()}
+                pos = lambda x: None if str(x).strip().startswith("-") else E.norm_weight(x)
+                rate, total = pos(out.get("owner_rate_per_km")), pos(out.get("owner_total_rs"))
+                ask = rate or (total / km if total and total > 300 else None)
+                said = self._owner_rate(text, km)       # guardrail: a number the owner wrote beats the model's reading of it
+                if ask and said and abs(ask - said) > max(0.5, 0.02 * said):
+                    ask = said
+                answer = (out.get("answer") or "").strip()
+                nums = lambda s: re.findall(r"\d+(?:[,.]\d+)*", s)
+                if any(n not in nums(self.terms_line()) for n in nums(answer)):
+                    answer = ""                         # guardrail: only the code's terms carry numbers; a model never names a rate
+                read = {"intent": out.get("intent"), "ask": ask, "answer": answer}
             except Exception as e:
                 print("negotiation LLM failed, using rules:", repr(e))
+        th["readBy"] = "AI" if read and read["intent"] in ("quote", "accept_offer", "refuse", "question", "other") else "Code"
         if not read or read["intent"] not in ("quote", "accept_offer", "refuse", "question", "other"):
             ask = self._owner_rate(text, km)
             read = {"intent": "quote" if ask else "accept_offer" if YES.search(text) and th["counter"]
@@ -1206,7 +1238,8 @@ class Desk:
             choice = next(m for m in ("widen", "final_offer", "bigger_truck", "ask_broker", "escalate") if m in moves)
             why = "fixed order: widen, final offer, bigger truck, ask the broker, hand over"
         load.setdefault("tried", []).append(choice)
-        self._event(load, "Strategist", f"({by}) {choice.replace('_', ' ')}: {opts[choice]}." + (f" Why: {why}" if why else ""))
+        self._event(load, "Strategist", f"({by}) {choice.replace('_', ' ')}: {opts[choice]}." + (f" Why: {why}" if why else ""),
+                    moves={k: opts[k] for k in moves}, chosen=choice, why=why)   # for the console's decision panel
         getattr(self, "_move_" + choice)(load, opts)
 
     def _move_widen(self, load, opts):

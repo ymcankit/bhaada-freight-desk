@@ -6,7 +6,7 @@ No Streamlit in here, so everything can be tested offline:  python test_engine.p
 Prices are computed only in code (trip_cost / price_quote). The LLM decides which
 tool to call next; it never produces a number that reaches the shipper.
 """
-import json, math, os, re, time, hashlib, difflib, inspect
+import json, math, os, re, time, hashlib, difflib, inspect, threading
 from pathlib import Path
 import requests
 
@@ -83,19 +83,66 @@ def _wait_secs(r):
         secs = float(m.group(2)) / (1000 if m.group(3) == "ms" else 1)
         return secs + 60 * int(m.group(1) or 0)
 
+# ---- observability: numbers only (calls, tokens, failures, cost), never message content or keys ----
+# USD per million tokens (input, output). gpt-oss-20b is not on our price sheet: half of 120b, an estimate.
+PRICES = {"gpt-5.4-mini": (0.75, 4.50), "openai/gpt-oss-120b": (0.15, 0.60), "openai/gpt-oss-20b": (0.075, 0.30)}
+_stats_lock = threading.Lock()
+
+def _new_stats():
+    return {"since": time.time(), "calls": 0, "rulesFallbacks": 0, "noKey": 0, "providers": {}}
+STATS = _new_stats()
+
+def _stat(name, model, ok=False, fail=False, fallback=False, usage=None):
+    """Count one provider attempt: a success with its token usage, or a failure (and whether the next one took over)."""
+    with _stats_lock:
+        p = STATS["providers"].setdefault(name, {"model": model, "ok": 0, "failures": 0, "fallbacks": 0,
+                                                 "promptTokens": 0, "completionTokens": 0, "usd": 0.0})
+        p["model"] = model
+        p["ok"] += ok
+        p["failures"] += fail
+        p["fallbacks"] += fallback
+        if usage:
+            pt, ct = int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
+            pin, pout = PRICES.get(model, (0, 0))
+            p["promptTokens"] += pt
+            p["completionTokens"] += ct
+            p["usd"] = round(p["usd"] + (pt * pin + ct * pout) / 1e6, 6)
+
+def llm_stats():
+    """A copy for /healthz: calls, tokens, failures, fallbacks and the estimated cost, per provider and in total."""
+    with _stats_lock:
+        out = json.loads(json.dumps(STATS))
+    ps = out["providers"].values()
+    out.update(since=round(out["since"]), usd=round(sum(p["usd"] for p in ps), 4),
+               tokens=sum(p["promptTokens"] + p["completionTokens"] for p in ps))
+    return out
+
+def reset_stats():
+    global STATS
+    with _stats_lock:
+        STATS = _new_stats()
+
 def chat(messages, tools=None, json_mode=False, timeout=25, retries=3, max_wait=30, tier="cheap"):
     """One chat completion, trying each configured provider in turn, each with a timeout and retries, so a slow
     call or a used-up quota cannot freeze the demo. Raises only when every provider failed."""
     chain = _providers(tier)
+    with _stats_lock:
+        STATS["calls"] += 1
+        if not chain:
+            STATS["noKey"] += 1
+            STATS["rulesFallbacks"] += 1
     if not chain:
         raise RuntimeError("No language model key is set (GROQ_API_KEY or OPENAI_API_KEY)")
     last = None
-    for name, url, key, model in chain:
+    for i, (name, url, key, model) in enumerate(chain):
         try:
             return _complete(name, url, key, model, messages, tools, json_mode, timeout, retries, max_wait)
         except Exception as e:
             last = e
+            _stat(name, model, fail=True, fallback=i < len(chain) - 1)
             print(f"LLM {name} failed, trying the next one:", str(e)[:160])
+    with _stats_lock:
+        STATS["rulesFallbacks"] += 1                  # every provider failed: the caller uses its rules
     raise last
 
 def _complete(name, url, key, model, messages, tools, json_mode, timeout, retries, max_wait):
@@ -133,7 +180,10 @@ def _complete(name, url, key, model, messages, tools, json_mode, timeout, retrie
                 raise PermissionError(f"{name} {r.status_code}: {r.text[:200]}")
             if not r.ok:
                 raise RuntimeError(f"{name} {r.status_code}: {r.text[:200]}")
-            return r.json()["choices"][0]["message"]
+            j = r.json()
+            msg = j["choices"][0]["message"]
+            _stat(name, model, ok=True, usage=j.get("usage"))
+            return msg
         except PermissionError:
             raise
         except Exception as e:
