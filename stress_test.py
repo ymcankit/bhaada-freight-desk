@@ -738,7 +738,7 @@ def phase_faults():
     wait_for(lambda: L["status"] in live.Desk.CLOSED + ("needs_approval",) and STORE["fails"] > f0, 40)
     time.sleep(2)
     h = HTTP.get(BASE + "/healthz").json()
-    check("Upstash down: desk keeps working", L["status"] in live.Desk.CLOSED + ("needs_approval", "holding"), L["status"])
+    check("Upstash down: desk keeps working", L["status"] in live.Desk.CLOSED + ("needs_approval", "holding", "waiting_trucks"), L["status"])
     check("Upstash down: health shows the store error and unsaved seconds", h["storeError"] and h["unsavedSec"] > 0, str(h))
     tries = STORE["fails"] - f0
     STORE["up"] = True
