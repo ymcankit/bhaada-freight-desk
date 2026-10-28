@@ -25,7 +25,7 @@ D.settings.update(mode="live", aiAgents=True)
 D.settings["replyTimeoutSec"]["live"] = 6
 D.settings["holdTimeoutSec"]["live"] = 8
 D.sandbox_on()
-c = TestClient(server.app)
+c = TestClient(server.app, headers={"X-Telegram-Bot-Api-Secret-Token": server.TG_SECRET})   # as Telegram sends it
 URL = f"/telegram/{server.TG_PATH}"
 n = [0]
 

@@ -24,7 +24,7 @@ server.desk.settings["aiAgents"] = False                # AI owners and the AI b
 server.desk.settings["replyTimeoutSec"]["live"] = 6
 E.intake_turn = lambda hist, load, msg: (E.normalise_load(dict(origin="Bhiwandi", destination="Surat", weight_ton=14,
                                                                truck_type="32 ft MXL", pickup_when="kal")), "ok", [])
-c = TestClient(server.app)
+c = TestClient(server.app, headers={"X-Telegram-Bot-Api-Secret-Token": server.TG_SECRET})   # as Telegram sends it
 URL = f"/telegram/{server.TG_PATH}"
 BROKER, OWNERS = 5001, [6001, 6002]
 n = [0]
@@ -108,12 +108,29 @@ text(OWNERS[0], "owner Nikunj Transport, Surat")
 time.sleep(2)
 ok &= check("an owner who joins later gets the waiting load", W["status"] == "sourcing" and "Load:" in last_to(OWNERS[0]), W["status"])
 ok &= check("state reports Telegram", "telegram" in c.get("/api/state").json())
-server.TG_BOT["hooked"] = True                                 # setWebhook took the secret: the header is required
 upd = {"update_id": 99999, "message": {"chat": {"id": 7777}, "text": "hi"}}
-ok &= check("webhook without the secret header refused", c.post(URL, json=upd).status_code == 403
+ok &= check("webhook without the secret header refused", TestClient(server.app).post(URL, json=upd).status_code == 403
             and c.post(URL, json=upd, headers={"X-Telegram-Bot-Api-Secret-Token": "nope"}).status_code == 403)
 ok &= check("webhook with the secret header accepted",
             c.post(URL, json=upd, headers={"X-Telegram-Bot-Api-Secret-Token": server.TG_SECRET}).status_code == 200)
+def post(update):
+    n[0] += 1
+    c.post(URL, json={"update_id": n[0], **update})
+post({"message": {"chat": {"id": -1008, "type": "group"}, "text": "hi"}})
+post({"callback_query": {"id": "qg", "data": "role:owner", "from": {"id": 9999}, "message": {"chat": {"id": 8801, "type": "private"}}}})
+ok &= check("groups and other people's taps are ignored", not last_to(-1008) and not last_to(8801))
+post({"message": {"chat": {"id": 8802}, "voice": {"file_id": "f", "duration": 900, "mime_type": "audio/ogg"}}})
+ok &= check("a long voice note is refused before download", "2 minute" in last_to(8802))
+server.RATE["perMin"] = 3
+for _ in range(6):
+    text(8803, "hi")
+mine = [t for to, t, b in SENT if to == "tg:8803"]
+ok &= check("a flood from one chat is cut off, told once", len(mine) == 4 and "ruk ke" in mine[-1], str(len(mine)))
+server.RATE["perMin"] = 12
+text(8804, "hi " + "x" * 5000)
+time.sleep(0.5)
+raw = [l["raw"] for l in server.desk.broker_loads("tg:8804")]
+ok &= check("long messages are cut before anything reads them", raw and len(raw[0]) <= server.MAX_TEXT, str([len(r) for r in raw]))
 ok &= check("bot token kept out of logged errors", server.TG_TOKEN not in server.safe(
             ConnectionError(f"Max retries exceeded with url: /bot{server.TG_TOKEN}/sendMessage")))
 print("\nALL PASS" if ok else "\nSOME FAILED")

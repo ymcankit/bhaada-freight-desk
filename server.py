@@ -15,6 +15,7 @@ Config (environment variables, or .streamlit/secrets.toml locally):
 """
 import os, re, json, threading, hashlib, hmac, collections, queue, time
 from pathlib import Path
+from urllib.parse import urlparse
 import requests
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Depends
 from fastapi.concurrency import run_in_threadpool
@@ -64,12 +65,30 @@ def wa_send(to, text, buttons=None):
     except Exception as e:
         print("WhatsApp send error:", repr(e))
 
+MAX_VOICE_SEC, MAX_VOICE_BYTES = 120, 4_000_000        # a load is said in under a minute; Whisper minutes are quota
+META_MEDIA_HOSTS = (".fbsbx.com", ".facebook.com", ".fbcdn.net", ".whatsapp.net")
+
+def fetch_capped(url, headers=None, cap=MAX_VOICE_BYTES):
+    """Download at most cap bytes; a bigger file is refused part-way instead of filling memory."""
+    with requests.get(url, headers=headers, timeout=60, stream=True) as r:
+        r.raise_for_status()
+        out = bytearray()
+        for chunk in r.iter_content(65536):
+            out += chunk
+            if len(out) > cap:
+                raise ValueError("voice note too large")
+        return bytes(out)
+
 def wa_media(media_id):
+    """(bytes, mime), or None when the note is too big. The token only goes to Meta's own media hosts."""
     h = {"Authorization": f"Bearer {WA_TOKEN}"}
     meta = requests.get(f"{GRAPH}/{media_id}", headers=h, timeout=20).json()
-    data = requests.get(meta["url"], headers=h, timeout=60)
-    data.raise_for_status()
-    return data.content, meta.get("mime_type", "audio/ogg")
+    if int(meta.get("file_size") or 0) > MAX_VOICE_BYTES:
+        return None
+    url = urlparse(meta["url"])
+    if url.scheme != "https" or not (url.hostname or "").endswith(META_MEDIA_HOSTS):
+        raise ValueError(f"unexpected media host {url.hostname}")
+    return fetch_capped(meta["url"], headers=h), meta.get("mime_type", "audio/ogg")
 
 # ---------------- Telegram sending (chat ids are kept as "tg:<id>" so they never clash with phone numbers) ----------------
 def tg_send(to, text, buttons=None):
@@ -352,9 +371,9 @@ async def receive(request: Request, bg: BackgroundTasks):
 async def telegram(path: str, request: Request, bg: BackgroundTasks):
     if not TG_READY or not hmac.compare_digest(path.encode(), TG_PATH.encode()):
         raise HTTPException(404)
-    got = request.headers.get("x-telegram-bot-api-secret-token")
-    # once setWebhook took our secret, every real update carries it; a path seen in a log is not enough to post
-    if (TG_BOT["hooked"] or got is not None) and not hmac.compare_digest((got or "").encode(), TG_SECRET.encode()):
+    got = request.headers.get("x-telegram-bot-api-secret-token") or ""
+    # every webhook we ever set carries this secret, so a real update always has it; a path seen in a log is not enough
+    if not hmac.compare_digest(got.encode(), TG_SECRET.encode()):
         raise HTTPException(403)
     u = await request.json()
     if first_time("tg:" + str(u.get("update_id"))):
@@ -363,10 +382,52 @@ async def telegram(path: str, request: Request, bg: BackgroundTasks):
 
 ONLY_TEXT = "Abhi sirf text aur voice note samajh pata hoon 🙏 Type kijiye ya bol ke bhejiye."
 OOPS = "Maaf kijiye, mere taraf se kuch gadbad hui 🙏 Thodi der baad wahi message dobara bhejiye."
+TOO_LONG = "🎤 Voice note 2 minute se chhota bhejiye 🙏 Ya load type kar dijiye."
+SLOW_DOWN = "Bahut saare messages ek saath aa gaye 🙏 Thodi der ruk ke bhejiye."
+
+# Every message can cost model calls on prepaid credit: one chat, or a crowd of them, can't run the desk dry
+RATE = {"perMin": 12, "perHour": 120, "allPerHour": 900}
+HITS, ALL_HITS, WARNED, RATE_LOCK = {}, collections.deque(), {}, threading.Lock()
+
+def allowed(who):
+    """(ok, tell_them): a sliding window per sender and for the whole desk; a refused sender hears it once in 10 min."""
+    t = time.time()
+    with RATE_LOCK:
+        while ALL_HITS and t - ALL_HITS[0] > 3600:
+            ALL_HITS.popleft()
+        q = HITS.setdefault(who, collections.deque())
+        while q and t - q[0] > 3600:
+            q.popleft()
+        if len(q) >= RATE["perHour"] or sum(t - x < 60 for x in q) >= RATE["perMin"] or len(ALL_HITS) >= RATE["allPerHour"]:
+            tell = t - WARNED.get(who, 0) > 600
+            if tell:
+                WARNED[who] = t
+            return False, tell
+        q.append(t)
+        ALL_HITS.append(t)
+        if len(HITS) > 5000:                               # forget senders quiet for an hour
+            for k in [k for k, d in HITS.items() if not d or t - d[-1] > 3600]:
+                HITS.pop(k, None)
+                WARNED.pop(k, None)
+        return True, False
+
+def gate(who):
+    ok, tell = allowed(who)
+    if not ok:
+        print("rate limited:", str(who)[-4:])
+        if tell:
+            send(who, SLOW_DOWN)
+    return ok
 
 def handle_telegram(u):
     if "callback_query" in u:
         q = u["callback_query"]
+        chat = (q.get("message") or {}).get("chat") or {}
+        # a button counts only from the person whose private chat it is in: in a group anyone could tap a broker's Approve
+        if chat.get("type", "private") != "private" or (q.get("from") and q["from"].get("id") != chat.get("id")):
+            return
+        if not gate(f"tg:{chat.get('id')}"):
+            return
         try:
             requests.post(f"{TG_API}/answerCallbackQuery", json={"callback_query_id": q["id"]}, timeout=10)
         except Exception:
@@ -375,13 +436,19 @@ def handle_telegram(u):
     m = u.get("message") or {}
     if not m.get("chat"):
         return
+    if m["chat"].get("type", "private") != "private":
+        return                                           # a group would make all its members one broker or one owner
     key = f"tg:{m['chat']['id']}"
+    if not gate(key):
+        return
     with LOCKS.setdefault(key, threading.Lock()):
         try:
             media = m.get("voice") or m.get("audio") or m.get("video_note")
             if media:
+                if (media.get("duration") or 0) > MAX_VOICE_SEC or (media.get("file_size") or 0) > MAX_VOICE_BYTES:
+                    return send(key, TOO_LONG)
                 f = requests.get(f"{TG_API}/getFile", params={"file_id": media["file_id"]}, timeout=15).json()["result"]
-                audio = requests.get(f"https://api.telegram.org/file/bot{TG_TOKEN}/{f['file_path']}", timeout=60).content
+                audio = fetch_capped(f"https://api.telegram.org/file/bot{TG_TOKEN}/{f['file_path']}")
                 text = E.transcribe(audio, media.get("mime_type") or "audio/ogg", name=f.get("file_path"))
                 print(f"voice {key[-4:]}: {media.get('mime_type')} {len(audio)} bytes {media.get('duration')}s -> {len(text)} chars")
                 if not text:
@@ -400,6 +467,8 @@ def handle_telegram(u):
 
 def handle_message(msg):
     wa = msg["from"]
+    if not gate(wa):
+        return
     with LOCKS.setdefault(wa, threading.Lock()):
         try:
             kind = msg.get("type")
@@ -408,7 +477,10 @@ def handle_message(msg):
             if kind == "button":
                 return on_button(wa, msg["button"].get("payload", ""))
             if kind == "audio":
-                audio, mime = wa_media(msg["audio"]["id"])
+                got = wa_media(msg["audio"]["id"])
+                if not got:
+                    return send(wa, TOO_LONG)
+                audio, mime = got
                 text = E.transcribe(audio, mime)
                 if not text:
                     return send(wa, "🎤 Awaaz saaf nahi aayi. Phone muh ke paas rakh ke dobara bolo, ya type kar do.")
@@ -450,6 +522,7 @@ def join_as_owner(wa, name, city):
              + ".\nGaadi khaali ho to aise bhejiye: *32 ft MXL, Bhiwandi, aaj, ₹85/km*\n(Role badalna ho to *hi* likhiye.)")
 
 def on_text(wa, text):
+    text = text[:MAX_TEXT]
     remember(wa, "Them", text)
     if GREETING.match(text):
         return role_menu(wa)
@@ -491,6 +564,7 @@ def on_text(wa, text):
         return send(wa, "Abhi system thoda busy hai 🙏 1 minute baad wahi message dobara bhejiye.")
     s["load"] = {k: v for k, v in merged.items() if v not in (None, "")}
     s["chat"].append({"role": "bot", "text": reply})
+    del s["chat"][:-16]                                     # saved with the desk state: a broker who never finishes can't grow it
     if miss:
         desk.post("save")                                    # a half-told load survives a restart
         return send(wa, reply)
