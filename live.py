@@ -683,56 +683,118 @@ class Desk:
             self._decide(load)
 
     def _negotiate(self, load, th, text, ec):
-        """LLM reads the owner's reply and answers; the code holds the ceiling and the round limit."""
-        last_out = next((m["text"] for m in reversed(th["messages"][:-1]) if m["dir"] == "out"), "")
-        d = None
+        """The model reads what the owner said; the code decides the move (a concession ladder inside the ceiling)
+        and explains it with the trip's real costs, so every counter comes with a reason the owner can check."""
+        f, lane, km = load["load"], load["lane"], ec["km"]
+        read = None
         if E.llm_ready():
             try:
                 hist = "\n".join(("Bhaada: " if m["dir"] == "out" else "Owner: ") + m["text"] for m in th["messages"][-6:])
                 out = self._llm_json(
-                    "You are Bhaada's negotiation agent hiring a truck from an Indian fleet owner on WhatsApp.\n"
-                    f"Trip {ec['km']} km. Target buy rate ₹{ec['target']}/km. HARD CEILING ₹{ec['ceiling']}/km: never agree above it.\n"
-                    f"Round {th['rounds']} of {self.settings['maxRounds']}. Your last counter: {th['counter'] or 'none'}.\n"
-                    "Rules: if the owner's rate is at or below target, accept it. If above, counter (start near target, "
-                    "move towards the ceiling only if they push). If they accept your counter, accept at your counter. "
-                    "If they insist above the ceiling on the last round, decline politely. A total in rupees means total/km per km.\n"
-                    f"Conversation:\n{hist}\n"
-                    'Return ONLY JSON {"owner_rate_per_km":null,"action":"accept|counter|decline|ask","rate_per_km":null,'
-                    '"reply":"<short reply in Hinglish: Hindi words in Roman script, never plain English>"}')
-                d = {"action": out.get("action"), "rate": E.norm_weight(out.get("rate_per_km")),
-                     "ask": E.norm_weight(out.get("owner_rate_per_km")), "reply": (out.get("reply") or "").strip()}
+                    "Read a truck owner's latest reply in a freight rate negotiation (Indian road freight, Hinglish chat).\n"
+                    f"Load: {lane['origin']} → {lane['destination']}, {km} km, {f.get('weight_ton')} T, {th['type']}, "
+                    f"pickup {f.get('pickup_when') or 'kal'}. Our last offer: {('₹' + str(th['counter']) + '/km') if th['counter'] else 'none yet'}.\n"
+                    "Terms you may state: the rate includes diesel and toll; advance, payment, loading/unloading time and "
+                    "detention are confirmed by the broker.\n"
+                    f"Conversation (latest last):\n{hist}\n"
+                    "intent: quote (they name their rate), accept_offer (they agree to our last offer), refuse (not "
+                    "interested / truck not free), question (they ask something), other.\n"
+                    "If they ask something, put a 1-line answer from the terms above in answer, in Hinglish (Hindi words in "
+                    "Roman script, e.g. \"Rate mein diesel aur toll dono shaamil hain.\"), never English. Else empty.\n"
+                    'Return ONLY JSON {"intent":"quote|accept_offer|refuse|question|other","owner_rate_per_km":null,'
+                    '"owner_total_rs":null,"answer":""}')
+                rate = E.norm_weight(out.get("owner_rate_per_km"))
+                total = E.norm_weight(out.get("owner_total_rs"))
+                read = {"intent": out.get("intent"), "ask": rate or (total / km if total and total > 300 else None),
+                        "answer": (out.get("answer") or "").strip()}
             except Exception as e:
                 print("negotiation LLM failed, using rules:", repr(e))
-        if not d or d["action"] not in ("accept", "counter", "decline", "ask"):
-            d = self._negotiate_rules(th, text, ec)
-        if d.get("ask"):
-            ask = d["ask"] if d["ask"] < 300 else d["ask"] / ec["km"]
-            th["ask"] = round(ask, 1)
-        # guardrails, enforced in code whatever the model said
-        if d["action"] == "accept":
-            rate = d["rate"] or th["counter"] or th["ask"]
-            said = [x for x in (th["ask"], th["counter"]) if x]
-            if rate and said and all(abs(rate - x) > 0.5 for x in said):
-                rate = th["ask"] if d.get("ask") else (th["counter"] or th["ask"])   # only a rate someone actually said
-            if not rate:
-                d = {"action": "ask", "rate": None, "reply": ""}
-            elif rate > ec["ceiling"]:
-                d = ({"action": "counter", "rate": ec["ceiling"], "reply": ""} if th["rounds"] < self.settings["maxRounds"]
-                     else {"action": "decline", "rate": None, "reply": ""})
-            else:
-                d["rate"] = round(rate, 1)
-        if d["action"] == "counter":
-            rate = min(d["rate"] or ec["target"], ec["ceiling"])
-            if th["ask"] and th["ask"] <= rate:              # never counter above what they asked: just accept
-                d = {"action": "accept", "rate": th["ask"], "reply": ""}
-            elif th["rounds"] >= self.settings["maxRounds"]:
-                d = {"action": "decline", "rate": None, "reply": ""}
-            else:
-                d["rate"] = round(rate, 1)
-        quoted = [float(a or b) for a, b in re.findall(r"₹\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:/|per\s*)km", d.get("reply") or "")]
-        if quoted and (d["action"] not in ("accept", "counter") or any(abs(q - d["rate"]) > 0.05 for q in quoted)):
-            d["reply"] = ""                              # the model's words must not promise a rate the code didn't set
+        if not read or read["intent"] not in ("quote", "accept_offer", "refuse", "question", "other"):
+            ask = self._owner_rate(text, km)
+            read = {"intent": "quote" if ask else "accept_offer" if YES.search(text) and th["counter"]
+                    else "refuse" if NO.search(text) else "other", "ask": ask, "answer": ""}
+        if read["intent"] == "quote" and not read["ask"]:
+            read["intent"] = "other"
+        if read["ask"]:
+            prev = th["ask"]
+            th["ask"] = round(read["ask"], 1)
+            th["askDrop"] = round(prev - th["ask"], 1) if prev else 0
+        d = self._next_move(load, th, ec, read)
+        if read["answer"] and d["action"] in ("counter", "ask"):
+            d["reply"] = read["answer"] + "\n" + d["reply"]
+        d["ask"] = None                                 # th["ask"] is already set above
         return d
+
+    def _rationale(self, load, th, km):
+        """The owner-facing reason behind a number: this trip's diesel, toll and driver cost, from the rate card."""
+        c = E.fair_cost(km, th["type"], load["lane"].get("returnLoadProb", 0.5))
+        per = round((c["fuel"] + c["toll"] + c["driver"] + c["misc"]) / km, 1)
+        why = (f"Hisaab: {km} km mein diesel ~₹{c['fuel']:,} (₹{E.rates['dieselPerLitre']:g}/L), toll ~₹{c['toll']:,}, "
+               f"driver ~₹{c['driver']:,} → kharcha lagbhag ₹{per}/km.")
+        if load["lane"].get("returnLoadProb", 0) >= 0.6:
+            why += (f" {load['lane']['destination']} se wapsi ka load aasaani se milta hai, to asli kharcha "
+                    f"~₹{round(c['est_cost'] / km, 1)}/km padta hai.")
+        if th.get("deadheadKm"):
+            why += f" Gaadi pickup se sirf {th['deadheadKm']} km door hai."
+        return why
+
+    def _best_rival(self, load, th):
+        """The cheapest owner already agreed on this load (a real offer, never a made-up one)."""
+        km = load["lane"]["distanceKm"]
+        rates = [x["agreedBuy"] / km for k, x in load["threads"].items() if x is not th and x["status"] == "deal" and x.get("agreedBuy")]
+        return round(min(rates), 1) if rates else None
+
+    def _next_move(self, load, th, ec, read):
+        km, ask, rnd, last = ec["km"], th["ask"], th["rounds"], self.settings["maxRounds"]
+        target, ceiling = ec["target"], ec["ceiling"]
+        rival = self._best_rival(load, th)
+        done = lambda r: {"action": "accept", "rate": round(r, 1),
+                          "reply": f"Done ✅ ₹{round(r, 1)}/km (₹{round(r * km):,} total). Broker se confirm karke turant batate hain."}
+        if read["intent"] == "refuse":
+            return {"action": "decline", "rate": None, "reply": "Koi baat nahi 🙏 Agla load aate hi aapko batayenge."}
+        if read["intent"] == "accept_offer" and th["counter"]:
+            return done(th["counter"])
+        if not ask:
+            q = "Is load ka aapka rate kya hoga? ₹/km ya total bata dijiye."
+            return {"action": "ask", "rate": None, "reply": q if read["intent"] != "question" else "Rate bhi bata dijiye (₹/km ya total)."}
+        if ask <= target or (rival is None and th["counter"] and ask <= min(ceiling, th["counter"] + 0.5)):
+            return done(ask)
+        cap = min(ceiling, rival) if rival else ceiling   # paying more than an owner who already said yes makes no sense
+        if ask <= cap and ask - (th["counter"] or target) <= max(0.6, 0.02 * ask):
+            return done(ask)                            # a few paise apart: close it rather than haggle
+        if rnd >= last:
+            if ask <= cap:
+                return done(ask)
+            if (th["counter"] or 0) < cap - 0.05 and not th.get("finalOffer"):
+                th["finalOffer"] = True                 # one honest last step to the most we can pay, then stop
+                return {"action": "counter", "rate": round(cap, 1),
+                        "reply": f"Aakhri offer ₹{round(cap, 1)}/km (₹{round(cap * km):,} total), isse upar sach mein nahi ho payega. "
+                                 "Chalega to *haan* likhiye."}
+            why = f"ek aur owner ₹{rival}/km pe raazi hai" if rival and rival < ceiling else "isse upar humara margin nahi bachta"
+            return {"action": "decline", "rate": None,
+                    "reply": f"₹{ask}/km nahi ho payega 🙏 ({why}). Agla load aapko pehle denge."}
+        # concession ladder: open at the anchor, then close the gap step by step; never move more than they did
+        morning = th.get("checkinRate") if th.get("checkinRate") and th["checkinRate"] <= cap else None
+        anchor = morning or target                      # their own morning rate, if we can pay it, is the fairest opener
+        step = {1: 0.0, 2: 0.5}.get(rnd, 1.0)
+        offer = anchor + (min(ask, cap) - anchor) * step
+        if th["counter"]:
+            give = offer - th["counter"]
+            moved = th.get("askDrop") or 0
+            offer = th["counter"] + min(give, max(moved, 0.5)) if give > 0 else th["counter"]
+        offer = round(min(offer, cap), 1)
+        if offer >= ask:
+            return done(ask)
+        lines = [f"Aapke liye ₹{offer}/km tak badha diya, isse zyada mushkil hai." if rnd >= last - 1 else
+                 f"₹{offer}/km de sakte hain." if rnd == 1 else f"Aapke liye ₹{offer}/km tak badha diya."]
+        if rnd == 1:
+            lines.append(self._rationale(load, th, km))
+        if morning and morning < ask:
+            lines.append(f"Aapne subah khud ₹{morning}/km bataya tha.")
+        if rival:
+            lines.append(f"Ek aur owner ₹{rival}/km pe raazi hai, aap ₹{offer}/km pe karo to aapko denge.")
+        lines.append("Theek lage to *haan* likhiye.")
+        return {"action": "counter", "rate": offer, "reply": " ".join(lines)}
 
     @staticmethod
     def _owner_rate(text, km):
@@ -749,24 +811,6 @@ class Desk:
             return None
         n = max(nums)
         return n / km if n > 300 else n
-
-    def _negotiate_rules(self, th, text, ec):
-        ask = self._owner_rate(text, ec["km"])
-        if YES.search(text) and th["counter"] and not ask:
-            return {"action": "accept", "rate": th["counter"], "ask": None, "reply": ""}
-        if NO.search(text) and not ask:
-            return {"action": "decline", "rate": None, "ask": None, "reply": "Koi baat nahi 🙏"}
-        if not ask:
-            return {"action": "ask", "rate": None, "ask": None, "reply": ""}
-        if ask <= ec["target"]:
-            return {"action": "accept", "rate": ask, "ask": ask, "reply": ""}
-        if th["rounds"] == 1:
-            return {"action": "counter", "rate": ec["target"], "ask": ask, "reply": ""}
-        if ask <= ec["ceiling"]:
-            return {"action": "accept", "rate": ask, "ask": ask, "reply": ""}
-        if th["rounds"] < self.settings["maxRounds"]:
-            return {"action": "counter", "rate": round((ec["target"] + ec["ceiling"]) / 2, 1), "ask": ask, "reply": ""}
-        return {"action": "decline", "rate": None, "ask": ask, "reply": ""}
 
     def _llm_json(self, prompt):
         msg = E.chat([{"role": "user", "content": prompt}], json_mode=True, retries=2, max_wait=8)
