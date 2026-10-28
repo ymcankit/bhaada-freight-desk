@@ -24,6 +24,8 @@ services:
         sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
+      - key: CONSOLE_OPEN                  # open console for the ABHIKALP submission; remove after the 30 Oct Finale
+        value: "1"
       - key: CONSOLE_PASSWORD
         sync: false
       - key: UPSTASH_REDIS_REST_URL
