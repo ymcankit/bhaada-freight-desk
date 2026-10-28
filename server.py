@@ -331,24 +331,35 @@ async def telegram(path: str, request: Request, bg: BackgroundTasks):
     # once setWebhook took our secret, every real update carries it; a path seen in a log is not enough to post
     if (TG_BOT["hooked"] or got is not None) and not hmac.compare_digest((got or "").encode(), TG_SECRET.encode()):
         raise HTTPException(403)
-    u = await request.json()
+    try:
+        u = await request.json()
+    except ValueError:
+        u = None
+    if not isinstance(u, dict):                         # not an update: a 200, since Telegram re-sends anything else for hours
+        return {"ok": True}
     if first_time("tg:" + str(u.get("update_id"))):
         bg.add_task(handle_telegram, u)
     return {"ok": True}
 
+MAX_TEXT = 1500                                       # a load is a few lines; a pasted essay would go whole to the model and the state
 ONLY_TEXT = "Abhi sirf text aur voice note samajh pata hoon 🙏 Type kijiye ya bol ke bhejiye."
 OOPS = "Maaf kijiye, mere taraf se kuch gadbad hui 🙏 Thodi der baad wahi message dobara bhejiye."
 
 def handle_telegram(u):
     if "callback_query" in u:
-        q = u["callback_query"]
+        q = u["callback_query"] or {}
+        chat = ((q.get("message") or {}).get("chat") or {}).get("id")
         try:
-            requests.post(f"{TG_API}/answerCallbackQuery", json={"callback_query_id": q["id"]}, timeout=10)
+            requests.post(f"{TG_API}/answerCallbackQuery", json={"callback_query_id": q.get("id")}, timeout=10)
         except Exception:
             pass                                         # only stops the button's spinner; the action still runs
-        return on_button(f"tg:{q['message']['chat']['id']}", q.get("data", ""))
+        if chat is None:
+            return
+        key = f"tg:{chat}"
+        with LOCKS.setdefault(key, threading.Lock()):     # taps and texts from one chat take turns
+            return on_button(key, str(q.get("data") or ""))
     m = u.get("message") or {}
-    if not m.get("chat"):
+    if not (m.get("chat") or {}).get("id"):
         return
     key = f"tg:{m['chat']['id']}"
     with LOCKS.setdefault(key, threading.Lock()):
@@ -362,8 +373,8 @@ def handle_telegram(u):
                 if not text:
                     return send(key, "🎤 Awaaz saaf nahi aayi. Phone muh ke paas rakh ke dobara bolo, ya type kar do.")
                 send(key, f"🎤 Suna: {text}")
-            elif m.get("text"):
-                text = m["text"].strip()
+            elif isinstance(m.get("text"), str) and m["text"].strip():
+                text = m["text"].strip()[:MAX_TEXT]
                 if text.startswith("/start"):
                     text = "hi"
             else:
@@ -389,7 +400,7 @@ def handle_message(msg):
                     return send(wa, "🎤 Awaaz saaf nahi aayi. Phone muh ke paas rakh ke dobara bolo, ya type kar do.")
                 send(wa, f"🎤 Suna: _{text}_")
             elif kind == "text":
-                text = msg["text"]["body"].strip()
+                text = msg["text"]["body"].strip()[:MAX_TEXT]
             else:
                 return send(wa, ONLY_TEXT)
             on_text(wa, text)
