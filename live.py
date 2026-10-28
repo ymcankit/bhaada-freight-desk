@@ -10,7 +10,7 @@ the clock), so a load's state never races. What is real and what is not:
   - negotiation: an LLM agent reads each owner's reply and answers in Hinglish, inside a ceiling the code enforces;
   - price: only engine.price_quote, never the LLM.
 """
-import json, os, queue, re, threading, time, hashlib, traceback
+import json, os, queue, re, threading, time, hashlib, traceback, zlib, base64
 import requests
 from datetime import datetime
 from pathlib import Path
@@ -38,6 +38,14 @@ def _redis(cmd):
     r = requests.post(url, headers={"Authorization": f"Bearer {tok}"}, json=cmd, timeout=8)
     r.raise_for_status()
     return r.json().get("result")
+
+def _pack(text):
+    """The state blob for Upstash, compressed: ~2 MB of JSON with 150 loads in it is ~0.27 MB this way, and it is
+    re-sent every few seconds against the free plan's monthly bandwidth."""
+    return "z:" + base64.b64encode(zlib.compress(text.encode("utf-8"), 6)).decode("ascii")
+
+def _unpack(raw):
+    return zlib.decompress(base64.b64decode(raw[2:])).decode("utf-8") if raw and raw.startswith("z:") else raw
 geo.seed_cities(E.CITY["cities"])
 E.CITY_RESOLVER = geo.resolve_city
 
@@ -100,7 +108,7 @@ class Desk:
             for i in range(3):
                 try:
                     raw = _redis(["GET", STATE_KEY])
-                    s = json.loads(raw) if raw else None
+                    s = json.loads(_unpack(raw)) if raw else None
                     print("state loaded from Upstash:", "found" if s else "empty")
                     break
                 except Exception as e:
@@ -181,7 +189,7 @@ class Desk:
             try:
                 raw = _redis(["GET", STATE_KEY])
                 if raw:
-                    self._merge_remote(json.loads(raw))
+                    self._merge_remote(json.loads(_unpack(raw)))
                 self.remote_ok = True
             except Exception as e:
                 self._remote_retry = now() + 30           # not on every save: each try holds the worker up to the timeout
@@ -212,7 +220,7 @@ class Desk:
             self._saved_hash = digest
         elif self.remote_ok:
             try:
-                _redis(["SET", STATE_KEY, text])
+                _redis(["SET", STATE_KEY, _pack(text)])
                 self._saved_hash, self.store_error = digest, None
             except Exception as e:
                 self._dirty, self.store_error = True, repr(e)[:120]
