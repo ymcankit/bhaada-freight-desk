@@ -25,9 +25,21 @@ function ago(t) {
   if (s < 3600) return `${Math.floor(s / 60)} min ago`;
   return clock(t).slice(0, 5);
 }
-async function api(path, body) {
-  const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+// The server may ask for a console password (CONSOLE_PASSWORD); it is asked once and kept in this browser.
+let KEY = "";
+try { KEY = localStorage.getItem("bhaada-console-key") || ""; } catch (e) {}
+function askKey() {
+  const k = window.prompt("Console password");
+  if (k === null) return false;
+  KEY = k.trim();
+  try { localStorage.setItem("bhaada-console-key", KEY); } catch (e) {}
+  return true;
+}
+async function api(path, body, retry = true) {
+  const headers = KEY ? { "X-Console-Key": KEY } : {};
+  const r = await fetch(path, body === undefined ? { headers } : { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
+  if (r.status === 401 && retry && askKey()) return api(path, body, false);
   if (!r.ok) throw new Error(j.detail || `Request failed (${r.status})`);
   return j;
 }
@@ -58,6 +70,12 @@ setInterval(tickCountdowns, 1000);
 async function poll() {
   try {
     const d = await api("/api/state");
+    if (d.locked) {
+      if (!S.askedKey) { S.askedKey = true; if (askKey()) return poll(); }
+      $("finding").textContent = "This console is locked. Reload the page and enter the console password.";
+      return;
+    }
+    S.askedKey = false;
     S.fetchedAt = Date.now() / 1000;
     const key = JSON.stringify({ ...d, now: 0 });
     S.data = d;
@@ -114,7 +132,8 @@ function renderDesk() {
       if (l.status === "sourcing") {
         const open = Object.values(l.threads).filter((t) => ["sent", "countered", "reconfirm"].includes(t.status)).length;
         sub += ` · ${open} owner${open === 1 ? "" : "s"} to reply`;
-      } else if (l.quote) sub += ` · ${rs(l.quote.sell_total)} · ${l.quote.margin_pct}%`;
+      } else if (l.status === "waiting_trucks") sub += ` · no truck free yet, kept open till ${clock(l.watchUntil).slice(0, 5)}`;
+      else if (l.quote) sub += ` · ${rs(l.quote.sell_total)} · ${l.quote.margin_pct}%`;
       else if (l.reason) sub += ` · ${l.reason}`;
       return el("li", {}, el("button", { class: "load-row", "aria-current": String(S.sel === l.id), onclick: () => select(l.id) },
         el("span", { class: "route" }, el("span", { class: "id", text: l.id }), `${lane.origin || f.origin} → ${lane.destination || f.destination}`),
@@ -141,7 +160,11 @@ function renderFinding() {
   if (wait) parts = [el("b", { text: `${wait.id} needs your approval: ` }), `${wait.lane.origin} → ${wait.lane.destination} at ${rs(wait.quote.sell_total)}, margin ${wait.quote.margin_pct}%.`];
   else if (re) parts = [el("b", { text: `${re.id}: an owner backed out. ` }), "Re-booking at the shipper's fixed price; nothing needed from you unless the floor is at risk."];
   else if (src) parts = [el("b", { text: `${src.id}: ` }), `messaging owners near ${src.lane ? src.lane.origin : src.load.origin}, `, cd(src.deadline), " left in this round."];
-  else if (esc) parts = [el("b", { text: `${esc.id} was escalated: ` }), esc.reason];
+  else if (loads.some((l) => l.status === "waiting_trucks")) {
+    const w = loads.filter((l) => l.status === "waiting_trucks");
+    parts = [el("b", { text: `${w.map((l) => l.id).join(", ")}: ` }), `waiting for a truck to check in. The broker was told; nothing needed from you yet.`];
+  }
+  else if (esc) parts =[el("b", { text: `${esc.id} was escalated: ` }), esc.reason];
   else if (loads.length) parts = ["Nothing is waiting on you. ", `${S.data.kpis.booked} booking-ready today.`];
   else parts = [S.data.settings.mode === "live" && !S.data.liveOwners ? "No live owners yet: add them under Owners and pool, then send the morning check-in." : "No loads yet today."];
   f.replaceChildren(...parts);
@@ -274,7 +297,9 @@ function renderDetail(l) {
       el("p", { class: "note", text: "Nothing was sent to the shipper. Call an owner you trust or quote by hand." })));
   } else {
     parts.push(el("div", { class: "qcard" }, el("h2", { text: "Quote" }),
-      el("p", { class: "muted", text: "The price appears when at least one owner agrees a rate above your floor." }),
+      el("p", { class: "muted", text: l.status === "waiting_trucks"
+        ? `No ${l.searchType} is free near ${l.lane.origin} yet. The load stays open till ${clock(l.watchUntil).slice(0, 5)}; any owner who checks in with one is asked at once.`
+        : "The price appears when at least one owner agrees a rate above your floor." }),
       el("dl", { class: "kv", style: "margin-top:10px" },
         el("dt", { text: "Floor · target · ceiling" }), el("dd", { text: `${s.floorPct}% · ${s.targetPct}% · ${s.ceilingPct}%` }),
         el("dt", { text: "Diesel" }), el("dd", { text: `₹${s.dieselPerLitre}/L` }))));
