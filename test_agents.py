@@ -63,8 +63,11 @@ text(8001, "owner Solo Transport, Surat")
 time.sleep(0.5)
 text(8001, "32 ft MXL, Surat, aaj, ₹36/km")
 time.sleep(1.5)
-D.post("ai_broker", key="tg:8001")                     # in the app this follows the check-in after 20 s
-time.sleep(2)
+ok &= check("demo load is due on the clock, not a timer", "tg:8001" in D.ai_due)
+D.ai_due["tg:8001"] = 0                                # in the app it comes 20 s after the check-in
+end = time.time() + 15                                 # routing may wait on OSRM
+while time.time() < end and "Demo load" not in last_to(8001):
+    time.sleep(0.3)
 A = D.loads[-1]
 ok &= check("AI broker posts a demo load to the owner", A.get("aiBroker") and "Demo load" in last_to(8001), A["id"])
 ok &= check("demo load goes to real owners only", all(not t["sandbox"] for t in A["threads"].values()))
@@ -110,6 +113,16 @@ X["deadline"] = 0
 st = wait(X, ("needs_approval", "escalated"), 10)
 st = wait(X, ("escalated",), 10)
 ok &= check("unapproved quote expires", st == "escalated" and X.get("reason", "").startswith("Quote expired"), st)
+
+# 6. a restart: what the clock promised comes back from the saved state
+D.ai_due["tg:8001"] = live.now() + 3600
+D.loads[-1]["autoApproveAt"] = 12345
+ok &= check("shutdown flush lands", D.flush_now())
+R = live.Desk()
+ok &= check("timers survive a restart", R.ai_due.get("tg:8001") == D.ai_due["tg:8001"]
+            and R.loads[-1].get("autoApproveAt") == 12345)
+h = c.get("/healthz")
+ok &= check("health check reports the worker", h.status_code == 200 and h.json()["worker"] == "ok", h.text)
 
 print("\nALL PASS" if ok else "\nSOME FAILED")
 import sys; sys.stdout.flush(); os._exit(0 if ok else 1)

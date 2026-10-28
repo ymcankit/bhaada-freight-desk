@@ -11,11 +11,12 @@ Config (environment variables, or .streamlit/secrets.toml locally):
     TELEGRAM_BOT_TOKEN                 a bot from @BotFather: the same desk on Telegram, free and with no phone number
     PUBLIC_URL                         this server's address, for the Telegram webhook (Render sets RENDER_EXTERNAL_URL itself)
 """
-import os, re, json, threading, hashlib, hmac, collections
+import os, re, json, threading, hashlib, hmac, collections, queue, time
 from pathlib import Path
 import requests
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Depends
-from fastapi.responses import PlainTextResponse, FileResponse
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import engine as E
 import live
@@ -102,7 +103,22 @@ def tg_setup():
         except Exception as e:
             print("Telegram setup failed:", safe(e))
 
-desk = live.Desk(sender=send if (WA_READY or TG_READY) else None)
+OUTBOX = queue.Queue()
+
+def outbox():
+    """The desk's messages go out from here, in order, so a slow Telegram or Meta call never holds up its worker."""
+    while True:
+        to, text, buttons = OUTBOX.get()
+        try:
+            send(to, text, buttons)
+        except Exception as e:
+            print("send failed:", safe(e))
+
+def desk_send(to, text, buttons=None):
+    OUTBOX.put((to, text, buttons))
+
+threading.Thread(target=outbox, daemon=True).start()
+desk = live.Desk(sender=desk_send if (WA_READY or TG_READY) else None)
 if TG_READY:
     threading.Thread(target=tg_setup, daemon=True).start()
 def keep_awake():
@@ -123,6 +139,8 @@ app = FastAPI(title="Bhaada freight desk")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
 CONSOLE_PW = cfg("CONSOLE_PASSWORD").strip()        # empty: the console is open (sandbox demos)
+if not CONSOLE_PW and os.getenv("RENDER"):
+    print("WARNING: CONSOLE_PASSWORD is not set: anyone with the URL can read every chat and approve or change settings")
 
 def console_ok(request: Request):
     got = request.headers.get("x-console-key", "")
@@ -137,8 +155,22 @@ def console():
     return FileResponse(ROOT / "static" / "index.html")
 
 @app.get("/healthz")
-def healthz():
-    return {"ok": True}
+async def healthz():
+    """Liveness for Render's health check and keep_awake. async: answered even when the thread pool is full.
+    503 only when the desk's worker is stuck, so a restart is the right cure; the rest is for a human to read."""
+    h = desk.health()
+    h.update(ok=h["worker"] == "ok", llm=E.llm_ready(), llmCoolingSec=max(0, round(E.LLM.get("coolUntil", 0) - time.time())),
+             telegram=("webhook set" if TG_BOT["hooked"] else "webhook not set") if TG_READY else None,
+             outbox=OUTBOX.qsize())
+    return JSONResponse(h, status_code=200 if h["ok"] else 503)
+
+@app.on_event("shutdown")
+def shutdown():
+    """Render stops the old instance on every deploy: write the last few seconds of changes first."""
+    desk.flush_now(wait=10)
+    end = time.time() + 5
+    while not OUTBOX.empty() and time.time() < end:
+        time.sleep(0.1)
 
 @app.get("/api/state")
 def state(request: Request):
@@ -164,7 +196,8 @@ async def intake(request: Request):
         return {"reply": "The language model isn't configured (GROQ_API_KEY), so I can't read free text yet.", "missing": ["all"]}
     hist.append({"role": "user", "text": text})
     try:
-        merged, reply, miss = E.intake_turn(hist, body.get("load") or {}, text)
+        # a model call (and geocoding) off the event loop, or every webhook and poll waits for it
+        merged, reply, miss = await run_in_threadpool(E.intake_turn, hist, body.get("load") or {}, text)
     except Exception as e:
         return {"reply": f"I couldn't read that ({str(e)[:80]}). Try again.", "missing": ["all"], "load": body.get("load") or {}}
     clean = {k: v for k, v in merged.items() if v not in (None, "")}
@@ -226,9 +259,9 @@ async def add_owner(request: Request):
         phone = "91" + phone
     if len(phone) < 11 or not (b.get("name") or "").strip():
         raise HTTPException(400, "Name and a WhatsApp number with country code are needed")
-    o = desk.register_owner(phone, b["name"], b.get("city"))
+    o = await run_in_threadpool(desk.register_owner, phone, b["name"], b.get("city"))   # geocoding is a network call
     if WA_READY:
-        wa_send(phone, f"Namaste {o['name']} 🙏 Aap Bhaada freight desk se jud gaye hain. Roz subah hum poochenge "
+        desk_send(phone, f"Namaste {o['name']} 🙏 Aap Bhaada freight desk se jud gaye hain. Roz subah hum poochenge "
                        "ki gaadi khaali hai ya nahi; loads seedhe WhatsApp par aayenge.")
     return {"ok": True}
 
