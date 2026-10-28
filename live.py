@@ -61,6 +61,8 @@ DEFAULT_SETTINGS = {
     "replyTimeoutSec": {"live": 300, "sandbox": 30},
     "holdTimeoutSec": {"live": 1800, "sandbox": 30},        # an owner on a slow phone gets 30 min to say HAAN
     "approvalExpireSec": {"live": 3600, "sandbox": 900},    # a quote nobody approves stops holding the owner's truck
+    "terms": {"advancePct": 80, "balanceDays": 7, "freeHours": 24, "detentionPerDay": 1500, "hamali": "party",
+              "gstMode": "RCM5"},                           # the agency's standard terms: owners hear them, quotes print them
     "aiAgents": True,                                       # AI owners bid beside real ones; an AI broker posts demo loads
     "maxRounds": 3,
     "maxDeadheadKm": 80,
@@ -318,7 +320,81 @@ class Desk:
         return round(max(1.0, o.get("reliability", 4.5) + self.reliability.get(key, 0)), 1)
 
     # ---------------- inbound ----------------
+    # ---------------- terms and paperwork ----------------
+    def terms_line(self):
+        t = {**DEFAULT_SETTINGS["terms"], **(self.settings.get("terms") or {})}
+        return (f"Advance {t['advancePct']}% loading pe, baaki POD milne ke {t['balanceDays']} din mein. {t['freeHours']} ghante free, "
+                f"phir ₹{t['detentionPerDay']:,}/din detention. Loading/unloading (hamali) {'party' if t['hamali'] == 'party' else 'owner'} ki.")
+
+    def paperwork_lines(self, load):
+        """What the shipper and broker must sort before dispatch: e-way bill validity and the GST line."""
+        f, km = load["load"], load["lane"]["distanceKm"]
+        t = {**DEFAULT_SETTINGS["terms"], **(self.settings.get("terms") or {})}
+        days = max(1, -(-km // 200))                    # 1 day per 200 km for normal cargo
+        inv = f.get("invoice_value_rs")
+        ewb = (f"E-way bill zaroori (maal ₹{inv:,.0f}), Part B mein gaadi number; valid {days} din ({km} km)" if inv and inv >= 50000
+               else f"E-way bill: maal ₹50,000+ ho to zaroori; valid {days} din ({km} km)" if not inv
+               else "E-way bill: ₹50,000 se kam maal, zaroori nahi (state rule check kar lein)")
+        if f.get("material_class") == "agri":
+            gst = "GST: anaaj/agri maal par GTA GST chhoot"
+        elif t["gstMode"] == "RCM5":
+            gst = "GST 5% RCM: party (shipper) seedha bharegi, bilty par likhein"
+        else:
+            gst = "GST forward charge, bilty par likhein (rate CA se confirm)"
+        return [ewb, gst]
+
+    DISPATCH_RE = re.compile(r"\b([A-Z]{2})[ -]?(\d{1,2})[ -]?([A-Z]{1,3})[ -]?(\d{3,4})\b", re.I)
+    PHONE_RE = re.compile(r"(?<!\d)(?:\+?91[ -]?)?([6-9]\d{9})(?!\d)")
+    STATE_CODES = set("AN AP AR AS BR CH CG DD DL GA GJ HR HP JK JH KA KL LA LD MP MH MN ML MZ NL OD OR PY PB RJ SK TN TS TR UP UK UA WB".split())
+
+    def _ask_dispatch(self, load, th):
+        th["needDispatch"] = True
+        self._to_owner(load, th, f"{load['id']}: gaadi ka number aur driver ka mobile bhejiye (e.g. *MH04AB1234, 98XXXXXXXX*). "
+                                 "Broker ko gate pass aur e-way bill ke liye chahiye.")
+        if th.get("sandbox"):
+            seq = int(hashlib.md5(th["ownerKey"].encode()).hexdigest(), 16)
+            reply = f"MH04 DM {1000 + seq % 9000}, driver 90000{seq % 100000:05d}"
+            threading.Timer(3, lambda: self.post("owner_message", key=th["ownerKey"], text=reply, lid=load["id"])).start()
+
+    def _take_dispatch(self, load, th, text):
+        """The owner's vehicle and driver for a booked load: checked, stored, and sent to the broker as a dispatch card."""
+        v, ph = self.DISPATCH_RE.search(text), self.PHONE_RE.search(text)
+        if not v and not ph:
+            return False
+        th["messages"].append({"dir": "in", "text": text, "t": now()})
+        if v:
+            th["vehicle"] = "".join(v.groups()).upper()
+        if ph:
+            th["driverPhone"] = ph.group(1)
+        if not (th.get("vehicle") and th.get("driverPhone")):
+            self._to_owner(load, th, "Shukriya 🙏 " + ("Driver ka mobile number bhi bhejiye." if th.get("vehicle") else "Gaadi number bhi bhejiye."))
+            return True
+        th["needDispatch"] = False
+        state = th["vehicle"][:2]
+        check = ("number ka format sahi, VAHAN check: demo (abhi juda nahi)" if state in self.STATE_CODES
+                 else f"⚠️ '{state}' koi state code nahi, number dobara confirm karein")
+        demo = " (demo gaadi)" if th.get("sandbox") else ""
+        lane, f = load["lane"], load["load"]
+        self._event(load, "Booking", f"Dispatch: vehicle {th['vehicle']}{demo}, driver ••••{th['driverPhone'][-4:]}; {check}.")
+        self._to_owner(load, th, "Dhanyavaad ✅ Details broker ko bhej di. " + self.terms_line())
+        self._to_broker(load, f"🚛 {load['id']} dispatch: gaadi *{th['vehicle']}*{demo} · driver {th['driverPhone']} · {th['name']}\n"
+                              f"{lane['origin']} → {lane['destination']}, {f.get('pickup_when') or 'kal'} · {check}\n"
+                              + "\n".join("🧾 " + x for x in self.paperwork_lines(load))
+                              + ("\n🔁 Gaadi badli hai: e-way bill Part B mein naya number update kijiye." if load.get("phase") == "replan" else ""))
+        self.save()
+        return True
+
+    def _held_needing_dispatch(self, key, lid=None):
+        for load in reversed(self.loads):
+            th = load["threads"].get(key)
+            if th and th["status"] == "held" and th.get("needDispatch") and (not lid or load["id"] == lid):
+                return load, th
+        return None
+
     def _on_owner_message(self, key, text, lid=None):
+        held = self._held_needing_dispatch(key, lid)
+        if held and self._take_dispatch(*held, text):
+            return
         live_states = ("sent", "countered", "hold_requested", "reconfirm")
         open_now = [l for l in self.loads if (l["threads"].get(key) or {}).get("status") in live_states]
         named = re.search(r"\bBH[-\s]?(\d{4,})\b", text, re.I)
@@ -425,8 +501,8 @@ class Desk:
                 "waiting for the broker's approval, say so and that they'll be told. If you don't know, say the desk will update them. "
                 "If they have no load yet, say loads come here as soon as one fits, and ask them to send their truck as "
                 "'32 ft MXL, Surat, aaj, ₹85/km' only if they haven't reported one.\n"
-                "- Payment, advance, documents, loading time and anything else not in the facts: the broker handles it; "
-                "say the broker will tell them. Don't guess.\n"
+                f"- Payment terms are fixed: {self.terms_line()} State them when asked. Loading time, documents and anything "
+                "else not in the facts: the broker will tell them. Don't guess.\n"
                 "- If they seem to cancel a booked trip, ask them to write *cancel* to confirm.\n"
                 "- Reply in Hinglish: Hindi words in Roman script, like \"Aapka rate ₹33/km tay hua hai, broker ka approval "
                 "aate hi bata denge.\" Never write plain English sentences.\n"
@@ -679,7 +755,9 @@ class Desk:
             need = (" Band (closed) body chahiye." if m.get("body") == "closed" else "") + \
                    (" ⚠️ Khatarnaak maal: Hazchem permit + trained driver zaroori. Nahi ho to mana kar dijiye." if m.get("hazmat") else "")
             self._to_owner(load, th, f"🚚 {demo}{load['id']} Load: {lane['origin']} → {lane['destination']} ({lane['distanceKm']} km), {when}, "
-                                     f"{f['weight_ton']:g} T{goods}, {c['type']}.{need}{hint} Gaadi free hai? Rate batayiye (₹/km ya total).")
+                                     f"{f['weight_ton']:g} T{goods}, {c['type']}.{need}{hint} Advance "
+                                     f"{(self.settings.get('terms') or DEFAULT_SETTINGS['terms'])['advancePct']}% loading pe. "
+                                     "Gaadi free hai? Rate batayiye (₹/km ya total).")
         self._event(load, "Sourcing", f"Messaged {len(cands)} owners near {lane['origin']} at once"
                                       + (f" (round {load['rounds']}, within {radius} km)" if load["rounds"] > 1 else "")
                                       + f". Waiting up to {self.timeout() // 60 or 1} min for replies.")
@@ -786,8 +864,8 @@ class Desk:
                     "Read a truck owner's latest reply in a freight rate negotiation (Indian road freight, Hinglish chat).\n"
                     f"Load: {lane['origin']} → {lane['destination']}, {km} km, {f.get('weight_ton')} T, {th['type']}, "
                     f"pickup {f.get('pickup_when') or 'kal'}. Our last offer: {('₹' + str(th['counter']) + '/km') if th['counter'] else 'none yet'}.\n"
-                    "Terms you may state: the rate includes diesel and toll; advance, payment, loading/unloading time and "
-                    "detention are confirmed by the broker.\n"
+                    f"Terms you may state: the rate includes diesel and toll. {self.terms_line()} Anything else (loading time, "
+                    "documents) the broker confirms.\n"
                     f"Conversation (latest last):\n{hist}\n"
                     "intent: quote (they name their rate), accept_offer (they agree to our last offer), refuse (not "
                     "interested / truck not free), question (they ask something), other.\n"
@@ -1012,11 +1090,11 @@ class Desk:
             th["status"] = "held"
             load["status"], load["bookedAt"] = "recovered", now()
             self._remember_rate(load, th)
-            self._to_owner(load, th, f"Booked ✅ {lane['origin']} → {lane['destination']} at ₹{round(th['agreedBuy'] / lane['distanceKm'], 1)}/km. "
-                                     "Pickup details jaldi bhejte hain.")
+            self._to_owner(load, th, f"Booked ✅ {lane['origin']} → {lane['destination']} at ₹{round(th['agreedBuy'] / lane['distanceKm'], 1)}/km.")
             self._event(load, "Booking", f"Re-booked with {th['name']}: margin {q['margin_pct']}% at the shipper's fixed ₹{q['sell_total']:,}.")
             self._to_broker(load, f"✅ {load['id']} dobara book ho gaya: {th['name']} · margin {q['margin_pct']}% "
-                                  f"(floor {E.MARGIN['floorPct']:g}%). Shipper ka rate wahi ₹{q['sell_total']:,}. Aapko kuch nahi karna.")
+                                  f"(floor {E.MARGIN['floorPct']:g}%). Shipper ka rate wahi ₹{q['sell_total']:,}. Gaadi number aate hi bhejta hoon.")
+            self._ask_dispatch(load, th)
         else:
             load["status"], load["quoteAt"] = "needs_approval", now()
             if load.get("aiBroker"):                     # the AI broker approves its own demo load after a short think
@@ -1174,8 +1252,9 @@ class Desk:
             load["status"], load["bookedAt"] = "recovered", now()
             self._remember_rate(load, th)
             self._event(load, "Booking", f"Re-booked with {th['name']} at {q['margin_pct']}% margin, below the floor, on the broker's say-so.")
-            self._to_owner(load, th, "Booked ✅ Pickup details jaldi bhejte hain.")
+            self._to_owner(load, th, "Booked ✅")
             self._to_broker(load, f"✅ {load['id']} {th['name']} ke saath book. Margin {q['margin_pct']}%, shipper ka rate wahi.")
+            self._ask_dispatch(load, th)
             return self.save()
         load["fixedSell"] = round(call["ask"] * km / (1 - E.MARGIN["floorPct"] / 100))
         load["status"] = "sourcing"
@@ -1219,7 +1298,8 @@ class Desk:
         self._event(load, "Broker", "Approved the quote.")
         th["status"] = "hold_requested"                  # before the message, so the reply is read as the hold answer
         self._to_owner(load, th, f"Pakka karte hain? {load['lane']['origin']} → {load['lane']['destination']}, "
-                                 f"₹{round(th['agreedBuy'] / load['lane']['distanceKm'], 1)}/km. Gaadi hold karne ke liye *HAAN* likhiye.")
+                                 f"₹{round(th['agreedBuy'] / load['lane']['distanceKm'], 1)}/km (₹{th['agreedBuy']:,} total). {self.terms_line()} "
+                                 "Gaadi hold karne ke liye *HAAN* likhiye.")
         self.save()
 
     def _on_reject(self, lid):
@@ -1258,9 +1338,10 @@ class Desk:
             self._remember_rate(load, th)
             secs = load["bookedAt"] - load["createdAt"]
             self._event(load, "Booking", f"{th['name']} confirmed the hold. Booking-ready in {int(secs // 60)}:{int(secs % 60):02d}.")
-            self._to_owner(load, th, "Dhanyavaad ✅ Booking pakki. Pickup details jaldi bhejte hain.")
+            self._to_owner(load, th, "Dhanyavaad ✅ Booking pakki.")
             self._to_broker(load, f"✅ {load['id']} booking pakki: {th['name']} ne gaadi hold kar di. "
-                                  f"Shipper ko ₹{load['quote']['sell_total']:,} ka quote bhej dijiye.")
+                                  f"Shipper ko ₹{load['quote']['sell_total']:,} ka quote bhej dijiye. Gaadi number aate hi bhejta hoon.")
+            self._ask_dispatch(load, th)
             self.save()
         elif th["status"] == "hold_requested":
             self._to_owner(load, th, "Gaadi hold karni hai? *HAAN* ya *NAHI* likhiye 🙏")
@@ -1343,6 +1424,7 @@ class Desk:
                  + (f" {f['material']}" if f.get("material") and f["material"] != "general" else "")]
         if load["searchType"] != f["truck_type"]:
             lines.append(f"🔄 {f['truck_type']} ki jagah {load['searchType']} li hai")
+        lines += ["🧾 " + x for x in self.paperwork_lines(load)]
         if m.get("premiumPct"):
             lines.append(f"📦 {m['label']}: +{m['premiumPct']}% rate" + (". Hazchem permit, UN number e-way bill/LR par, trained driver." if m.get("hazmat") else ""))
         lines += [f"📲 {len(ths)} owners se poocha: {n('deal')} raazi, {n('declined')} mana, {n('silent')} ka jawab nahi",

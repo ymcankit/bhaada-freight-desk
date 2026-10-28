@@ -89,6 +89,14 @@ end = time.time() + 8
 while time.time() < end and L["status"] != "booked":
     time.sleep(0.3)
 ok &= check("booked", L["status"] == "booked", L["status"])
+ok &= check("owner asked for vehicle and driver", "gaadi ka number" in last_to(int(w[3:])))
+ok &= check("hold message states the payment terms", any("Advance" in t and "POD" in t for to, t, b in SENT if to == w))
+text(int(w[3:]), "gaadi MH04AB1234 hai, driver 9812345678")
+time.sleep(1)
+card = last_to(BROKER)
+ok &= check("broker gets a dispatch card with paperwork", "MH04AB1234" in card and "9812345678" in card and "E-way bill" in card
+            and "GST" in card, card[:120])
+ok &= check("vehicle stored on the load", L["threads"][w].get("vehicle") == "MH04AB1234")
 text(OWNERS[1], "broker")
 ok &= check("an owner can switch to broker", f"tg:{OWNERS[1]}" not in server.desk.owners and "Ab aap broker" in last_to(OWNERS[1]))
 before = len(server.desk.loads)

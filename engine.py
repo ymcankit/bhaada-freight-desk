@@ -304,6 +304,7 @@ def normalise_load(load):
     out["weight_ton"] = norm_tons(out.get("weight_ton"))
     out["budget_rs"] = norm_money(out.get("budget_rs"))
     out["volume_cft"] = norm_money(out.get("volume_cft"))
+    out["invoice_value_rs"] = norm_money(out.get("invoice_value_rs"))
     if out.get("material"):
         out["material"] = str(out["material"]).strip()[:60]
     return out
@@ -338,9 +339,9 @@ Conversation so far:
 {_hist(hist)}
 Latest broker message: "{user_msg}"
 Merge new details into the load; keep existing values unless the broker corrects them.
-Required fields: origin, destination, weight_ton, material (what the goods are, in the broker's words, e.g. "kapda", "steel saria", "acid drums"; "pata nahi"/"general" is fine if they don't say). Optional: truck_type (only if the broker names one; never guess it - the desk advises the truck), pickup_when, budget_rs (shipper's budget in rupees, number), volume_cft (cubic feet if given), hazardous (true/false only if the broker said whether a chemical is dangerous).
+Required fields: origin, destination, weight_ton, material (what the goods are, in the broker's words, e.g. "kapda", "steel saria", "acid drums"; "pata nahi"/"general" is fine if they don't say). Optional: truck_type (only if the broker names one; never guess it - the desk advises the truck), pickup_when, budget_rs (shipper's budget in rupees, number), volume_cft (cubic feet if given), hazardous (true/false only if the broker said whether a chemical is dangerous), invoice_value_rs (value of the goods in rupees, if given: decides the e-way bill).
 Return ONLY JSON:
-{{"reply":"<one or two short lines>","load":{{"origin":null,"destination":null,"weight_ton":null,"material":null,"truck_type":null,"pickup_when":null,"budget_rs":null,"volume_cft":null,"hazardous":null}},"missing":["..."],"complete":false}}
+{{"reply":"<one or two short lines>","load":{{"origin":null,"destination":null,"weight_ton":null,"material":null,"truck_type":null,"pickup_when":null,"budget_rs":null,"volume_cft":null,"hazardous":null,"invoice_value_rs":null}},"missing":["..."],"complete":false}}
 Fill load with everything known so far. If all required fields are known set complete=true and reply that you are finding the best truck now.
 If anything required is missing, the reply must ASK for exactly those details (e.g. "Kahan se kahan tak?") and must not say you are finding a truck.
 Reply language: always Hinglish - Hindi words in Roman script, like "Theek hai, kitne ton maal hai?" - even if the broker wrote in English or in Devanagari. Never reply in plain English."""
