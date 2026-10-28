@@ -63,6 +63,11 @@ def run_tests():
                     and E.norm_money("35 hazaar") == 35000 and E.norm_money("1,20,000") == 120000 and E.norm_money(40) == 40
                     and E.norm_money("40/km") == 40)
 
+        ok &= check("Indian truck names", E.norm_type("32 ft container") is None and E.norm_type("32 ft MXL container") == "32 ft MXL"
+                    and E.norm_type("14 wheeler") is None and E.norm_type("10 chakka") == "Taurus (10-tyre)" and E.norm_type("Tata Ace") is None
+                    and E.rates["axlesByType"]["32 ft SXL"] == 2)
+        ok &= check("volume and lengths are not weights", E.norm_tons("1500 cft") is None and E.norm_tons("800 carton 4 ton") == 4
+                    and E.norm_tons("32 ft") is None and E.norm_tons("14 ton 1500 cft") == 14)
         fit = lambda w, words, asked=None: E.truck_fit({"weight_ton": w, "material_class": E.material_class(words), "truck_type": asked})
         ok &= check("goods classified", E.material_class("14 ton kapda") == "textile" and E.material_class("acid drums") == "hazardous"
                     and E.material_class("garments") == "textile" and E.material_class("TMT saria") == "steel_construction"

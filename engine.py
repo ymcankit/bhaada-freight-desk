@@ -227,13 +227,24 @@ def norm_type(s):
     if s in KNOWN_TYPES:
         return s
     t = str(s).lower()
-    if "taurus" in t or re.search(r"10[\s-]*(tyre|tire|wheel)", t):
+    wheels = re.search(r"(\d{1,2})\s*[- ]?(?:tyre|tire|wheel|wheeler|chakka|chakke|pahiya)", t)
+    if "taurus" in t or (wheels and wheels.group(1) == "10"):
         return "Taurus (10-tyre)"
-    if "container" in t:
-        return "20 ft container"
-    if re.search(r"\b407\b", t):                          # Tata 407: the common 14 ft body
+    if wheels:                                          # 6/12/14/16-wheelers: no such class here; the adviser picks by weight
+        return None
+    if re.search(r"\b407\b", t):                          # Tata 407 (~2.5 T): the smallest class on the rate card
         return "14 ft"
+    if re.search(r"\b(ace|chhota hathi|pickup|pick-up|709|909|1109)\b", t):
+        return None                                     # LCV/ICV model names the rate card doesn't carry yet
     m = re.search(r"(\d{2})", t)
+    if "container" in t:                                # read the length first: "32 ft container" is an SXL or MXL
+        if m and m.group(1) == "20":
+            return "20 ft container"
+        if m and m.group(1) == "24":
+            return "24 ft SXL"
+        if m and m.group(1) == "32":
+            return "32 ft MXL" if ("mxl" in t or "multi" in t) else "32 ft SXL" if ("sxl" in t or "single" in t) else None
+        return None if m else "20 ft container"
     if m:
         cands = [k for k in KNOWN_TYPES if k.startswith(m.group(1) + " ft") and "container" not in k]
         if len(cands) == 1:
@@ -254,6 +265,10 @@ def norm_weight(x):
 
 def norm_tons(x):
     """'18000 kg' or a bare 18000 is kilograms, '150 quintal' is 15 T: no truck carries 100 T."""
+    if isinstance(x, str):                              # "1500 cft", "32 ft", "800 carton" are not weights
+        x = re.sub(r"\d[\d,.]*\s*(?:cft|cu\.?\s*ft|cubic\s*\w+|cbm|ft|feet|foot|km|carton|box|peti|packet)s?\b", " ", x, flags=re.I)
+        if not re.search(r"\d", x):
+            return None
     v = norm_weight(str(x).replace(",", "") if x not in (None, "") else x)
     if v is None:
         return None
