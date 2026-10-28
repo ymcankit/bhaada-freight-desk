@@ -15,7 +15,7 @@
   "high_value": {"label": "high-value goods", "hi": "mehenga maal", "body": "closed", "premiumPct": 5, "kgPerCft": 7,
                  "words": ["electronics", "mobile", "phone", "laptop", "tv", "television", "ac unit", "fridge", "refrigerator", "copper", "tamba"],
                  "note": "Closed container, transit insurance on the invoice value, a known owner."},
-  "textile": {"label": "cloth / textiles", "hi": "kapda", "body": "closed", "premiumPct": 0, "kgPerCft": 8,
+  "textile": {"label": "cloth / textiles", "hi": "kapda", "body": "closed", "premiumPct": 0, "kgPerCft": 10,
               "words": ["kapda", "kapde", "kapra", "cloth", "fabric", "textile", "garment", "saree", "sari", "yarn", "dhaga", "cotton", "kapas", "roll", "than", "कपड़ा", "कपड़े", "कपास", "धागा"],
               "note": "Closed body (rain, theft); bulky, so volume can fill the truck before weight does."},
   "packaged": {"label": "cartons / FMCG / furniture", "hi": "carton wala maal", "body": "closed", "premiumPct": 0, "kgPerCft": 8,

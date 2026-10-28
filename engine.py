@@ -285,7 +285,8 @@ def norm_city(s):
         if t == c.lower():
             return c
     # "Bhiwandi (Mumbai)" -> Bhiwandi: the first known name that appears in the text wins
-    hits = sorted((t.find(c.lower()), c) for c in KNOWN_CITIES if c.lower() in t)
+    hits = sorted((t.find(c.lower()), c) for c in KNOWN_CITIES             # whole words: Suratgarh is not Surat
+                  if re.search(r"(?<![a-z])" + re.escape(c.lower()) + r"(?![a-z])", t))
     if hits:
         return hits[0][1]
     for a, c in CITY_ALIASES.items():
@@ -547,13 +548,33 @@ def _roman(text):
         t = t.replace(k, v)
     return t
 
+WEEKDAYS = {"somvar": 0, "monday": 0, "mangalvar": 1, "tuesday": 1, "budhvar": 2, "wednesday": 2, "guruvar": 3, "veervar": 3,
+            "thursday": 3, "shukravar": 4, "friday": 4, "shanivar": 5, "saturday": 5, "ravivar": 6, "itvaar": 6, "sunday": 6}
+MONTHS = {m: i + 1 for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"])}
+
 def pickup_day(text):
-    """0 = today, 1 = tomorrow, 2 = day after. Defaults to tomorrow."""
+    """Days from today to pickup: aaj 0, kal 1, parso 2, a weekday, or a date ('30 tarikh', '28-Oct'). Defaults to tomorrow."""
+    from datetime import date
     t = _roman(text)
-    if re.search(r"parso|day after|2 din", t):
+    if re.search(r"\bparso\b|day after|2 din", t):
         return 2
-    if re.search(r"\baaj\b|today|abhi|tonight|aaj hi", t):
+    if re.search(r"\baaj\b|\btoday\b|\babhi\b|\btonight\b", t):
         return 0
+    today = date.today()
+    wd = next((d for w, d in WEEKDAYS.items() if re.search(r"\b" + w + r"\b", t)), None)
+    if wd is not None:
+        return (wd - today.weekday()) % 7 or 7
+    m = re.search(r"\b(\d{1,2})\s*(?:-|/|\s)?\s*(?:tarikh|tareekh|date|th|st|nd|rd)?\s*[-/ ]?\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)?", t)
+    if m and (m.group(2) or re.search(r"tarikh|tareekh|date", t)):
+        try:
+            month = MONTHS.get(m.group(2)) or today.month
+            d = date(today.year, month, int(m.group(1)))
+            if d < today:
+                d = date(today.year + (month <= today.month and not m.group(2) and 0 or 1), month, int(m.group(1))) \
+                    if m.group(2) else date(today.year + (today.month == 12), today.month % 12 + 1, int(m.group(1)))
+            return min(30, (d - today).days)
+        except ValueError:
+            pass
     return 1
 
 def pickup_phrase(texts):
@@ -625,8 +646,9 @@ def target_sell(lane, tt):
     return lane_cost(lane, tt)["est_cost"] / (1 - MARGIN["targetPct"] / 100)
 
 def price_quote(lane, tt, buy, fixed_sell=None, budget=None):
-    """Sell price = cost-plus at target margin, capped at the ceiling, matched to the shipper's budget
-    only if the floor still holds. After booking, the shipper price is fixed (re-plan)."""
+    """Sell price = the lane's market-anchored price (expected buy at target margin), matched down to the shipper's
+    budget only if the floor still holds. A cheaper buy is the broker's gain, not a discount for the shipper.
+    After booking, the shipper price is fixed (re-plan)."""
     br = lane_cost(lane, tt)
     note = ""
     if fixed_sell:
@@ -634,9 +656,8 @@ def price_quote(lane, tt, buy, fixed_sell=None, budget=None):
         note = "shipper price fixed at booking"
     else:
         sell = br["est_cost"] / (1 - MARGIN["targetPct"] / 100)
-        cap = buy / (1 - MARGIN["ceilingPct"] / 100)
-        if sell > cap:
-            sell, note = cap, f"capped at {MARGIN['ceilingPct']}% ceiling"
+        if buy < 0.6 * br["owner_cost"]:
+            note = f"owner's price is far below the truck's running cost (₹{br['owner_cost']:,}): confirm with the owner"
         if budget and budget < sell:
             if (budget - buy) / budget * 100 >= MARGIN["floorPct"]:
                 sell, note = budget, "matched shipper budget"

@@ -3,7 +3,7 @@ Real geography: any Indian city (OpenStreetMap Nominatim) and real road distance
 Both are free public services; results are cached in data/geo_cache.json so a city or a lane is looked up once.
 If a service is down, distance falls back to straight-line x road factor and says so.
 """
-import json, math, threading, time
+import json, math, re, threading, time
 from pathlib import Path
 import requests
 
@@ -48,7 +48,7 @@ def resolve_city(text):
         if key in _cache["cities"]:
             return _cache["cities"][key]
         for k, v in list(_cache["cities"].items()):    # 'Bhiwandi (Mumbai)' contains a known name
-            if len(k) > 3 and k in key:
+            if len(k) > 3 and re.search(r"(?<![a-z])" + re.escape(k) + r"(?![a-z])", key):   # whole words: not Suratgarh -> Surat
                 return v
         if time.time() - _missed.get(key, 0) < 600 or time.time() < _down["geocode"]:   # just failed: don't spend another 20 s on it
             return None

@@ -52,7 +52,9 @@ E.CITY_RESOLVER = geo.resolve_city
 
 YES = re.compile(r"\b(haan|haa|ha|han|yes|yep|ok|okay|pakka|confirm|confirmed|done|theek|thik|chalega|sure|book)\b|👍|✅", re.I)
 NO = re.compile(r"\b(nahi|nahin|nhi|no|cancel|sorry|nikal|nikal gayi|not|mat)\b|^\W*na+\W*$|❌", re.I)   # "haan na" is a yes
-CANCEL = re.compile(r"cancel|back\s*out|nahi\s+(aa|ja|ho)\s+(pa|sak)|nikal\s+ga(yi|ya)|mana\s+kar", re.I)
+CANCEL = re.compile(r"cancel|back\s*out|nahi\s+(aa|ja|ho)\s+(pa|sak)|nikal\s+ga(yi|ya)|mana\s+kar|kharab|kharaab|breakdown|"
+                    r"driver\s+nahi|accident|puncture", re.I)
+SURE_CANCEL = re.compile(r"back\s*out|nahi\s+(aa|ja)\s+(pa|sak)|nikal\s+ga(yi|ya)|cancel\s+(kar|karo|kardo|kar do)\b(?!.*\?)", re.I)
 
 def now():
     return time.time()
@@ -508,11 +510,18 @@ class Desk:
         th, load = self._open_thread(key)
         if th and th["status"] == "held":
             # a booked owner writes about many things (payment, timing, tomorrow's truck); only a clear cancel un-books
-            if CANCEL.search(text) and load["status"] in ("booked", "recovered") and now() - (load.get("bookedAt") or 0) < 48 * 3600:
+            in_window = load["status"] in ("booked", "recovered") and now() - (load.get("bookedAt") or 0) < 48 * 3600
+            if in_window and CANCEL.search(text) and not SURE_CANCEL.search(text) and not th.get("cancelAsked"):
+                th["cancelAsked"] = True                # "e-way bill cancel karna hai?" or "gaadi kharab": ask before un-booking
+                th["messages"].append({"dir": "in", "text": text, "t": now()})
+                return self._to_owner(load, th, f"{load['id']}: kya gaadi nahi aa payegi? Pakka cancel ho to *haan cancel* likhiye. "
+                                                "Koi aur baat ho (time, kagaz, payment) to bataiye, booking bani rahegi.")
+            if in_window and (SURE_CANCEL.search(text) or (th.get("cancelAsked") and (CANCEL.search(text) or YES.search(text)))):
                 th["messages"].append({"dir": "in", "text": text, "t": now()})
                 th["status"] = "backed_out"
                 self._event(load, "Booking", f"{th['name']} cancelled: “{text[:60]}”.")
                 return self._replan(load, key)
+            th["cancelAsked"] = False                   # they moved on to something else: the question lapses
             th = None
         if th:
             th["messages"].append({"dir": "in", "text": text, "t": now()})
@@ -1004,6 +1013,8 @@ class Desk:
             ask = self._owner_rate(text, km)
             read = {"intent": "quote" if ask else "accept_offer" if YES.search(text) and th["counter"]
                     else "refuse" if NO.search(text) else "other", "ask": ask, "answer": ""}
+        if read["ask"]:
+            read["ask"] = self._plausible_ask(load, th, ec, read["ask"], text)
         if read["intent"] == "quote" and not read["ask"]:
             read["intent"] = "other"
         if read["ask"]:
@@ -1032,6 +1043,16 @@ class Desk:
         rows = self.lane_rates.setdefault(f"{lane['laneId']}|{th['type']}", [])
         rows.append((round(th["agreedBuy"] / lane["distanceKm"], 1), now()))
         del rows[:-10]
+
+    def _plausible_ask(self, load, th, ec, ask, text):
+        """'26 final' on a 284 km trip means ₹26,000, not ₹26/km: owners quote bare thousands. 'toll alag' adds the toll."""
+        km = ec["km"]
+        cost_pk = E.lane_cost(load["lane"], th["type"])["owner_cost"] / km
+        if ask < 0.6 * cost_pk and 0.5 * ec["target"] <= ask * 1000 / km <= 2 * ec["ceiling"]:
+            ask = ask * 1000 / km                       # read as thousands in total
+        if re.search(r"toll\s*(alag|extra|separate|aapka|aap ka)", text, re.I):
+            ask += E.rates["tollPerKmByAxle"][str(E.rates["axlesByType"][th["type"]])]
+        return round(ask, 1)
 
     def _rationale(self, load, th, km):
         """The owner-facing reason behind a number: the lane's market rate and what this trip really costs them."""
@@ -1243,6 +1264,8 @@ class Desk:
             caps = E.rates["capacityTonByType"]
             bigger = sorted((t for t in caps if caps[t] > caps[load["searchType"]] and t not in load.get("triedTypes", [])
                              and t != "20 ft container"), key=lambda t: caps[t])
+        if f["weight_ton"] < 0.5 * E.rates["capacityTonByType"].get(load["searchType"], 99):
+            bigger = []                                 # a small load in a bigger truck only costs the shipper more
         if bigger:
             opts["_bigger"] = bigger[0]
             opts["bigger_truck"] = f"look for a {bigger[0]} instead of {load['searchType']} (more capacity, usually a higher rate)"
@@ -1580,8 +1603,8 @@ class Desk:
         note = q.get("note") or ""
         if note.startswith("shipper budget"):
             note = f"Shipper ka budget ₹{f.get('budget_rs') or 0:,.0f} floor se kam hai, isliye floor wala rate lagaya"
-        elif note.startswith("capped"):
-            note = f"Rate {E.MARGIN['ceilingPct']:g}% ceiling pe roka"
+        elif note.startswith("owner's price is far below"):
+            note = "⚠️ Owner ka rate gaadi ke kharche se bahut kam hai: approve se pehle owner se confirm kar lijiye"
         elif note == "matched shipper budget":
             note = "Shipper ke budget jitna rate rakha"
         if note:

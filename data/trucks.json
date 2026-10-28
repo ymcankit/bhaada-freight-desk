@@ -44,7 +44,7 @@
   "ownerId": "O002",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "GJ03DE2307",
   "currentCity": "Bhiwandi",
   "availableFrom": "tomorrow"
@@ -144,7 +144,7 @@
   "ownerId": "O005",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "DL17GD9835",
   "currentCity": "Kolkata",
   "availableFrom": "tomorrow"
@@ -174,7 +174,7 @@
   "ownerId": "O006",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "UP16HG4119",
   "currentCity": "Bhiwandi",
   "availableFrom": "today"
@@ -234,7 +234,7 @@
   "ownerId": "O008",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "RJ26BD1651",
   "currentCity": "Indore",
   "availableFrom": "today"
@@ -284,7 +284,7 @@
   "ownerId": "O009",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "DL18ED6617",
   "currentCity": "Bhiwandi",
   "availableFrom": "tomorrow"
@@ -314,7 +314,7 @@
   "ownerId": "O009",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "GJ05CA7049",
   "currentCity": "Bhiwandi",
   "availableFrom": "tomorrow"
@@ -394,7 +394,7 @@
   "ownerId": "O012",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "DL40EG9977",
   "currentCity": "Bhiwandi",
   "availableFrom": "today"
@@ -434,7 +434,7 @@
   "ownerId": "O013",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "WB32GD3417",
   "currentCity": "Mumbai",
   "availableFrom": "today"
@@ -464,7 +464,7 @@
   "ownerId": "O016",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "MH49GH1096",
   "currentCity": "Bhiwandi",
   "availableFrom": "tomorrow"
@@ -524,7 +524,7 @@
   "ownerId": "O017",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "RJ09HB4571",
   "currentCity": "Mumbai",
   "availableFrom": "tomorrow"
@@ -564,7 +564,7 @@
   "ownerId": "O018",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "UP46CG3885",
   "currentCity": "Delhi",
   "availableFrom": "tomorrow"
@@ -644,7 +644,7 @@
   "ownerId": "O020",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "DL18AA5786",
   "currentCity": "Bhiwandi",
   "availableFrom": "tomorrow"
@@ -654,7 +654,7 @@
   "ownerId": "O020",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "UP07AE8690",
   "currentCity": "Bhiwandi",
   "availableFrom": "in 2 days"
@@ -664,7 +664,7 @@
   "ownerId": "O021",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "KA06DB7818",
   "currentCity": "Bhiwandi",
   "availableFrom": "tomorrow"
@@ -744,7 +744,7 @@
   "ownerId": "O025",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "UP27AD9494",
   "currentCity": "Mumbai",
   "availableFrom": "in 2 days"
@@ -754,7 +754,7 @@
   "ownerId": "O026",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "RJ46CE1224",
   "currentCity": "Delhi",
   "availableFrom": "in 2 days"
@@ -854,7 +854,7 @@
   "ownerId": "O028",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "DL11CB7267",
   "currentCity": "Delhi",
   "availableFrom": "tomorrow"
@@ -894,7 +894,7 @@
   "ownerId": "O030",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "DL41BA6061",
   "currentCity": "Mumbai",
   "availableFrom": "in 2 days"
@@ -924,7 +924,7 @@
   "ownerId": "O032",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "TN07DH1410",
   "currentCity": "Bhiwandi",
   "availableFrom": "tomorrow"
@@ -944,7 +944,7 @@
   "ownerId": "O033",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "WB38CG2622",
   "currentCity": "Bhiwandi",
   "availableFrom": "in 2 days"
@@ -954,7 +954,7 @@
   "ownerId": "O033",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "KA03FD8264",
   "currentCity": "Pune",
   "availableFrom": "tomorrow"
@@ -1034,7 +1034,7 @@
   "ownerId": "O037",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "UP05BB2527",
   "currentCity": "Jaipur",
   "availableFrom": "today"
@@ -1044,7 +1044,7 @@
   "ownerId": "O037",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "TN09AF3002",
   "currentCity": "Pune",
   "availableFrom": "tomorrow"
@@ -1064,7 +1064,7 @@
   "ownerId": "O037",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "RJ10HD2773",
   "currentCity": "Mumbai",
   "availableFrom": "tomorrow"
@@ -1124,7 +1124,7 @@
   "ownerId": "O038",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "UP34EA4612",
   "currentCity": "Delhi",
   "availableFrom": "today"
@@ -1144,7 +1144,7 @@
   "ownerId": "O039",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "WB02HB6129",
   "currentCity": "Mumbai",
   "availableFrom": "in 2 days"
@@ -1154,7 +1154,7 @@
   "ownerId": "O039",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "WB19BG1341",
   "currentCity": "Chennai",
   "availableFrom": "tomorrow"
@@ -1184,7 +1184,7 @@
   "ownerId": "O041",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "TN41FC8205",
   "currentCity": "Pune",
   "availableFrom": "in 2 days"
@@ -1214,7 +1214,7 @@
   "ownerId": "O042",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "DL04HB6626",
   "currentCity": "Bhiwandi",
   "availableFrom": "today"
@@ -1354,7 +1354,7 @@
   "ownerId": "O049",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "TN05FD2698",
   "currentCity": "Bhiwandi",
   "availableFrom": "tomorrow"
@@ -1374,7 +1374,7 @@
   "ownerId": "O049",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "DL05HA5807",
   "currentCity": "Bhiwandi",
   "availableFrom": "today"
@@ -1414,7 +1414,7 @@
   "ownerId": "O049",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "TN34EB7955",
   "currentCity": "Chennai",
   "availableFrom": "in 2 days"
@@ -1464,7 +1464,7 @@
   "ownerId": "O002",
   "type": "32 ft MXL",
   "axles": 3,
-  "capacityTon": 16,
+  "capacityTon": 18,
   "regNo": "MH43AZ8890",
   "currentCity": "Bhiwandi",
   "availableFrom": "tomorrow"

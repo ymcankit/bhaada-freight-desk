@@ -88,7 +88,7 @@ def run_tests():
         # 2. deterministic planner on the hero load
         r = E.run_quote(HERO, POOL, use_llm=False)
         ok &= check("hero load quoted", r["status"] == "quote", r.get("reason", ""))
-        ok &= check("hero load substitutes Taurus", r["search_type"] == "Taurus (10-tyre)")
+        ok &= check("hero load (18 T kapda, 32 MXL) fits the MXL it asked for", r["search_type"] == "32 ft MXL")
         ok &= check("quote clears floor", r["quote"]["above_floor"], f'{r["quote"]["margin_pct"]}%')
 
         # 3. re-plan keeps the shipper price fixed and re-checks the floor
