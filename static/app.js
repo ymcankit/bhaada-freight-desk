@@ -33,7 +33,8 @@ async function api(path, body) {
 }
 
 const STATUS = {
-  routing: ["Finding the route", "neutral"], sourcing: ["Waiting on owners", "neutral"], needs_approval: ["Needs your approval", "wait"],
+  routing: ["Finding the route", "neutral"], sourcing: ["Waiting on owners", "neutral"],
+  waiting_trucks: ["Waiting for a truck", "wait"], needs_approval: ["Needs your approval", "wait"],
   holding: ["Waiting for the hold", "neutral"], booked: ["Booking-ready", "ok"], recovered: ["Re-booked", "ok"],
   escalated: ["Escalated to you", "bad"], rejected: ["Rejected", "neutral"],
 };

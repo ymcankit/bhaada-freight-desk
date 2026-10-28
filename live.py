@@ -166,6 +166,7 @@ class Desk:
                               "baseCity": hit["name"] if hit else (city or ""), "reliability": 4.5,
                               "registeredAt": now(), "sandbox": False}
         self.save()
+        self.post("retry_waiting")                     # a new owner is asked about loads still waiting for a truck
         return self.owners[phone]
 
     def sandbox_on(self):
@@ -250,11 +251,12 @@ class Desk:
                           "city": city["name"], "available": t.get("available") if t.get("available") in E.AVAIL_DAY else "today",
                           "ratePerKm": rate if rate and 10 < rate < 200 else None, "source": "checkin", "at": now()})
         if not added:
-            return self._wa(o, "Samajh nahi aaya 🙏 Aise bhejiye: *32 ft MXL, Bhiwandi, aaj, ₹38/km*")
+            return self._wa(o, "Kaunsi gaadi hai aur kahan khadi hai? 🙏 Aise bhejiye: *32 ft MXL, Surat, aaj, ₹38/km*")
         self.pool = [t for t in self.pool if t["ownerKey"] != o["key"]] + added
         self.save()
         lines = ", ".join(f"{t['type']} in {t['city']} ({t['available']})" for t in added)
         self._wa(o, f"Noted ✅ {lines}. Load aate hi message karenge.")
+        self._on_retry_waiting()
 
     def _checkin_rules(self, o, text):
         """Fallback when the model is unavailable: one truck per line, '32 ft MXL, Bhiwandi, aaj, ₹38/km'."""
@@ -354,8 +356,9 @@ class Desk:
         radius = self.settings["maxDeadheadKm"] * (1 if load["rounds"] == 0 else 2)
         cands = self._candidates(load, radius)
         if not cands:
-            return self._decide(load, final=True) if load["threads"] else self._escalate(
-                load, f"No {load['searchType']} in today's pool within {radius} km of {load['lane']['origin']}.")
+            if load["threads"]:
+                return self._decide(load, final=True)
+            return self._wait_for_trucks(load, radius)
         load["rounds"] += 1
         load["status"] = "sourcing"
         load["deadline"] = now() + self.timeout()
@@ -378,6 +381,32 @@ class Desk:
                                       + (f" (round {load['rounds']}, within {radius} km)" if load["rounds"] > 1 else "")
                                       + f". Waiting up to {self.timeout() // 60 or 1} min for replies.")
         self.save()
+
+    WAIT_HOURS = 6
+
+    def _wait_for_trucks(self, load, radius):
+        """Nobody has the truck yet: keep the load open and try again whenever an owner checks in."""
+        if load["status"] == "waiting_trucks":
+            return
+        load["status"], load["watchUntil"] = "waiting_trucks", now() + self.WAIT_HOURS * 3600
+        lane = load["lane"]
+        self._event(load, "Sourcing", f"No {load['searchType']} within {radius} km of {lane['origin']} yet. Load kept open "
+                                      f"for {self.WAIT_HOURS} h: any owner who checks in with one gets it at once.")
+        self._to_broker(load, f"⏳ {load['id']}: abhi {lane['origin']} ke paas {load['searchType']} khaali nahi hai.\n"
+                              f"Load khula rakha hai. Jaise hi koi owner gaadi batayega, turant usse rate poochke "
+                              f"aapko quote bhejunga ({self.WAIT_HOURS} ghante tak).")
+        self.save()
+
+    def _on_retry_waiting(self):
+        """New supply arrived (a check-in or a new owner): offer it every open load it fits."""
+        for load in self.loads:
+            if load["status"] != "waiting_trucks":
+                continue
+            radius = self.settings["maxDeadheadKm"]
+            if self._candidates(load, radius):
+                load["status"] = "sourcing"
+                self._event(load, "Sourcing", "A matching truck just checked in. Sourcing again.")
+                self._broadcast(load)
 
     # ---------------- negotiation ----------------
     def _econ(self, load, th):
@@ -495,6 +524,9 @@ class Desk:
                     if th["status"] in ("sent", "countered", "reconfirm") and th["round"] == load["rounds"]:
                         th["status"] = "declined" if th["status"] == "countered" else "silent"
                 self._decide(load)
+            elif load["status"] == "waiting_trucks" and t > load.get("watchUntil", t + 1):
+                load["status"] = "sourcing"                 # so _escalate's broker message reads as the end of the wait
+                self._escalate(load, f"{self.WAIT_HOURS} ghante mein koi {load['searchType']} nahi mila.")
             elif load["status"] == "holding" and t > load.get("deadline", t + 1):
                 th = load["threads"][load["winner"]]
                 th["status"] = "backed_out"

@@ -78,6 +78,17 @@ text(OWNERS[1], "Kal Bhiwandi se Surat 14 ton 32 MXL")
 time.sleep(1)
 ok &= check("and then sends a load", len(server.desk.loads) == before + 1)
 ok &= check("no WhatsApp markup on Telegram", not any("*" in t for to, t, b in SENT))
+# a load nobody can serve yet waits, and goes out the moment a matching truck checks in
+server.desk.remove_owner(f"tg:{OWNERS[0]}")                    # no owners at all, as after the memory was wiped
+E.intake_turn = lambda hist, load, msg: (E.normalise_load(dict(origin="Surat", destination="Bhiwandi", weight_ton=14,
+                                                               truck_type="32 ft MXL", pickup_when="kal")), "ok", [])
+text(OWNERS[1], "Kal Surat se Bhiwandi 14 ton 32 MXL")
+time.sleep(2)
+W = server.desk.loads[-1]
+ok &= check("no truck yet: load kept open", W["status"] == "waiting_trucks" and "khula rakha" in last_to(OWNERS[1]), W["status"])
+text(OWNERS[0], "owner Nikunj Transport, Surat")
+time.sleep(2)
+ok &= check("an owner who joins later gets the waiting load", W["status"] == "sourcing" and "Load:" in last_to(OWNERS[0]), W["status"])
 ok &= check("state reports Telegram", "telegram" in c.get("/api/state").json())
 print("\nALL PASS" if ok else "\nSOME FAILED")
 import sys; sys.stdout.flush(); os._exit(0 if ok else 1)
