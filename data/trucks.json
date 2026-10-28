@@ -1,1472 +1,1532 @@
 [
-  {
-    "truckId": "T001",
-    "ownerId": "O001",
-    "type": "22 ft",
-    "axles": 2,
-    "capacityTon": 10,
-    "regNo": "DL48BB7912",
-    "currentCity": "Ahmedabad",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T002",
-    "ownerId": "O001",
-    "type": "17 ft",
-    "axles": 2,
-    "capacityTon": 6,
-    "regNo": "RJ33AD9928",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T003",
-    "ownerId": "O001",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "KA01CG6574",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T004",
-    "ownerId": "O001",
-    "type": "22 ft",
-    "axles": 2,
-    "capacityTon": 10,
-    "regNo": "TN07BG2584",
-    "currentCity": "Pune",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T005",
-    "ownerId": "O002",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "GJ03DE2307",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T006",
-    "ownerId": "O002",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "WB18HF3664",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T007",
-    "ownerId": "O002",
-    "type": "22 ft",
-    "axles": 2,
-    "capacityTon": 10,
-    "regNo": "KA45BC9751",
-    "currentCity": "Chennai",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T008",
-    "ownerId": "O002",
-    "type": "19 ft",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "WB18DF1916",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T009",
-    "ownerId": "O002",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "WB18BD6155",
-    "currentCity": "Ahmedabad",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T010",
-    "ownerId": "O003",
-    "type": "20 ft container",
-    "axles": 2,
-    "capacityTon": 12,
-    "regNo": "DL33HB1771",
-    "currentCity": "Delhi",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T011",
-    "ownerId": "O003",
-    "type": "19 ft",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "DL44GB7304",
-    "currentCity": "Pune",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T012",
-    "ownerId": "O004",
-    "type": "19 ft",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "WB11HA5315",
-    "currentCity": "Indore",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T013",
-    "ownerId": "O004",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "GJ41ED3504",
-    "currentCity": "Hyderabad",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T014",
-    "ownerId": "O004",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "MH39FH1319",
-    "currentCity": "Mumbai",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T015",
-    "ownerId": "O005",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "DL17GD9835",
-    "currentCity": "Kolkata",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T016",
-    "ownerId": "O006",
-    "type": "22 ft",
-    "axles": 2,
-    "capacityTon": 10,
-    "regNo": "RJ01BA4750",
-    "currentCity": "Chennai",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T017",
-    "ownerId": "O006",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "GJ33DE8953",
-    "currentCity": "Kanpur",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T018",
-    "ownerId": "O006",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "UP16HG4119",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T019",
-    "ownerId": "O007",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "RJ13DH3296",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T020",
-    "ownerId": "O007",
-    "type": "22 ft",
-    "axles": 2,
-    "capacityTon": 10,
-    "regNo": "RJ05HB1828",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T021",
-    "ownerId": "O008",
-    "type": "22 ft",
-    "axles": 2,
-    "capacityTon": 10,
-    "regNo": "UP19GH3536",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T022",
-    "ownerId": "O008",
-    "type": "22 ft",
-    "axles": 2,
-    "capacityTon": 10,
-    "regNo": "MH38AF1936",
-    "currentCity": "Delhi",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T023",
-    "ownerId": "O008",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "DL04BC2122",
-    "currentCity": "Kolkata",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T024",
-    "ownerId": "O008",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "RJ26BD1651",
-    "currentCity": "Indore",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T025",
-    "ownerId": "O008",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "TN17DF4910",
-    "currentCity": "Mumbai",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T026",
-    "ownerId": "O008",
-    "type": "19 ft",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "KA30FB1152",
-    "currentCity": "Kolkata",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T027",
-    "ownerId": "O008",
-    "type": "17 ft",
-    "axles": 2,
-    "capacityTon": 6,
-    "regNo": "RJ33EC6718",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T028",
-    "ownerId": "O008",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "TN19CH9900",
-    "currentCity": "Mumbai",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T029",
-    "ownerId": "O009",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "DL18ED6617",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T030",
-    "ownerId": "O009",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "KA04BG5533",
-    "currentCity": "Delhi",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T031",
-    "ownerId": "O009",
-    "type": "24 ft SXL",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "DL41EC8239",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T032",
-    "ownerId": "O009",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "GJ05CA7049",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T033",
-    "ownerId": "O009",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "MH20FA6862",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T034",
-    "ownerId": "O010",
-    "type": "20 ft container",
-    "axles": 2,
-    "capacityTon": 12,
-    "regNo": "MH12FG5065",
-    "currentCity": "Pune",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T035",
-    "ownerId": "O010",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "GJ25AH4644",
-    "currentCity": "Delhi",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T036",
-    "ownerId": "O010",
-    "type": "24 ft SXL",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "RJ15AD7528",
-    "currentCity": "Kolkata",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T037",
-    "ownerId": "O010",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "KA23GF1452",
-    "currentCity": "Kolkata",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T038",
-    "ownerId": "O011",
-    "type": "20 ft container",
-    "axles": 2,
-    "capacityTon": 12,
-    "regNo": "RJ17AG1027",
-    "currentCity": "Mumbai",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T039",
-    "ownerId": "O012",
-    "type": "24 ft SXL",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "WB45EC4143",
-    "currentCity": "Kolkata",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T040",
-    "ownerId": "O012",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "DL40EG9977",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T041",
-    "ownerId": "O013",
-    "type": "20 ft container",
-    "axles": 2,
-    "capacityTon": 12,
-    "regNo": "DL43BE9445",
-    "currentCity": "Surat",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T042",
-    "ownerId": "O013",
-    "type": "17 ft",
-    "axles": 2,
-    "capacityTon": 6,
-    "regNo": "RJ44ED4262",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T043",
-    "ownerId": "O013",
-    "type": "14 ft",
-    "axles": 2,
-    "capacityTon": 4,
-    "regNo": "UP40BH7790",
-    "currentCity": "Jaipur",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T044",
-    "ownerId": "O013",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "WB32GD3417",
-    "currentCity": "Mumbai",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T045",
-    "ownerId": "O014",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "TN49HG9976",
-    "currentCity": "Mumbai",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T046",
-    "ownerId": "O015",
-    "type": "22 ft",
-    "axles": 2,
-    "capacityTon": 10,
-    "regNo": "KA22FB3267",
-    "currentCity": "Delhi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T047",
-    "ownerId": "O016",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "MH49GH1096",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T048",
-    "ownerId": "O016",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "WB35DH4595",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T049",
-    "ownerId": "O016",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "WB22GC8657",
-    "currentCity": "Delhi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T050",
-    "ownerId": "O016",
-    "type": "20 ft container",
-    "axles": 2,
-    "capacityTon": 12,
-    "regNo": "MH26AB8022",
-    "currentCity": "Ahmedabad",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T051",
-    "ownerId": "O016",
-    "type": "19 ft",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "KA25FD8449",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T052",
-    "ownerId": "O017",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "MH49AD4266",
-    "currentCity": "Mumbai",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T053",
-    "ownerId": "O017",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "RJ09HB4571",
-    "currentCity": "Mumbai",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T054",
-    "ownerId": "O017",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "DL39BC6096",
-    "currentCity": "Chennai",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T055",
-    "ownerId": "O018",
-    "type": "22 ft",
-    "axles": 2,
-    "capacityTon": 10,
-    "regNo": "GJ37AF9728",
-    "currentCity": "Bengaluru",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T056",
-    "ownerId": "O018",
-    "type": "17 ft",
-    "axles": 2,
-    "capacityTon": 6,
-    "regNo": "TN01GH2729",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T057",
-    "ownerId": "O018",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "UP46CG3885",
-    "currentCity": "Delhi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T058",
-    "ownerId": "O019",
-    "type": "22 ft",
-    "axles": 2,
-    "capacityTon": 10,
-    "regNo": "UP16HG6511",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T059",
-    "ownerId": "O019",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "DL32DF5232",
-    "currentCity": "Chennai",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T060",
-    "ownerId": "O019",
-    "type": "20 ft container",
-    "axles": 2,
-    "capacityTon": 12,
-    "regNo": "KA36AD2402",
-    "currentCity": "Jaipur",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T061",
-    "ownerId": "O019",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "RJ45HH8342",
-    "currentCity": "Ahmedabad",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T062",
-    "ownerId": "O019",
-    "type": "17 ft",
-    "axles": 2,
-    "capacityTon": 6,
-    "regNo": "RJ26DE7046",
-    "currentCity": "Delhi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T063",
-    "ownerId": "O020",
-    "type": "20 ft container",
-    "axles": 2,
-    "capacityTon": 12,
-    "regNo": "DL13DH5530",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T064",
-    "ownerId": "O020",
-    "type": "20 ft container",
-    "axles": 2,
-    "capacityTon": 12,
-    "regNo": "RJ19DF3939",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T065",
-    "ownerId": "O020",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "DL18AA5786",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T066",
-    "ownerId": "O020",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "UP07AE8690",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T067",
-    "ownerId": "O021",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "KA06DB7818",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T068",
-    "ownerId": "O022",
-    "type": "22 ft",
-    "axles": 2,
-    "capacityTon": 10,
-    "regNo": "GJ11DC2229",
-    "currentCity": "Indore",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T069",
-    "ownerId": "O023",
-    "type": "22 ft",
-    "axles": 2,
-    "capacityTon": 10,
-    "regNo": "RJ28BD3441",
-    "currentCity": "Mumbai",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T070",
-    "ownerId": "O024",
-    "type": "24 ft SXL",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "KA33HH2317",
-    "currentCity": "Nashik",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T071",
-    "ownerId": "O024",
-    "type": "20 ft container",
-    "axles": 2,
-    "capacityTon": 12,
-    "regNo": "TN39EA2496",
-    "currentCity": "Chennai",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T072",
-    "ownerId": "O025",
-    "type": "20 ft container",
-    "axles": 2,
-    "capacityTon": 12,
-    "regNo": "UP23GF6260",
-    "currentCity": "Chennai",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T073",
-    "ownerId": "O025",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "TN27HE7561",
-    "currentCity": "Nashik",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T074",
-    "ownerId": "O025",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "TN17FB7622",
-    "currentCity": "Ahmedabad",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T075",
-    "ownerId": "O025",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "UP27AD9494",
-    "currentCity": "Mumbai",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T076",
-    "ownerId": "O026",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "RJ46CE1224",
-    "currentCity": "Delhi",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T077",
-    "ownerId": "O026",
-    "type": "17 ft",
-    "axles": 2,
-    "capacityTon": 6,
-    "regNo": "GJ30BC9165",
-    "currentCity": "Mumbai",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T078",
-    "ownerId": "O026",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "KA27HH4993",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T079",
-    "ownerId": "O026",
-    "type": "24 ft SXL",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "DL05EG6568",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T080",
-    "ownerId": "O026",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "KA47EH3434",
-    "currentCity": "Delhi",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T081",
-    "ownerId": "O026",
-    "type": "24 ft SXL",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "WB30FD4912",
-    "currentCity": "Delhi",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T082",
-    "ownerId": "O026",
-    "type": "22 ft",
-    "axles": 2,
-    "capacityTon": 10,
-    "regNo": "WB03FH7246",
-    "currentCity": "Kanpur",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T083",
-    "ownerId": "O026",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "MH09FB8213",
-    "currentCity": "Pune",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T084",
-    "ownerId": "O027",
-    "type": "22 ft",
-    "axles": 2,
-    "capacityTon": 10,
-    "regNo": "WB21HA2121",
-    "currentCity": "Kolkata",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T085",
-    "ownerId": "O028",
-    "type": "17 ft",
-    "axles": 2,
-    "capacityTon": 6,
-    "regNo": "TN24GC5000",
-    "currentCity": "Delhi",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T086",
-    "ownerId": "O028",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "DL11CB7267",
-    "currentCity": "Delhi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T087",
-    "ownerId": "O029",
-    "type": "17 ft",
-    "axles": 2,
-    "capacityTon": 6,
-    "regNo": "TN38EG5097",
-    "currentCity": "Kolkata",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T088",
-    "ownerId": "O029",
-    "type": "22 ft",
-    "axles": 2,
-    "capacityTon": 10,
-    "regNo": "WB31BD7248",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T089",
-    "ownerId": "O030",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "KA15FD4115",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T090",
-    "ownerId": "O030",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "DL41BA6061",
-    "currentCity": "Mumbai",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T091",
-    "ownerId": "O030",
-    "type": "14 ft",
-    "axles": 2,
-    "capacityTon": 4,
-    "regNo": "TN47CB5835",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T092",
-    "ownerId": "O031",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "GJ30BC4696",
-    "currentCity": "Mumbai",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T093",
-    "ownerId": "O032",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "TN07DH1410",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T094",
-    "ownerId": "O032",
-    "type": "20 ft container",
-    "axles": 2,
-    "capacityTon": 12,
-    "regNo": "RJ42BH5951",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T095",
-    "ownerId": "O033",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "WB38CG2622",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T096",
-    "ownerId": "O033",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "KA03FD8264",
-    "currentCity": "Pune",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T097",
-    "ownerId": "O033",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "GJ44FF1992",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T098",
-    "ownerId": "O034",
-    "type": "20 ft container",
-    "axles": 2,
-    "capacityTon": 12,
-    "regNo": "RJ05DD4817",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T099",
-    "ownerId": "O034",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "MH18CC9850",
-    "currentCity": "Ahmedabad",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T100",
-    "ownerId": "O035",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "GJ48BH8344",
-    "currentCity": "Mumbai",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T101",
-    "ownerId": "O036",
-    "type": "14 ft",
-    "axles": 2,
-    "capacityTon": 4,
-    "regNo": "UP26GB9032",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T102",
-    "ownerId": "O036",
-    "type": "17 ft",
-    "axles": 2,
-    "capacityTon": 6,
-    "regNo": "GJ21CB3067",
-    "currentCity": "Jaipur",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T103",
-    "ownerId": "O036",
-    "type": "24 ft SXL",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "KA30GB2874",
-    "currentCity": "Delhi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T104",
-    "ownerId": "O037",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "UP05BB2527",
-    "currentCity": "Jaipur",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T105",
-    "ownerId": "O037",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "TN09AF3002",
-    "currentCity": "Pune",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T106",
-    "ownerId": "O037",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "WB47AE6119",
-    "currentCity": "Delhi",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T107",
-    "ownerId": "O037",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "RJ10HD2773",
-    "currentCity": "Mumbai",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T108",
-    "ownerId": "O037",
-    "type": "19 ft",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "KA37DG1430",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T109",
-    "ownerId": "O037",
-    "type": "14 ft",
-    "axles": 2,
-    "capacityTon": 4,
-    "regNo": "KA45EF6751",
-    "currentCity": "Indore",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T110",
-    "ownerId": "O037",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "WB05CA2503",
-    "currentCity": "Mumbai",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T111",
-    "ownerId": "O037",
-    "type": "24 ft SXL",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "UP22CF6105",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T112",
-    "ownerId": "O038",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "RJ49BF8043",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T113",
-    "ownerId": "O038",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "UP34EA4612",
-    "currentCity": "Delhi",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T114",
-    "ownerId": "O038",
-    "type": "14 ft",
-    "axles": 2,
-    "capacityTon": 4,
-    "regNo": "KA14CE5742",
-    "currentCity": "Hyderabad",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T115",
-    "ownerId": "O039",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "WB02HB6129",
-    "currentCity": "Mumbai",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T116",
-    "ownerId": "O039",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "WB19BG1341",
-    "currentCity": "Chennai",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T117",
-    "ownerId": "O040",
-    "type": "22 ft",
-    "axles": 2,
-    "capacityTon": 10,
-    "regNo": "TN15FC2251",
-    "currentCity": "Ahmedabad",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T118",
-    "ownerId": "O040",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "RJ23FC4871",
-    "currentCity": "Delhi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T119",
-    "ownerId": "O041",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "TN41FC8205",
-    "currentCity": "Pune",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T120",
-    "ownerId": "O041",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "KA18AF9312",
-    "currentCity": "Ahmedabad",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T121",
-    "ownerId": "O041",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "MH04FE2257",
-    "currentCity": "Nashik",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T122",
-    "ownerId": "O042",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "DL04HB6626",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T123",
-    "ownerId": "O043",
-    "type": "24 ft SXL",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "TN44AF2079",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T124",
-    "ownerId": "O044",
-    "type": "24 ft SXL",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "WB09BE7171",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T125",
-    "ownerId": "O045",
-    "type": "19 ft",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "RJ22HD4711",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T126",
-    "ownerId": "O045",
-    "type": "17 ft",
-    "axles": 2,
-    "capacityTon": 6,
-    "regNo": "GJ33AF3147",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T127",
-    "ownerId": "O046",
-    "type": "20 ft container",
-    "axles": 2,
-    "capacityTon": 12,
-    "regNo": "KA49HD9749",
-    "currentCity": "Mumbai",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T128",
-    "ownerId": "O046",
-    "type": "20 ft container",
-    "axles": 2,
-    "capacityTon": 12,
-    "regNo": "UP13FH8564",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T129",
-    "ownerId": "O046",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "WB11DC5096",
-    "currentCity": "Delhi",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T130",
-    "ownerId": "O047",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "GJ15HF1436",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T131",
-    "ownerId": "O047",
-    "type": "24 ft SXL",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "TN16GB7142",
-    "currentCity": "Nashik",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T132",
-    "ownerId": "O048",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "MH06AE4533",
-    "currentCity": "Ahmedabad",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T133",
-    "ownerId": "O048",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "WB08ED5934",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T134",
-    "ownerId": "O048",
-    "type": "22 ft",
-    "axles": 2,
-    "capacityTon": 10,
-    "regNo": "UP05BH9782",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T135",
-    "ownerId": "O049",
-    "type": "32 ft SXL",
-    "axles": 3,
-    "capacityTon": 9,
-    "regNo": "MH25HA7338",
-    "currentCity": "Chennai",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T136",
-    "ownerId": "O049",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "TN05FD2698",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T137",
-    "ownerId": "O049",
-    "type": "19 ft",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "TN35FC8612",
-    "currentCity": "Ahmedabad",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T138",
-    "ownerId": "O049",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "DL05HA5807",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T139",
-    "ownerId": "O049",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "MH21EG9897",
-    "currentCity": "Pune",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T140",
-    "ownerId": "O049",
-    "type": "14 ft",
-    "axles": 2,
-    "capacityTon": 4,
-    "regNo": "RJ19FA6438",
-    "currentCity": "Ahmedabad",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T141",
-    "ownerId": "O049",
-    "type": "Taurus (10-tyre)",
-    "axles": 3,
-    "capacityTon": 21,
-    "regNo": "WB26HG6554",
-    "currentCity": "Delhi",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T142",
-    "ownerId": "O049",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "TN34EB7955",
-    "currentCity": "Chennai",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T143",
-    "ownerId": "O050",
-    "type": "24 ft SXL",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "MH47FG5498",
-    "currentCity": "Jaipur",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T144",
-    "ownerId": "O050",
-    "type": "17 ft",
-    "axles": 2,
-    "capacityTon": 6,
-    "regNo": "WB24CA3339",
-    "currentCity": "Hyderabad",
-    "availableFrom": "in 2 days"
-  },
-  {
-    "truckId": "T145",
-    "ownerId": "O050",
-    "type": "14 ft",
-    "axles": 2,
-    "capacityTon": 4,
-    "regNo": "GJ16FF7272",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "today"
-  },
-  {
-    "truckId": "T000",
-    "ownerId": "O001",
-    "type": "24 ft SXL",
-    "axles": 2,
-    "capacityTon": 7,
-    "regNo": "MH04GB1234",
-    "currentCity": "Delhi",
-    "availableFrom": "tomorrow"
-  },
-  {
-    "truckId": "T001b",
-    "ownerId": "O002",
-    "type": "32 ft MXL",
-    "axles": 3,
-    "capacityTon": 16,
-    "regNo": "MH43AZ8890",
-    "currentCity": "Bhiwandi",
-    "availableFrom": "tomorrow"
-  }
+ {
+  "truckId": "T001",
+  "ownerId": "O001",
+  "type": "22 ft",
+  "axles": 2,
+  "capacityTon": 10,
+  "regNo": "DL48BB7912",
+  "currentCity": "Ahmedabad",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T002",
+  "ownerId": "O001",
+  "type": "17 ft",
+  "axles": 2,
+  "capacityTon": 6,
+  "regNo": "RJ33AD9928",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T003",
+  "ownerId": "O001",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "KA01CG6574",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T004",
+  "ownerId": "O001",
+  "type": "22 ft",
+  "axles": 2,
+  "capacityTon": 10,
+  "regNo": "TN07BG2584",
+  "currentCity": "Pune",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T005",
+  "ownerId": "O002",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "GJ03DE2307",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T006",
+  "ownerId": "O002",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "WB18HF3664",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T007",
+  "ownerId": "O002",
+  "type": "22 ft",
+  "axles": 2,
+  "capacityTon": 10,
+  "regNo": "KA45BC9751",
+  "currentCity": "Chennai",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T008",
+  "ownerId": "O002",
+  "type": "19 ft",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "WB18DF1916",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T009",
+  "ownerId": "O002",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "WB18BD6155",
+  "currentCity": "Ahmedabad",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T010",
+  "ownerId": "O003",
+  "type": "20 ft container",
+  "axles": 2,
+  "capacityTon": 12,
+  "regNo": "DL33HB1771",
+  "currentCity": "Delhi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T011",
+  "ownerId": "O003",
+  "type": "19 ft",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "DL44GB7304",
+  "currentCity": "Pune",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T012",
+  "ownerId": "O004",
+  "type": "19 ft",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "WB11HA5315",
+  "currentCity": "Indore",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T013",
+  "ownerId": "O004",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "GJ41ED3504",
+  "currentCity": "Hyderabad",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T014",
+  "ownerId": "O004",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "MH39FH1319",
+  "currentCity": "Mumbai",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T015",
+  "ownerId": "O005",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "DL17GD9835",
+  "currentCity": "Kolkata",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T016",
+  "ownerId": "O006",
+  "type": "22 ft",
+  "axles": 2,
+  "capacityTon": 10,
+  "regNo": "RJ01BA4750",
+  "currentCity": "Chennai",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T017",
+  "ownerId": "O006",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "GJ33DE8953",
+  "currentCity": "Kanpur",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T018",
+  "ownerId": "O006",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "UP16HG4119",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T019",
+  "ownerId": "O007",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "RJ13DH3296",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T020",
+  "ownerId": "O007",
+  "type": "22 ft",
+  "axles": 2,
+  "capacityTon": 10,
+  "regNo": "RJ05HB1828",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T021",
+  "ownerId": "O008",
+  "type": "22 ft",
+  "axles": 2,
+  "capacityTon": 10,
+  "regNo": "UP19GH3536",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T022",
+  "ownerId": "O008",
+  "type": "22 ft",
+  "axles": 2,
+  "capacityTon": 10,
+  "regNo": "MH38AF1936",
+  "currentCity": "Delhi",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T023",
+  "ownerId": "O008",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "DL04BC2122",
+  "currentCity": "Kolkata",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T024",
+  "ownerId": "O008",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "RJ26BD1651",
+  "currentCity": "Indore",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T025",
+  "ownerId": "O008",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "TN17DF4910",
+  "currentCity": "Mumbai",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T026",
+  "ownerId": "O008",
+  "type": "19 ft",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "KA30FB1152",
+  "currentCity": "Kolkata",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T027",
+  "ownerId": "O008",
+  "type": "17 ft",
+  "axles": 2,
+  "capacityTon": 6,
+  "regNo": "RJ33EC6718",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T028",
+  "ownerId": "O008",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "TN19CH9900",
+  "currentCity": "Mumbai",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T029",
+  "ownerId": "O009",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "DL18ED6617",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T030",
+  "ownerId": "O009",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "KA04BG5533",
+  "currentCity": "Delhi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T031",
+  "ownerId": "O009",
+  "type": "24 ft SXL",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "DL41EC8239",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T032",
+  "ownerId": "O009",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "GJ05CA7049",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T033",
+  "ownerId": "O009",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "MH20FA6862",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T034",
+  "ownerId": "O010",
+  "type": "20 ft container",
+  "axles": 2,
+  "capacityTon": 12,
+  "regNo": "MH12FG5065",
+  "currentCity": "Pune",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T035",
+  "ownerId": "O010",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "GJ25AH4644",
+  "currentCity": "Delhi",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T036",
+  "ownerId": "O010",
+  "type": "24 ft SXL",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "RJ15AD7528",
+  "currentCity": "Kolkata",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T037",
+  "ownerId": "O010",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "KA23GF1452",
+  "currentCity": "Kolkata",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T038",
+  "ownerId": "O011",
+  "type": "20 ft container",
+  "axles": 2,
+  "capacityTon": 12,
+  "regNo": "RJ17AG1027",
+  "currentCity": "Mumbai",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T039",
+  "ownerId": "O012",
+  "type": "24 ft SXL",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "WB45EC4143",
+  "currentCity": "Kolkata",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T040",
+  "ownerId": "O012",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "DL40EG9977",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T041",
+  "ownerId": "O013",
+  "type": "20 ft container",
+  "axles": 2,
+  "capacityTon": 12,
+  "regNo": "DL43BE9445",
+  "currentCity": "Surat",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T042",
+  "ownerId": "O013",
+  "type": "17 ft",
+  "axles": 2,
+  "capacityTon": 6,
+  "regNo": "RJ44ED4262",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T043",
+  "ownerId": "O013",
+  "type": "14 ft",
+  "axles": 2,
+  "capacityTon": 4,
+  "regNo": "UP40BH7790",
+  "currentCity": "Jaipur",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T044",
+  "ownerId": "O013",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "WB32GD3417",
+  "currentCity": "Mumbai",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T045",
+  "ownerId": "O014",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "TN49HG9976",
+  "currentCity": "Mumbai",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T046",
+  "ownerId": "O015",
+  "type": "22 ft",
+  "axles": 2,
+  "capacityTon": 10,
+  "regNo": "KA22FB3267",
+  "currentCity": "Delhi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T047",
+  "ownerId": "O016",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "MH49GH1096",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T048",
+  "ownerId": "O016",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "WB35DH4595",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T049",
+  "ownerId": "O016",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "WB22GC8657",
+  "currentCity": "Delhi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T050",
+  "ownerId": "O016",
+  "type": "20 ft container",
+  "axles": 2,
+  "capacityTon": 12,
+  "regNo": "MH26AB8022",
+  "currentCity": "Ahmedabad",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T051",
+  "ownerId": "O016",
+  "type": "19 ft",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "KA25FD8449",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T052",
+  "ownerId": "O017",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "MH49AD4266",
+  "currentCity": "Mumbai",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T053",
+  "ownerId": "O017",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "RJ09HB4571",
+  "currentCity": "Mumbai",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T054",
+  "ownerId": "O017",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "DL39BC6096",
+  "currentCity": "Chennai",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T055",
+  "ownerId": "O018",
+  "type": "22 ft",
+  "axles": 2,
+  "capacityTon": 10,
+  "regNo": "GJ37AF9728",
+  "currentCity": "Bengaluru",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T056",
+  "ownerId": "O018",
+  "type": "17 ft",
+  "axles": 2,
+  "capacityTon": 6,
+  "regNo": "TN01GH2729",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T057",
+  "ownerId": "O018",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "UP46CG3885",
+  "currentCity": "Delhi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T058",
+  "ownerId": "O019",
+  "type": "22 ft",
+  "axles": 2,
+  "capacityTon": 10,
+  "regNo": "UP16HG6511",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T059",
+  "ownerId": "O019",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "DL32DF5232",
+  "currentCity": "Chennai",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T060",
+  "ownerId": "O019",
+  "type": "20 ft container",
+  "axles": 2,
+  "capacityTon": 12,
+  "regNo": "KA36AD2402",
+  "currentCity": "Jaipur",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T061",
+  "ownerId": "O019",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "RJ45HH8342",
+  "currentCity": "Ahmedabad",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T062",
+  "ownerId": "O019",
+  "type": "17 ft",
+  "axles": 2,
+  "capacityTon": 6,
+  "regNo": "RJ26DE7046",
+  "currentCity": "Delhi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T063",
+  "ownerId": "O020",
+  "type": "20 ft container",
+  "axles": 2,
+  "capacityTon": 12,
+  "regNo": "DL13DH5530",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T064",
+  "ownerId": "O020",
+  "type": "20 ft container",
+  "axles": 2,
+  "capacityTon": 12,
+  "regNo": "RJ19DF3939",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T065",
+  "ownerId": "O020",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "DL18AA5786",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T066",
+  "ownerId": "O020",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "UP07AE8690",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T067",
+  "ownerId": "O021",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "KA06DB7818",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T068",
+  "ownerId": "O022",
+  "type": "22 ft",
+  "axles": 2,
+  "capacityTon": 10,
+  "regNo": "GJ11DC2229",
+  "currentCity": "Indore",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T069",
+  "ownerId": "O023",
+  "type": "22 ft",
+  "axles": 2,
+  "capacityTon": 10,
+  "regNo": "RJ28BD3441",
+  "currentCity": "Mumbai",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T070",
+  "ownerId": "O024",
+  "type": "24 ft SXL",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "KA33HH2317",
+  "currentCity": "Nashik",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T071",
+  "ownerId": "O024",
+  "type": "20 ft container",
+  "axles": 2,
+  "capacityTon": 12,
+  "regNo": "TN39EA2496",
+  "currentCity": "Chennai",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T072",
+  "ownerId": "O025",
+  "type": "20 ft container",
+  "axles": 2,
+  "capacityTon": 12,
+  "regNo": "UP23GF6260",
+  "currentCity": "Chennai",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T073",
+  "ownerId": "O025",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "TN27HE7561",
+  "currentCity": "Nashik",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T074",
+  "ownerId": "O025",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "TN17FB7622",
+  "currentCity": "Ahmedabad",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T075",
+  "ownerId": "O025",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "UP27AD9494",
+  "currentCity": "Mumbai",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T076",
+  "ownerId": "O026",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "RJ46CE1224",
+  "currentCity": "Delhi",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T077",
+  "ownerId": "O026",
+  "type": "17 ft",
+  "axles": 2,
+  "capacityTon": 6,
+  "regNo": "GJ30BC9165",
+  "currentCity": "Mumbai",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T078",
+  "ownerId": "O026",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "KA27HH4993",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T079",
+  "ownerId": "O026",
+  "type": "24 ft SXL",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "DL05EG6568",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T080",
+  "ownerId": "O026",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "KA47EH3434",
+  "currentCity": "Delhi",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T081",
+  "ownerId": "O026",
+  "type": "24 ft SXL",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "WB30FD4912",
+  "currentCity": "Delhi",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T082",
+  "ownerId": "O026",
+  "type": "22 ft",
+  "axles": 2,
+  "capacityTon": 10,
+  "regNo": "WB03FH7246",
+  "currentCity": "Kanpur",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T083",
+  "ownerId": "O026",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "MH09FB8213",
+  "currentCity": "Pune",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T084",
+  "ownerId": "O027",
+  "type": "22 ft",
+  "axles": 2,
+  "capacityTon": 10,
+  "regNo": "WB21HA2121",
+  "currentCity": "Kolkata",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T085",
+  "ownerId": "O028",
+  "type": "17 ft",
+  "axles": 2,
+  "capacityTon": 6,
+  "regNo": "TN24GC5000",
+  "currentCity": "Delhi",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T086",
+  "ownerId": "O028",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "DL11CB7267",
+  "currentCity": "Delhi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T087",
+  "ownerId": "O029",
+  "type": "17 ft",
+  "axles": 2,
+  "capacityTon": 6,
+  "regNo": "TN38EG5097",
+  "currentCity": "Kolkata",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T088",
+  "ownerId": "O029",
+  "type": "22 ft",
+  "axles": 2,
+  "capacityTon": 10,
+  "regNo": "WB31BD7248",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T089",
+  "ownerId": "O030",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "KA15FD4115",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T090",
+  "ownerId": "O030",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "DL41BA6061",
+  "currentCity": "Mumbai",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T091",
+  "ownerId": "O030",
+  "type": "14 ft",
+  "axles": 2,
+  "capacityTon": 4,
+  "regNo": "TN47CB5835",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T092",
+  "ownerId": "O031",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "GJ30BC4696",
+  "currentCity": "Mumbai",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T093",
+  "ownerId": "O032",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "TN07DH1410",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T094",
+  "ownerId": "O032",
+  "type": "20 ft container",
+  "axles": 2,
+  "capacityTon": 12,
+  "regNo": "RJ42BH5951",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T095",
+  "ownerId": "O033",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "WB38CG2622",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T096",
+  "ownerId": "O033",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "KA03FD8264",
+  "currentCity": "Pune",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T097",
+  "ownerId": "O033",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "GJ44FF1992",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T098",
+  "ownerId": "O034",
+  "type": "20 ft container",
+  "axles": 2,
+  "capacityTon": 12,
+  "regNo": "RJ05DD4817",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T099",
+  "ownerId": "O034",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "MH18CC9850",
+  "currentCity": "Ahmedabad",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T100",
+  "ownerId": "O035",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "GJ48BH8344",
+  "currentCity": "Mumbai",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T101",
+  "ownerId": "O036",
+  "type": "14 ft",
+  "axles": 2,
+  "capacityTon": 4,
+  "regNo": "UP26GB9032",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T102",
+  "ownerId": "O036",
+  "type": "17 ft",
+  "axles": 2,
+  "capacityTon": 6,
+  "regNo": "GJ21CB3067",
+  "currentCity": "Jaipur",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T103",
+  "ownerId": "O036",
+  "type": "24 ft SXL",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "KA30GB2874",
+  "currentCity": "Delhi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T104",
+  "ownerId": "O037",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "UP05BB2527",
+  "currentCity": "Jaipur",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T105",
+  "ownerId": "O037",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "TN09AF3002",
+  "currentCity": "Pune",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T106",
+  "ownerId": "O037",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "WB47AE6119",
+  "currentCity": "Delhi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T107",
+  "ownerId": "O037",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "RJ10HD2773",
+  "currentCity": "Mumbai",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T108",
+  "ownerId": "O037",
+  "type": "19 ft",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "KA37DG1430",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T109",
+  "ownerId": "O037",
+  "type": "14 ft",
+  "axles": 2,
+  "capacityTon": 4,
+  "regNo": "KA45EF6751",
+  "currentCity": "Indore",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T110",
+  "ownerId": "O037",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "WB05CA2503",
+  "currentCity": "Mumbai",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T111",
+  "ownerId": "O037",
+  "type": "24 ft SXL",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "UP22CF6105",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T112",
+  "ownerId": "O038",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "RJ49BF8043",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T113",
+  "ownerId": "O038",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "UP34EA4612",
+  "currentCity": "Delhi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T114",
+  "ownerId": "O038",
+  "type": "14 ft",
+  "axles": 2,
+  "capacityTon": 4,
+  "regNo": "KA14CE5742",
+  "currentCity": "Hyderabad",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T115",
+  "ownerId": "O039",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "WB02HB6129",
+  "currentCity": "Mumbai",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T116",
+  "ownerId": "O039",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "WB19BG1341",
+  "currentCity": "Chennai",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T117",
+  "ownerId": "O040",
+  "type": "22 ft",
+  "axles": 2,
+  "capacityTon": 10,
+  "regNo": "TN15FC2251",
+  "currentCity": "Ahmedabad",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T118",
+  "ownerId": "O040",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "RJ23FC4871",
+  "currentCity": "Delhi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T119",
+  "ownerId": "O041",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "TN41FC8205",
+  "currentCity": "Pune",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T120",
+  "ownerId": "O041",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "KA18AF9312",
+  "currentCity": "Ahmedabad",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T121",
+  "ownerId": "O041",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "MH04FE2257",
+  "currentCity": "Nashik",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T122",
+  "ownerId": "O042",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "DL04HB6626",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T123",
+  "ownerId": "O043",
+  "type": "24 ft SXL",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "TN44AF2079",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T124",
+  "ownerId": "O044",
+  "type": "24 ft SXL",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "WB09BE7171",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T125",
+  "ownerId": "O045",
+  "type": "19 ft",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "RJ22HD4711",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T126",
+  "ownerId": "O045",
+  "type": "17 ft",
+  "axles": 2,
+  "capacityTon": 6,
+  "regNo": "GJ33AF3147",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T127",
+  "ownerId": "O046",
+  "type": "20 ft container",
+  "axles": 2,
+  "capacityTon": 12,
+  "regNo": "KA49HD9749",
+  "currentCity": "Mumbai",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T128",
+  "ownerId": "O046",
+  "type": "20 ft container",
+  "axles": 2,
+  "capacityTon": 12,
+  "regNo": "UP13FH8564",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T129",
+  "ownerId": "O046",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "WB11DC5096",
+  "currentCity": "Delhi",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T130",
+  "ownerId": "O047",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "GJ15HF1436",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T131",
+  "ownerId": "O047",
+  "type": "24 ft SXL",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "TN16GB7142",
+  "currentCity": "Nashik",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T132",
+  "ownerId": "O048",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "MH06AE4533",
+  "currentCity": "Ahmedabad",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T133",
+  "ownerId": "O048",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "WB08ED5934",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T134",
+  "ownerId": "O048",
+  "type": "22 ft",
+  "axles": 2,
+  "capacityTon": 10,
+  "regNo": "UP05BH9782",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T135",
+  "ownerId": "O049",
+  "type": "32 ft SXL",
+  "axles": 3,
+  "capacityTon": 9,
+  "regNo": "MH25HA7338",
+  "currentCity": "Chennai",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T136",
+  "ownerId": "O049",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "TN05FD2698",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T137",
+  "ownerId": "O049",
+  "type": "19 ft",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "TN35FC8612",
+  "currentCity": "Ahmedabad",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T138",
+  "ownerId": "O049",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "DL05HA5807",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T139",
+  "ownerId": "O049",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "MH21EG9897",
+  "currentCity": "Pune",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T140",
+  "ownerId": "O049",
+  "type": "14 ft",
+  "axles": 2,
+  "capacityTon": 4,
+  "regNo": "RJ19FA6438",
+  "currentCity": "Ahmedabad",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T141",
+  "ownerId": "O049",
+  "type": "Taurus (10-tyre)",
+  "axles": 3,
+  "capacityTon": 21,
+  "regNo": "WB26HG6554",
+  "currentCity": "Delhi",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T142",
+  "ownerId": "O049",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "TN34EB7955",
+  "currentCity": "Chennai",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T143",
+  "ownerId": "O050",
+  "type": "24 ft SXL",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "MH47FG5498",
+  "currentCity": "Jaipur",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T144",
+  "ownerId": "O050",
+  "type": "17 ft",
+  "axles": 2,
+  "capacityTon": 6,
+  "regNo": "WB24CA3339",
+  "currentCity": "Hyderabad",
+  "availableFrom": "in 2 days"
+ },
+ {
+  "truckId": "T145",
+  "ownerId": "O050",
+  "type": "14 ft",
+  "axles": 2,
+  "capacityTon": 4,
+  "regNo": "GJ16FF7272",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T000",
+  "ownerId": "O001",
+  "type": "24 ft SXL",
+  "axles": 2,
+  "capacityTon": 7,
+  "regNo": "MH04GB1234",
+  "currentCity": "Delhi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T001b",
+  "ownerId": "O002",
+  "type": "32 ft MXL",
+  "axles": 3,
+  "capacityTon": 16,
+  "regNo": "MH43AZ8890",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "tomorrow"
+ },
+ {
+  "truckId": "T200",
+  "ownerId": "O001",
+  "type": "12-wheeler",
+  "axles": 4,
+  "capacityTon": 25,
+  "regNo": "MH46DM4000",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T201",
+  "ownerId": "O002",
+  "type": "14-wheeler",
+  "axles": 5,
+  "capacityTon": 31,
+  "regNo": "MH46DM4001",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T202",
+  "ownerId": "O003",
+  "type": "Trailer 40 ft",
+  "axles": 5,
+  "capacityTon": 30,
+  "regNo": "MH46DM4002",
+  "currentCity": "Nashik",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T203",
+  "ownerId": "O004",
+  "type": "12-wheeler",
+  "axles": 4,
+  "capacityTon": 25,
+  "regNo": "MH46DM4003",
+  "currentCity": "Kolkata",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T204",
+  "ownerId": "O006",
+  "type": "14-wheeler",
+  "axles": 5,
+  "capacityTon": 31,
+  "regNo": "MH46DM4004",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "today"
+ },
+ {
+  "truckId": "T205",
+  "ownerId": "O008",
+  "type": "12-wheeler",
+  "axles": 4,
+  "capacityTon": 25,
+  "regNo": "MH46DM4005",
+  "currentCity": "Bhiwandi",
+  "availableFrom": "today"
+ }
 ]

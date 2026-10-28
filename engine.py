@@ -243,7 +243,11 @@ def norm_type(s):
     wheels = re.search(r"(\d{1,2})\s*[- ]?(?:tyre|tire|wheel|wheeler|chakka|chakke|pahiya)", t)
     if "taurus" in t or (wheels and wheels.group(1) == "10"):
         return "Taurus (10-tyre)"
-    if wheels:                                          # 6/12/14/16-wheelers: no such class here; the adviser picks by weight
+    if wheels and wheels.group(1) in ("12", "14"):
+        return f"{wheels.group(1)}-wheeler"
+    if "trailer" in t or (wheels and wheels.group(1) in ("16", "18", "22")):
+        return "Trailer 40 ft"
+    if wheels:                                          # a 6-wheeler: the adviser picks the length by weight
         return None
     if re.search(r"\b407\b", t):                          # Tata 407 (~2.5 T): the smallest class on the rate card
         return "14 ft"
@@ -488,10 +492,20 @@ def deadhead_cost(km, tt):
 def lane_memory(lane, tt):
     return (lane.get("memory") or {}).get(tt)
 
+def season(day=None):
+    """The festival or peak window a pickup date falls in: (name, +%) or (None, 0)."""
+    from datetime import date
+    d = day or date.today()
+    for s in rates.get("seasons", []):
+        lo, hi = (x if len(x) == 10 else f"{d.year}-{x}" for x in (s["from"], s["to"]))
+        if lo <= d.isoformat() <= hi:
+            return s["name"], s["pct"]
+    return None, 0
+
 def lane_cost(lane, tt):
-    """fair_cost for a load's lane, with its goods premium (hazardous, perishable...) on the expected buy price."""
+    """fair_cost for a load's lane, with its goods premium (hazardous, perishable...) and the season on the expected buy price."""
     c = fair_cost(lane["distanceKm"], tt, lane["returnLoadProb"], lane_memory(lane, tt))
-    p = lane.get("premiumPct") or 0
+    p = (lane.get("premiumPct") or 0) + (lane.get("seasonPct") or 0)
     if p:
         c = {**c, "est_cost": round(c["est_cost"] * (1 + p / 100)), "market": round(c["market"] * (1 + p / 100)), "premiumPct": p}
     return c

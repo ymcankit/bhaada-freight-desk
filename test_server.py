@@ -69,7 +69,7 @@ ok &= check("owners register over WhatsApp", len([o for o in server.desk.owners.
 ok &= check("owner gets a welcome", "fleet owner ke roop mein jud gaye" in last_to(OWNERS[0]))
 
 for ph in OWNERS:
-    text(ph, "32 ft MXL, Bhiwandi, aaj, ₹85/km")
+    text(ph, "32 ft MXL, Bhiwandi, aaj")                 # no morning rate: prices then don't depend on the season or lane
 time.sleep(1)
 pool = [t for t in server.desk.pool if t["source"] == "checkin"]
 ok &= check("check-in replies build the pool", len(pool) == 3, str([(t["type"], t["city"], t["ratePerKm"]) for t in pool]))

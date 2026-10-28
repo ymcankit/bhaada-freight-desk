@@ -12,7 +12,7 @@ the clock), so a load's state never races. What is real and what is not:
 """
 import json, os, queue, re, threading, time, hashlib, hmac, traceback
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 import engine as E
@@ -689,6 +689,8 @@ class Desk:
         m = fit["material"]
         load["searchType"] = fit["type"]
         load["lane"]["premiumPct"] = m.get("premiumPct", 0)
+        pickup = (datetime.now(IST) + timedelta(days=E.pickup_day(f.get("pickup_when")))).date()
+        load["lane"]["season"], load["lane"]["seasonPct"] = E.season(pickup)
         if not load["searchType"]:
             return self._escalate(load, f"No truck fits: {fit['why']}.", f"{fit['why']}.")
         self._event(load, "Orchestrator", f"Goods: {m['label']} → {m['body']} body" + (", hazardous handling" if m.get("hazmat") else "")
@@ -1447,6 +1449,8 @@ class Desk:
         if load["searchType"] != f["truck_type"]:
             lines.append(f"🔄 {f['truck_type']} ki jagah {load['searchType']} li hai")
         lines += ["🧾 " + x for x in self.paperwork_lines(load)]
+        if lane.get("seasonPct"):
+            lines.append(f"📅 {lane['season']} season: rate +{lane['seasonPct']}% (drivers ghar jaate hain, gaadiyan kam)")
         if m.get("premiumPct"):
             lines.append(f"📦 {m['label']}: +{m['premiumPct']}% rate" + (". Hazchem permit, UN number e-way bill/LR par, trained driver." if m.get("hazmat") else ""))
         lines += [f"📲 {len(ths)} owners se poocha: {n('deal')} raazi, {n('declined')} mana, {n('silent')} ka jawab nahi",

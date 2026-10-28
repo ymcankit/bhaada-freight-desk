@@ -64,7 +64,7 @@ def run_tests():
                     and E.norm_money("40/km") == 40)
 
         ok &= check("Indian truck names", E.norm_type("32 ft container") is None and E.norm_type("32 ft MXL container") == "32 ft MXL"
-                    and E.norm_type("14 wheeler") is None and E.norm_type("10 chakka") == "Taurus (10-tyre)" and E.norm_type("Tata Ace") is None
+                    and E.norm_type("14 wheeler") == "14-wheeler" and E.norm_type("6 tyre") is None and E.norm_type("10 chakka") == "Taurus (10-tyre)" and E.norm_type("Tata Ace") is None
                     and E.rates["axlesByType"]["32 ft SXL"] == 2)
         ok &= check("'100 ton' stays 100 tons and is split, not priced as 0.1 T",
                     E.norm_tons("100 ton") == 100 and E.norm_tons("14 टन") == 14 and E.norm_tons("18000") == 18
@@ -78,7 +78,8 @@ def run_tests():
         ok &= check("cloth is bulky: 14 T needs a 32 ft MXL", fit(14, "kapda")["type"] == "32 ft MXL" and fit(14, "kapda", "19 ft")["type"] == "32 ft MXL")
         ok &= check("closed goods never get an open Taurus", fit(3, "dawai", "Taurus (10-tyre)")["type"] != "Taurus (10-tyre)")
         ok &= check("perishables and overweight loads are blocked with a reason",
-                    fit(9, "fruits")["type"] is None and "reefer" in fit(9, "fruits")["why"] and fit(25, "cement")["type"] is None)
+                    fit(9, "fruits")["type"] is None and "reefer" in fit(9, "fruits")["why"] and fit(45, "cement")["type"] is None
+                    and fit(25, "cement")["type"] == "12-wheeler")
         ok &= check("chemical asks whether it is hazardous",
                     E.missing_fields({"origin": "A", "destination": "B", "weight_ton": 5, "material": "chemical", "material_class": "chemical"}) == ["hazard"])
         lane = {"distanceKm": 300, "returnLoadProb": 0.5}
