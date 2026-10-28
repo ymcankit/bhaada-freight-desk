@@ -323,6 +323,7 @@ function renderOwners() {
   $("owners-finding").textContent = live
     ? (d.liveOwners ? `${d.liveOwners} owner${d.liveOwners === 1 ? "" : "s"} registered · ${d.poolSize} truck${d.poolSize === 1 ? "" : "s"} offered today` +
        (d.checkin.sentAt ? ` · check-in sent at ${clock(d.checkin.sentAt).slice(0, 5)}` : " · check-in not sent yet") : "No live owners yet. Add them here; each gets a WhatsApp welcome.")
+      + (d.aiOwners ? ` · ${d.aiOwners} AI owners also bid (marked AI owner in quotes)` : "")
     : `Sandbox: ${d.owners.length} persona owners with ${d.poolSize} trucks. Switch to Live owners to work with real people.`;
   $("send-checkin").textContent = live ? "Send morning check-in" : "Refresh sandbox pool";
   $("send-checkin").disabled = live && (!(d.whatsapp || d.telegram) || !d.liveOwners);

@@ -1107,5 +1107,7 @@ class Desk:
                            for o in (live_owners if self.settings["mode"] == "live" else
                                      [o for o in list(self.owners.values()) if o.get("sandbox")])],
                 "poolSize": len(pool), "liveOwners": len(live_owners),
+                "aiOwners": len({t["ownerKey"] for t in self.pool if t.get("source") == "sandbox"})
+                            if self.settings["mode"] == "live" and self.settings.get("aiAgents") else 0,
                 "loads": [{k: v for k, v in l.items() if k not in ("contacted", "prefer")} for l in reversed(self.loads[-60:])],
                 "whatsapp": bool(self.send_wa)}
