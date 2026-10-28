@@ -1258,6 +1258,13 @@ class Desk:
                                   "Kisi owner ka rate margin floor ke andar nahi baitha.")
         self._escalate(load, "No owner replied.", "Kisi owner ne jawab nahi diya.")
 
+    def _on_own_rate(self, lid, rs):
+        load = self._find(lid)
+        if load and load.get("quote"):
+            load["brokerRate"] = rs
+            self._event(load, "Broker", f"Shadow mode: the broker's own quote was ₹{rs:,.0f} (Bhaada ₹{load['quote']['sell_total']:,}).")
+            self.save()
+
     def _on_broker_call(self, lid, yes):
         """The broker's answer to the strategist's question: book the cheapest owner at their ask, or hand over."""
         load = self._find(lid)
@@ -1533,6 +1540,10 @@ class Desk:
                 "escalated": sum(l["status"] == "escalated" for l in loads),
                 "medianQuoteMin": round(mins[len(mins) // 2], 1) if mins else None,
                 "avgMargin": round(sum(margins) / len(margins), 1) if margins else None}
+        shadow = [l for l in self.loads if l.get("brokerRate") and l.get("quote")]
+        kpis["shadowCompared"] = len(shadow)            # all time: the pilot's accuracy evidence
+        kpis["shadowWithin3Pct"] = round(100 * sum(abs(l["quote"]["sell_total"] - l["brokerRate"]) <= 0.03 * l["brokerRate"]
+                                                   for l in shadow) / len(shadow)) if shadow else None
         live_owners = [o for o in list(self.owners.values()) if not o.get("sandbox")]
         pool = [t for t in self.pool if (t.get("source") == "sandbox") == (self.settings["mode"] == "sandbox")]
         return {"now": now(), "settings": self.settings, "kpis": kpis, "checkin": self.checkin,

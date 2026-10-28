@@ -730,11 +730,22 @@ def broker_brain(wa, text, s):
     reply = (out.get("reply") or "").strip()
     return ("reply", reply[:700]) if out.get("intent") == "reply" and reply else ("load", None)
 
+OWN_RATE = re.compile(r"\b(?:mera|meri|my|apna)\s+(?:rate|quote|bhaada|bhada)\b.*?(\d[\d,]{2,})", re.I)
+
 def broker_command(wa, text):
     """A reply to a quote typed instead of tapped, or a question about loads already sent. True if handled."""
     mine = desk.broker_loads(wa)
     hit = LOAD_ID.search(text)
     named = next((l for l in mine if l["id"] == f"BH-{hit.group(1)}"), None) if hit else None
+    own = OWN_RATE.search(LOAD_ID.sub(" ", text))
+    if own and mine:                                    # shadow mode: the broker's own quote, to measure ours against
+        target = named or next((l for l in reversed(mine) if l.get("quote")), None)
+        if target:
+            desk.post("own_rate", lid=target["id"], rs=float(own.group(1).replace(",", "")))
+            q = target["quote"]["sell_total"]
+            rs = float(own.group(1).replace(",", ""))
+            return send(wa, f"📒 {target['id']}: aapka rate ₹{rs:,.0f} note kiya. Bhaada ka quote ₹{q:,} tha "
+                            f"({(q - rs) / rs * 100:+.1f}%). Isse hum seekhte hain.") or True
     short = len(text.split()) <= 5
     mid_intake = bool(desk.brokers.get(wa, {}).get("chat"))   # then a bare "haan"/"nahi" answers the intake question
     yes_no = APPROVE.match(text) or (REJECT.match(text) and not re.search(r"\d", LOAD_ID.sub("", text)))
