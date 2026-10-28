@@ -224,6 +224,13 @@ ok &= check("WhatsApp file over the cap is refused", "4 MB" in last_to("91980000
 R = live.Desk._owner_rate
 ok &= check("owner rates read in context", R("₹38/km lagega", 280) == 38 and R("38k", 1000) == 38 and R("35 hazaar total", 1000) == 35
             and R("32 ft hai, 36 per km, 1500 toll alag", 280) == 36 and R("14 ton ka 40", 280) == 40 and R("kal 10 baje", 280) is None)
+ok &= check("owner amounts: lakh + hazaar, 2.5L, saade, percentages and plates ignored",
+            round(R("1 lakh 20 hazaar", 1000) * 1000) == 120000 and round(R("2.5L", 1000) * 1000) == 250000
+            and round(R("saade 27 hazaar", 1000) * 1000) == 27500 and R("80% advance chahiye", 280) is None
+            and R("MH04AB1234 wali, 26 final", 280) == 26)
+ok &= check("hold replies: 'no problem bhai' and 'koi dikkat nahi' are yes; unclear is asked again",
+            live.yes_no("No problem bhai, gaadi ready hai") == "yes" and live.yes_no("haan, koi dikkat nahi") == "yes"
+            and live.yes_no("sorry gaadi nikal gayi") == "no" and live.yes_no("kya rate tha?") is None)
 ok &= check("'haan na' is not a no", not live.NO.search("haan na bhai") and bool(live.NO.search("na") and live.NO.search("nahi")))
 
 print("\nALL PASS" if ok else "\nSOME FAILED")

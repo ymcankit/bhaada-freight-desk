@@ -71,7 +71,8 @@ while time.time() < end and "Demo load" not in last_to(8001):
 A = D.loads[-1]
 ok &= check("AI broker posts a demo load to the owner", A.get("aiBroker") and "Demo load" in last_to(8001), A["id"])
 ok &= check("demo load goes to real owners only", all(not t["sandbox"] for t in A["threads"].values()))
-text(8001, "34 per km")
+tgt = D._econ(A, A["threads"]["tg:8001"])["target"]
+text(8001, f"{tgt - 1:.1f} per km")                     # a realistic ask; far below running cost would be confirmed first
 st = wait(A, ("holding",), 25)
 ok &= check("AI broker approves its own quote", st == "holding" and "HAAN" in last_to(8001), st)
 text(8001, "haan")

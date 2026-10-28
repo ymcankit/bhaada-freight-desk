@@ -50,8 +50,18 @@ def _unpack(raw):
 geo.seed_cities(E.CITY["cities"])
 E.CITY_RESOLVER = geo.resolve_city
 
-YES = re.compile(r"\b(haan|haa|ha|han|yes|yep|ok|okay|pakka|confirm|confirmed|done|theek|thik|chalega|sure|book)\b|👍|✅", re.I)
+YES = re.compile(r"\b(haan|haa|ha|han|yes|yep|ok|okay|pakka|confirm|confirmed|done|theek|thik|chalega|sure|book|ji|ready|"
+                 r"hold kar (diya|di|dunga|denge)|de dunga|de denge|ho jayega|bilkul)\b|👍|✅", re.I)
 NO = re.compile(r"\b(nahi|nahin|nhi|no|cancel|sorry|nikal|nikal gayi|not|mat)\b|^\W*na+\W*$|❌", re.I)   # "haan na" is a yes
+BENIGN_NO = re.compile(r"\bno problem\b|\b(koi )?(dikkat|problem|tension|issue|chinta) nahi\b|\bnahi nahi\b|\bmana nahi\b", re.I)
+
+def yes_no(text):
+    """'yes', 'no' or None. 'No problem bhai', 'koi dikkat nahi' and 'nahi nahi, de dunga' are not refusals."""
+    t = BENIGN_NO.sub(" ", text)
+    y = bool(YES.search(t)) or (bool(BENIGN_NO.search(text)) and not NO.search(t))
+    n = bool(NO.search(t))
+    return "yes" if y and not n else "no" if n and not y else None
+
 CANCEL = re.compile(r"cancel|back\s*out|nahi\s+(aa|ja|ho)\s+(pa|sak)|nikal\s+ga(yi|ya)|mana\s+kar|kharab|kharaab|breakdown|"
                     r"driver\s+nahi|accident|puncture", re.I)
 SURE_CANCEL = re.compile(r"back\s*out|nahi\s+(aa|ja)\s+(pa|sak)|nikal\s+ga(yi|ya)|cancel\s+(kar|karo|kardo|kar do)\b(?!.*\?)", re.I)
@@ -1017,8 +1027,8 @@ class Desk:
                 pos = lambda x: None if str(x).strip().startswith("-") else E.norm_weight(x)
                 rate, total = pos(out.get("owner_rate_per_km")), pos(out.get("owner_total_rs"))
                 ask = rate or (total / km if total and total > 300 else None)
-                said = self._owner_rate(text, km)       # guardrail: a number the owner wrote beats the model's reading of it
-                if ask and said and abs(ask - said) > max(0.5, 0.02 * said):
+                said, sure = self._owner_rate_info(text, km)   # guardrail: a number the owner clearly wrote beats the model's reading
+                if ask and said and sure and abs(ask - said) > max(0.5, 0.02 * said):
                     ask = said
                 answer = (out.get("answer") or "").strip()
                 nums = lambda s: re.findall(r"\d+(?:[,.]\d+)*", s)
@@ -1112,6 +1122,11 @@ class Desk:
             return {"action": "decline", "rate": None, "reply": "Koi baat nahi 🙏 Agla load aate hi aapko batayenge."}
         if read["intent"] == "accept_offer" and th["counter"]:
             return done(th["counter"])
+        if ask and not th.get("lowChecked") and ask < 0.8 * E.lane_cost(load["lane"], th["type"])["owner_cost"] / km:
+            th["lowChecked"] = True                     # far below what the truck costs to run: a typo or a misread, confirm first
+            return {"action": "counter", "rate": round(ask, 1),
+                    "reply": f"Confirm kar lijiye: ₹{round(ask * km / 100) * 100:,} total (₹{round(ask, 1)}/km)? Ye gaadi ke kharche se "
+                             "kaafi kam lag raha hai. Sahi hai to *haan* likhiye, warna sahi rate bhejiye."}
         if not ask:
             q = "Is load ka aapka rate kya hoga? ₹/km ya total bata dijiye."
             return {"action": "ask", "rate": None, "reply": q if read["intent"] != "question" else "Rate bhi bata dijiye (₹/km ya total)."}
@@ -1157,19 +1172,41 @@ class Desk:
 
     @staticmethod
     def _owner_rate(text, km):
-        """The owner's ask in ₹/km: '38/km', '38k', '35 hazaar total'; ignores tons, feet, times and toll add-ons."""
+        """The owner's ask in ₹/km: '38/km', '28k', '1 lakh 20 hazaar', '2.5L', 'saade 27 hazaar'; ignores tons, feet,
+        times, percentages, truck numbers and phone numbers."""
+        return Desk._owner_rate_info(text, km)[0]
+
+    HINDI_FRACTION = {"saade": 0.5, "sadhe": 0.5, "paune": -0.25, "sava": 0.25, "savaa": 0.25}
+
+    @staticmethod
+    def _owner_rate_info(text, km):
+        """(₹/km or None, sure): sure when the owner named the unit (per km, k, hazaar, lakh), so the number beats a
+        model's reading; a bare '26' is a guess the plausibility check may reread as thousands."""
         t = text.lower().replace(",", "")
+        t = Desk.DISPATCH_RE.sub(" ", t)
+        t = re.sub(r"(?<!\d)(?:\+?91[ -]?)?[6-9]\d{4}[ -]?\d{5}(?!\d)", " ", t)          # phone numbers
+        t = re.sub(r"\d+(?:\.\d+)?\s*(?:%|percent|pratishat)", " ", t)                  # "80% advance"
+        t = re.sub(r"\bdedh\b", "1.5", t)
+        t = re.sub(r"\bdhai\b", "2.5", t)
+        for w, add in Desk.HINDI_FRACTION.items():                                       # "saade 27" = 27.5
+            t = re.sub(rf"\b{w}\s+(\d+(?:\.\d+)?)", lambda m: str(float(m.group(1)) + add), t)
+            t = re.sub(rf"\b{w}\s+(lakh|lac)", str(1 + add) + r" \1", t)
         m = re.search(r"(\d+(?:\.\d+)?)\s*(?:rs\.?|₹|rupaye|rupees|rupee)?\s*(?:/|per|prati)\s*(?:km|kilo)", t)
         if m:
-            return float(m.group(1))
-        nums = []
-        for v, unit in re.findall(r"(\d+(?:\.\d+)?)\s*(lakh|lac|k\b|hazaa?r|thousand|tonne|ton|t\b|ft|feet|foot|baje|tyre|km|din|ghante|gaadi|truck)?", t):
-            if unit in ("", "lakh", "lac", "k", "hazar", "hazaar", "thousand"):
-                nums.append(float(v) * {"": 1, "lakh": 1e5, "lac": 1e5}.get(unit, 1e3))
+            return float(m.group(1)), True
+        lakh = re.search(r"(\d+(?:\.\d+)?)\s*(?:lakh|lac|l)\b(?:\s*(\d+(?:\.\d+)?)\s*(?:hazaa?r|thousand|k)\b)?", t)
+        if lakh:                                                                   # "1 lakh 20 hazaar", "2.5L"
+            total = float(lakh.group(1)) * 1e5 + float(lakh.group(2) or 0) * 1e3
+            return total / km, True
+        k = re.search(r"(\d+(?:\.\d+)?)\s*(?:k|hazaa?r|thousand)\b", t)
+        if k:
+            return float(k.group(1)) * 1e3 / km, True
+        nums = [float(v) for v, unit in re.findall(r"(\d+(?:\.\d+)?)\s*(tonne|ton|t\b|ft|feet|foot|baje|tyre|km|din|ghante|gaadi|truck)?", t)
+                if not unit]
         if not nums:
-            return None
+            return None, False
         n = max(nums)
-        return n / km if n > 300 else n
+        return (n / km if n > 300 else n), n > 300                               # a full rupee total is unambiguous too
 
     def _llm_json(self, prompt, tier="smart"):
         # timeout 12: negotiation calls this on the worker, so one slow reply must not stall every other load;
@@ -1527,8 +1564,11 @@ class Desk:
 
     def _hold_reply(self, load, th, text):
         key = th["ownerKey"]
+        said = yes_no(text)
         if th["status"] == "reconfirm":
-            if YES.search(text) and not NO.search(text):
+            if said is None:
+                return self._to_owner(load, th, f"{load['id']}: purane rate pe gaadi milegi? *HAAN* ya *NAHI* likhiye 🙏")
+            if said == "yes":
                 th["status"] = "deal"
                 self._event(load, "Sourcing", f"{th['name']} confirmed the earlier rate still holds.")
             else:
@@ -1537,14 +1577,14 @@ class Desk:
             if self._all_answered(load):
                 self._decide(load)
             return
-        if NO.search(text) and not YES.search(text):
+        if said == "no":
             if re.search(r"\d", text):                     # "35 nahi, 38 chahiye" is haggling, not a back-out
                 rate = round(th["agreedBuy"] / load["lane"]["distanceKm"], 1)
                 return self._to_owner(load, th, f"Rate ₹{rate}/km tay hua tha. Usi rate pe gaadi hold karni hai? *HAAN* ya *NAHI* likhiye 🙏")
             th["status"] = "backed_out"
             self._event(load, "Booking", f"{th['name']} backed out: “{text[:60]}”.")
             return self._replan(load, key)
-        if th["status"] == "hold_requested" and YES.search(text):
+        if th["status"] == "hold_requested" and said == "yes":
             th["status"] = "held"
             load["status"], load["bookedAt"] = "booked", now()
             self._remember_rate(load, th)
