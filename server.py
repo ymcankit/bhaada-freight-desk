@@ -7,12 +7,15 @@ Config (environment variables, or .streamlit/secrets.toml locally):
     WHATSAPP_TOKEN, WHATSAPP_PHONE_ID  Meta WhatsApp Cloud API (leave empty to run the console alone)
     WHATSAPP_VERIFY_TOKEN              any string; the same one goes into Meta's webhook settings
     WHATSAPP_APP_SECRET                Meta app secret; when set, webhook POSTs without a valid signature are refused
-    CONSOLE_PASSWORD                   when set, the console and its API ask for it (leave empty for an open demo)
+    CONSOLE_PASSWORD                   when set, the console and its API ask for it. Unset on a host (Render), the
+                                       console is view-only unless CONSOLE_OPEN=1; on a laptop it stays open
+    PUBLIC_VIEW                        1: with a password set, anyone may watch the desk; acting still needs the password
     TELEGRAM_BOT_TOKEN                 a bot from @BotFather: the same desk on Telegram, free and with no phone number
     PUBLIC_URL                         this server's address, for the Telegram webhook (Render sets RENDER_EXTERNAL_URL itself)
 """
 import os, re, json, threading, hashlib, hmac, collections, queue, time
 from pathlib import Path
+from urllib.parse import urlparse
 import requests
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Depends
 from fastapi.concurrency import run_in_threadpool
@@ -44,6 +47,8 @@ def safe(e):
     s = repr(e)
     return s.replace(TG_TOKEN, "<bot-token>") if TG_TOKEN else s
 
+MAX_TEXT = 1000                                         # a load fits in a few lines; longer text is cut, not sent to a model
+
 # ---------------- WhatsApp sending ----------------
 def wa_send(to, text, buttons=None):
     if buttons:
@@ -60,12 +65,30 @@ def wa_send(to, text, buttons=None):
     except Exception as e:
         print("WhatsApp send error:", repr(e))
 
+MAX_VOICE_SEC, MAX_VOICE_BYTES = 120, 4_000_000        # a load is said in under a minute; Whisper minutes are quota
+META_MEDIA_HOSTS = (".fbsbx.com", ".facebook.com", ".fbcdn.net", ".whatsapp.net")
+
+def fetch_capped(url, headers=None, cap=MAX_VOICE_BYTES):
+    """Download at most cap bytes; a bigger file is refused part-way instead of filling memory."""
+    with requests.get(url, headers=headers, timeout=60, stream=True) as r:
+        r.raise_for_status()
+        out = bytearray()
+        for chunk in r.iter_content(65536):
+            out += chunk
+            if len(out) > cap:
+                raise ValueError("voice note too large")
+        return bytes(out)
+
 def wa_media(media_id):
+    """(bytes, mime), or None when the note is too big. The token only goes to Meta's own media hosts."""
     h = {"Authorization": f"Bearer {WA_TOKEN}"}
     meta = requests.get(f"{GRAPH}/{media_id}", headers=h, timeout=20).json()
-    data = requests.get(meta["url"], headers=h, timeout=60)
-    data.raise_for_status()
-    return data.content, meta.get("mime_type", "audio/ogg")
+    if int(meta.get("file_size") or 0) > MAX_VOICE_BYTES:
+        return None
+    url = urlparse(meta["url"])
+    if url.scheme != "https" or not (url.hostname or "").endswith(META_MEDIA_HOSTS):
+        raise ValueError(f"unexpected media host {url.hostname}")
+    return fetch_capped(meta["url"], headers=h), meta.get("mime_type", "audio/ogg")
 
 # ---------------- Telegram sending (chat ids are kept as "tg:<id>" so they never clash with phone numbers) ----------------
 def tg_send(to, text, buttons=None):
@@ -144,20 +167,71 @@ threading.Thread(target=keep_awake, daemon=True).start()
 if desk.settings["mode"] == "sandbox" or desk.settings.get("aiAgents"):
     desk.sandbox_on()                                   # the persona owners: sandbox mode, and AI owners in live mode
 
-app = FastAPI(title="Bhaada freight desk")
+app = FastAPI(title="Bhaada freight desk", docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
-CONSOLE_PW = cfg("CONSOLE_PASSWORD").strip()        # empty: the console is open (sandbox demos)
-if not CONSOLE_PW and os.getenv("RENDER"):
-    print("WARNING: CONSOLE_PASSWORD is not set: anyone with the URL can read every chat and approve or change settings")
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+       "font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; "
+       "base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+HEADERS = [(b"content-security-policy", CSP.encode()), (b"x-content-type-options", b"nosniff"),
+           (b"x-frame-options", b"DENY"), (b"referrer-policy", b"no-referrer"),
+           (b"strict-transport-security", b"max-age=31536000"),
+           (b"permissions-policy", b"camera=(), microphone=(), geolocation=()")]
+MAX_BODY = 1_000_000                                   # webhooks and console posts are a few KB
+
+class Guard:
+    """Security headers on every response (no framing, no sniffing, scripts only from this site; the console's
+    text never becomes HTML anyway) and a cap on request bodies, which are read whole before a signature check."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        size = dict(scope.get("headers") or []).get(b"content-length", b"0")
+        if not size.isdigit() or int(size) > MAX_BODY:
+            return await PlainTextResponse("request too large", status_code=413)(scope, receive, send)
+        seen = [0]
+        async def capped():
+            msg = await receive()
+            seen[0] += len(msg.get("body", b""))
+            if seen[0] > MAX_BODY:                       # chunked, with no length up front
+                raise HTTPException(413)
+            return msg
+        api = scope["path"].startswith("/api/")
+        async def with_headers(msg):
+            if msg["type"] == "http.response.start":
+                msg["headers"] = list(msg.get("headers") or []) + HEADERS + ([(b"cache-control", b"no-store")] if api else [])
+            await send(msg)
+        await self.app(scope, capped, with_headers)
+
+app.add_middleware(Guard)
+
+CONSOLE_PW = cfg("CONSOLE_PASSWORD").strip()        # set: reading and acting need it (unless PUBLIC_VIEW)
+YES_WORDS = ("1", "true", "yes", "on")
+PUBLIC_VIEW = cfg("PUBLIC_VIEW").lower() in YES_WORDS     # with a password: anyone may watch, only the password acts
+CONSOLE_OPEN = cfg("CONSOLE_OPEN").lower() in YES_WORDS   # no password on a host: acting needs this explicit opt-in
+ON_HOST = bool(os.getenv("RENDER"))                        # on a laptop an open console is fine; on the internet it isn't
+if not CONSOLE_PW and ON_HOST:
+    print("WARNING: CONSOLE_PASSWORD is not set: anyone with the URL can read every chat"
+          + (" and approve or change settings (CONSOLE_OPEN)" if CONSOLE_OPEN else "; the console is read-only"))
 
 def console_ok(request: Request):
+    """May read the whole desk."""
     got = request.headers.get("x-console-key", "")
     return not CONSOLE_PW or hmac.compare_digest(got.encode(), CONSOLE_PW.encode())
 
+def console_can_act(request: Request):
+    """May approve, reject, change settings, add owners or spend model calls on intake."""
+    if CONSOLE_PW:
+        return console_ok(request)
+    return CONSOLE_OPEN or not ON_HOST
+
 def console_auth(request: Request):
-    if not console_ok(request):
-        raise HTTPException(401, "Console password needed")
+    if not console_can_act(request):
+        if CONSOLE_PW:
+            raise HTTPException(401, "Console password needed")
+        raise HTTPException(403, "This public console is read-only. Set CONSOLE_PASSWORD on the server to act from it.")
 
 @app.get("/")
 def console():
@@ -168,6 +242,8 @@ async def healthz():
     """Liveness for Render's health check and keep_awake. async: answered even when the thread pool is full.
     503 only when the desk's worker is stuck, so a restart is the right cure; the rest is for a human to read."""
     h = desk.health()
+    if h.get("storeError"):                           # public: the kind of failure, not the Upstash host in the message
+        h["storeError"] = h["storeError"].split("(")[0]
     h.update(ok=h["worker"] == "ok", llm=E.llm_ready(), llmChain=[n for n, *_ in E._providers("smart")], llmCoolingSec=max(0, round(E.LLM.get("coolUntil", 0) - time.time())),
              telegram=("webhook set" if TG_BOT["hooked"] else "webhook not set") if TG_READY else None,
              outbox=OUTBOX.qsize())
@@ -183,9 +259,10 @@ def shutdown():
 
 @app.get("/api/state")
 def state(request: Request):
-    if not console_ok(request):
+    if not console_ok(request) and not PUBLIC_VIEW:
         return {"locked": True}                    # 200, so a health check on this path keeps passing
     v = desk.view()
+    v["readOnly"] = not console_can_act(request)
     v["whatsapp"] = WA_READY
     v["telegram"] = TG_BOT["username"] if TG_READY else None
     v["build"] = (os.getenv("RENDER_GIT_COMMIT") or "local")[:7]
@@ -197,8 +274,11 @@ def state(request: Request):
 @app.post("/api/intake", dependencies=[Depends(console_auth)])
 async def intake(request: Request):
     body = await request.json()
-    hist = [m for m in body.get("chat", []) if m.get("role") in ("user", "bot")][-12:]
-    text = (body.get("text") or "").strip()
+    hist = [{"role": m["role"], "text": str(m.get("text") or "")[:MAX_TEXT]} for m in (body.get("chat") or [])[-12:]
+            if isinstance(m, dict) and m.get("role") in ("user", "bot")]
+    text = str(body.get("text") or "").strip()[:MAX_TEXT]       # every character is model tokens someone pays for
+    if not isinstance(body.get("load") or {}, dict):
+        raise HTTPException(400, "load must be an object")
     if not text:
         raise HTTPException(400, "empty message")
     if not E.llm_ready():
@@ -207,8 +287,9 @@ async def intake(request: Request):
     try:
         # a model call (and geocoding) off the event loop, or every webhook and poll waits for it
         merged, reply, miss = await run_in_threadpool(E.intake_turn, hist, body.get("load") or {}, text)
-    except Exception as e:
-        return {"reply": f"I couldn't read that ({str(e)[:80]}). Try again.", "missing": ["all"], "load": body.get("load") or {}}
+    except Exception as e:                       # the provider's error text stays in the log, not on the page
+        print("console intake failed:", safe(e)[:200])
+        return {"reply": "I couldn't read that just now. Try again in a minute.", "missing": ["all"], "load": body.get("load") or {}}
     clean = {k: v for k, v in merged.items() if v not in (None, "")}
     out = {"reply": reply, "missing": miss, "load": clean}
     if not miss:
@@ -271,7 +352,9 @@ async def add_owner(request: Request):
         phone = "91" + phone
     if len(phone) < 11 or not (b.get("name") or "").strip():
         raise HTTPException(400, "Name and a WhatsApp number with country code are needed")
-    o = await run_in_threadpool(desk.register_owner, phone, b["name"], b.get("city"))   # geocoding is a network call
+    if len(phone) > 15:
+        raise HTTPException(400, "That is not a phone number")
+    o = await run_in_threadpool(desk.register_owner, phone, str(b["name"])[:40], str(b.get("city") or "")[:60] or None)   # geocoding is a network call
     if WA_READY:
         desk_send(phone, f"Namaste {o['name']} 🙏 Aap Bhaada freight desk se jud gaye hain. Roz subah hum poochenge "
                        "ki gaadi khaali hai ya nahi; loads seedhe WhatsApp par aayenge.")
@@ -327,9 +410,9 @@ async def receive(request: Request, bg: BackgroundTasks):
 async def telegram(path: str, request: Request, bg: BackgroundTasks):
     if not TG_READY or not hmac.compare_digest(path.encode(), TG_PATH.encode()):
         raise HTTPException(404)
-    got = request.headers.get("x-telegram-bot-api-secret-token")
-    # once setWebhook took our secret, every real update carries it; a path seen in a log is not enough to post
-    if (TG_BOT["hooked"] or got is not None) and not hmac.compare_digest((got or "").encode(), TG_SECRET.encode()):
+    got = request.headers.get("x-telegram-bot-api-secret-token") or ""
+    # every webhook we ever set carries this secret, so a real update always has it; a path seen in a log is not enough
+    if not hmac.compare_digest(got.encode(), TG_SECRET.encode()):
         raise HTTPException(403)
     u = await request.json()
     if first_time("tg:" + str(u.get("update_id"))):
@@ -338,10 +421,52 @@ async def telegram(path: str, request: Request, bg: BackgroundTasks):
 
 ONLY_TEXT = "Abhi sirf text aur voice note samajh pata hoon 🙏 Type kijiye ya bol ke bhejiye."
 OOPS = "Maaf kijiye, mere taraf se kuch gadbad hui 🙏 Thodi der baad wahi message dobara bhejiye."
+TOO_LONG = "🎤 Voice note 2 minute se chhota bhejiye 🙏 Ya load type kar dijiye."
+SLOW_DOWN = "Bahut saare messages ek saath aa gaye 🙏 Thodi der ruk ke bhejiye."
+
+# Every message can cost model calls on prepaid credit: one chat, or a crowd of them, can't run the desk dry
+RATE = {"perMin": 12, "perHour": 120, "allPerHour": 900}
+HITS, ALL_HITS, WARNED, RATE_LOCK = {}, collections.deque(), {}, threading.Lock()
+
+def allowed(who):
+    """(ok, tell_them): a sliding window per sender and for the whole desk; a refused sender hears it once in 10 min."""
+    t = time.time()
+    with RATE_LOCK:
+        while ALL_HITS and t - ALL_HITS[0] > 3600:
+            ALL_HITS.popleft()
+        q = HITS.setdefault(who, collections.deque())
+        while q and t - q[0] > 3600:
+            q.popleft()
+        if len(q) >= RATE["perHour"] or sum(t - x < 60 for x in q) >= RATE["perMin"] or len(ALL_HITS) >= RATE["allPerHour"]:
+            tell = t - WARNED.get(who, 0) > 600
+            if tell:
+                WARNED[who] = t
+            return False, tell
+        q.append(t)
+        ALL_HITS.append(t)
+        if len(HITS) > 5000:                               # forget senders quiet for an hour
+            for k in [k for k, d in HITS.items() if not d or t - d[-1] > 3600]:
+                HITS.pop(k, None)
+                WARNED.pop(k, None)
+        return True, False
+
+def gate(who):
+    ok, tell = allowed(who)
+    if not ok:
+        print("rate limited:", str(who)[-4:])
+        if tell:
+            send(who, SLOW_DOWN)
+    return ok
 
 def handle_telegram(u):
     if "callback_query" in u:
         q = u["callback_query"]
+        chat = (q.get("message") or {}).get("chat") or {}
+        # a button counts only from the person whose private chat it is in: in a group anyone could tap a broker's Approve
+        if chat.get("type", "private") != "private" or (q.get("from") and q["from"].get("id") != chat.get("id")):
+            return
+        if not gate(f"tg:{chat.get('id')}"):
+            return
         try:
             requests.post(f"{TG_API}/answerCallbackQuery", json={"callback_query_id": q["id"]}, timeout=10)
         except Exception:
@@ -350,13 +475,19 @@ def handle_telegram(u):
     m = u.get("message") or {}
     if not m.get("chat"):
         return
+    if m["chat"].get("type", "private") != "private":
+        return                                           # a group would make all its members one broker or one owner
     key = f"tg:{m['chat']['id']}"
+    if not gate(key):
+        return
     with LOCKS.setdefault(key, threading.Lock()):
         try:
             media = m.get("voice") or m.get("audio") or m.get("video_note")
             if media:
+                if (media.get("duration") or 0) > MAX_VOICE_SEC or (media.get("file_size") or 0) > MAX_VOICE_BYTES:
+                    return send(key, TOO_LONG)
                 f = requests.get(f"{TG_API}/getFile", params={"file_id": media["file_id"]}, timeout=15).json()["result"]
-                audio = requests.get(f"https://api.telegram.org/file/bot{TG_TOKEN}/{f['file_path']}", timeout=60).content
+                audio = fetch_capped(f"https://api.telegram.org/file/bot{TG_TOKEN}/{f['file_path']}")
                 text = E.transcribe(audio, media.get("mime_type") or "audio/ogg", name=f.get("file_path"))
                 print(f"voice {key[-4:]}: {media.get('mime_type')} {len(audio)} bytes {media.get('duration')}s -> {len(text)} chars")
                 if not text:
@@ -375,6 +506,8 @@ def handle_telegram(u):
 
 def handle_message(msg):
     wa = msg["from"]
+    if not gate(wa):
+        return
     with LOCKS.setdefault(wa, threading.Lock()):
         try:
             kind = msg.get("type")
@@ -383,7 +516,10 @@ def handle_message(msg):
             if kind == "button":
                 return on_button(wa, msg["button"].get("payload", ""))
             if kind == "audio":
-                audio, mime = wa_media(msg["audio"]["id"])
+                got = wa_media(msg["audio"]["id"])
+                if not got:
+                    return send(wa, TOO_LONG)
+                audio, mime = got
                 text = E.transcribe(audio, mime)
                 if not text:
                     return send(wa, "🎤 Awaaz saaf nahi aayi. Phone muh ke paas rakh ke dobara bolo, ya type kar do.")
@@ -405,6 +541,9 @@ REJECT = re.compile(r"^\s*(?:(reject(ed)?|nahi|nahin|nhi|no|mat|rehne do|cancel)
 STATUS_Q = re.compile(r"\b(status|update|kya hua|kya scene|kahan tak pahunch|progress)\b", re.I)
 LOAD_ID = re.compile(r"\bBH[-\s]?(\d{4,})\b", re.I)
 
+FORGET = re.compile(r"^\s*(delete my data|delete data|forget me|mera data (hatao|delete karo|mitao))\s*[.!]*\s*$", re.I)
+PRIVACY = ("🔒 Aapka naam, number aur gaadi ki jaankari sirf load dene ke liye rakhte hain. "
+           "Sab hatana ho to *delete my data* likhiye.")
 GREETING = re.compile(r"^\s*(hi+|hello|helo|hey|new|reset|namaste|namaskar|start|menu)\s*[!.]*\s*$", re.I)
 ROLE_BUTTONS = [("role:owner", "🚚 Truck owner"), ("role:broker", "📦 Broker")]
 
@@ -413,7 +552,7 @@ def role_menu(wa):
     now_as = f"Abhi aap *{o['name']}* (truck owner) ke roop mein jude hain.\n" if o and not o.get("sandbox") else ""
     send(wa, "Namaste 🙏 Bhaada freight desk.\n" + now_as + "Aap kaun hain? Neeche button dabaiye:\n"
              "🚚 *Truck owner*: gaadi khaali batao, load aur rate yahin milenge\n"
-             "📦 *Broker*: load bhejo (text ya voice), hum truck dhoondh ke quote denge", ROLE_BUTTONS)
+             "📦 *Broker*: load bhejo (text ya voice), hum truck dhoondh ke quote denge\n" + PRIVACY, ROLE_BUTTONS)
 
 def join_as_owner(wa, name, city):
     o = desk.register_owner(wa, name, city)
@@ -422,9 +561,15 @@ def join_as_owner(wa, name, city):
         desk.settings["mode"] = "live"
         desk.post("save")
     send(wa, f"Namaste {o['name']} 🙏 Aap fleet owner ke roop mein jud gaye" + (f" ({o['baseCity']})" if o.get("baseCity") else "")
-             + ".\nGaadi khaali ho to aise bhejiye: *32 ft MXL, Bhiwandi, aaj, ₹85/km*\n(Role badalna ho to *hi* likhiye.)")
+             + ".\nGaadi khaali ho to aise bhejiye: *32 ft MXL, Bhiwandi, aaj, ₹85/km*\n(Role badalna ho to *hi* likhiye.)\n"
+             + PRIVACY)
 
 def on_text(wa, text):
+    text = text[:MAX_TEXT]
+    if FORGET.match(text):                                 # before remember(): nothing of theirs is kept
+        desk.post("forget", key=wa)
+        CONVO.pop(wa, None)
+        return send(wa, "🗑️ Aapka naam, number, gaadi aur chat desk se hata diye gaye. Dobara judna ho to *hi* likhiye.")
     remember(wa, "Them", text)
     if GREETING.match(text):
         return role_menu(wa)
@@ -469,6 +614,7 @@ def on_text(wa, text):
         return send(wa, "Abhi system thoda busy hai 🙏 1 minute baad wahi message dobara bhejiye.")
     s["load"] = {k: v for k, v in merged.items() if v not in (None, "")}
     s["chat"].append({"role": "bot", "text": reply})
+    del s["chat"][:-16]                                     # saved with the desk state: a broker who never finishes can't grow it
     if miss:
         desk.post("save")                                    # a half-told load survives a restart
         return send(wa, reply)
