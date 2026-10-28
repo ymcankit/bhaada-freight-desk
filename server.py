@@ -303,8 +303,10 @@ def admin_only(request: Request):
 IP_HITS = {}
 def ip_limit(request: Request, what, per_hour):
     """Per-visitor budget for actions that spend model calls or message people."""
-    # the proxy appends the real client address last; earlier entries are whatever the client sent
-    ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "?")).split(",")[-1].strip()
+    # Render sits behind Cloudflare, which sets the visitor's address itself; X-Forwarded-For can be typed by the client
+    h = request.headers
+    ip = (h.get("cf-connecting-ip") or h.get("true-client-ip") or (h.get("x-forwarded-for") or "").split(",")[0].strip()
+          or (request.client.host if request.client else "?"))
     q = IP_HITS.setdefault((ip, what), collections.deque())
     t = time.time()
     while q and t - q[0] > 3600:
@@ -353,6 +355,11 @@ def state(request: Request):
             for th in l["threads"].values():
                 if not th.get("sandbox"):
                     th["messages"] = [{**m, "text": "(hidden in the public view)"} for m in th.get("messages", [])]
+                    th.pop("vehicle", None)
+                    th.pop("driverPhone", None)
+            if l.get("source") in ("telegram", "whatsapp"):     # quoted words and plates in the event log too
+                for e in l.get("events", []):
+                    e["text"] = re.sub(r"“[^”]*”", "“…”", live.Desk.DISPATCH_RE.sub(lambda m: m.group(1) + "··", e["text"]))
     v["whatsapp"] = WA_READY
     v["telegram"] = TG_BOT["username"] if TG_READY else None
     v["build"] = (os.getenv("RENDER_GIT_COMMIT") or "local")[:7]
@@ -410,6 +417,8 @@ def lr_pdf(lid: str, request: Request):
     if not console_ok(request) and not PUBLIC_VIEW:
         raise HTTPException(401, "Console password needed")
     load = desk._find(lid)
+    if load and (ON_HOST and not console_ok(request) or judge_mode(request)) and load.get("source") != "console":
+        raise HTTPException(403, "A real broker's LR is not shown in the public console")
     pdf = None
     for _ in range(3):
         try:

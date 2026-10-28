@@ -272,7 +272,10 @@ def read_image(data, mime="image/jpeg", timeout=40):
     return str(parse_json(r.json()["choices"][0]["message"].get("content") or "{}").get("text") or "").strip()
 
 # =============================== normalising what the LLM extracted ===============================
-CITY_ALIASES = {"bombay": "Mumbai", "bangalore": "Bengaluru", "bengaluru": "Bengaluru",
+CITY_ALIASES = {"भिवंडी": "Bhiwandi", "सूरत": "Surat", "मुंबई": "Mumbai", "पुणे": "Pune", "दिल्ली": "Delhi", "अहमदाबाद": "Ahmedabad",
+                "जयपुर": "Jaipur", "इंदौर": "Indore", "नागपुर": "Nagpur", "कोलकाता": "Kolkata", "चेन्नई": "Chennai", "नासिक": "Nashik",
+                "वापी": "Vapi", "वडोदरा": "Vadodara", "लखनऊ": "Lucknow", "कानपुर": "Kanpur", "हैदराबाद": "Hyderabad",
+                "bombay": "Mumbai", "bangalore": "Bengaluru", "bengaluru": "Bengaluru",
                 "new delhi": "Delhi", "ncr": "Delhi", "calcutta": "Kolkata", "madras": "Chennai"}
 
 CITY_RESOLVER = None      # set by the live desk to geo.resolve_city: any Indian city, not only the seeded list
@@ -292,21 +295,24 @@ def norm_city(s):
     for a, c in CITY_ALIASES.items():
         if a in t:
             return c
-    m = difflib.get_close_matches(str(s).strip().title(), KNOWN_CITIES, 1, 0.8)
-    if m:
-        return m[0]
-    if CITY_RESOLVER:
+    if CITY_RESOLVER:                                  # the map first: "Raipur" is a city, not a typo for Jaipur
         hit = CITY_RESOLVER(s)
-        if hit and hit.get("src") != "seed":
-            NEW_PLACES[hit["name"]] = hit             # found by a geocoder: the broker confirms it before owners are messaged
-        return hit["name"] if hit else None
+        if hit:
+            if hit.get("src") != "seed":
+                NEW_PLACES[hit["name"]] = hit         # found by a geocoder: the broker confirms it before owners are messaged
+            return hit["name"]
+    m = difflib.get_close_matches(str(s).strip().title(), KNOWN_CITIES, 1, 0.8)
+    if m:                                              # a likely typo of a known city: still confirmed with the broker
+        NEW_PLACES.setdefault(m[0], {"name": m[0], "fuzzy": True})
+        return m[0]
     return None
 
 NEW_PLACES = {}
 YES_TEXT = re.compile(r"^\s*(haan|haa|ha|han|hn|yes|y|ok|okay|sahi|sahi hai|theek|thik|correct|ji|ji haan|bilkul)\b", re.I)
 
 def _km_guess(a, b):
-    pts = [CITY["cities"].get(x) or ([NEW_PLACES[x]["lat"], NEW_PLACES[x]["lon"]] if x in NEW_PLACES else None) for x in (a, b)]
+    pts = [CITY["cities"].get(x) or ([NEW_PLACES[x]["lat"], NEW_PLACES[x]["lon"]] if NEW_PLACES.get(x, {}).get("lat") else None)
+           for x in (a, b)]
     if not all(pts):
         return None
     (la1, lo1), (la2, lo2) = [map(math.radians, p) for p in pts]
@@ -434,10 +440,15 @@ def intake_rules(hist):
     low = text.lower()
     out = {}
     word = r"([a-z\u0900-\u097f][\w\u0900-\u097f]{1,30})"
+    eng = re.search(r"\bfrom\s+([a-z][\w]{1,30})\s+to\s+([a-z][\w]{1,30})", low)     # "need a truck from Pune to Nagpur"
+    if eng:
+        out["origin"], out["destination"] = eng.group(1), eng.group(2)
     to = re.search(word + r"\s+(?:ke liye|tak|ko jaana|ko jana)\b", low)      # "Surat ke liye Bhiwandi se": destination first
     frm = re.search(word + r"\s+(?:se|से|from)\b", low)
     pair = re.search(r"([a-z\u0900-\u097f][\w\u0900-\u097f ]{1,30}?)\s+(?:se|से|from)\s+([a-z\u0900-\u097f][\w\u0900-\u097f]{1,30})", low)
-    if to and frm and to.group(1) != frm.group(1):
+    if eng:
+        pass
+    elif to and frm and to.group(1) != frm.group(1):
         out["origin"], out["destination"] = frm.group(1), to.group(1)
     elif pair:
         out["origin"] = pair.group(1).split()[-1]
@@ -527,7 +538,8 @@ Reply language: Hinglish - Hindi words in Roman script, like "Theek hai, kitne t
             merged["truck_type_asked"], merged["truck_type"] = merged.get("truck_type"), fit["type"]
         reply = (f"Theek hai ✅ {merged['origin']} → {merged['destination']}, {merged['weight_ton']:g} T {m['hi']}, "
                  f"{merged['truck_type']}{advice}, {merged.get('pickup_when') or 'kal'}"
-                 + (f", budget ₹{merged['budget_rs']:,.0f}" if merged.get("budget_rs") else "")
+                 + ((f", budget ₹{merged['budget_rs']:g}/km" if merged["budget_rs"] < 300 else f", budget ₹{merged['budget_rs']:,.0f}")
+                    if merged.get("budget_rs") else "")
                  + (". ⚠️ Khatarnaak maal: sirf Hazchem permit aur trained driver wali gaadi" if m.get("hazmat") else "")
                  + ". Owners ko message kar raha hoon.")
     return merged, reply, miss
@@ -576,7 +588,7 @@ def _day_mentions(text):
         out.append((m.start(), max(0, min(30, days)), m.group(0)))
     for m in re.finditer(r"\bparso\b|\bday after(?: tomorrow)?\b", t):
         add(m, 2)
-    for m in re.finditer(r"\bkal(?: subah| shaam| raat)?\b|\btomorrow\b", t):
+    for m in re.finditer(r"\bkal(?: subah| shaam| raat)?\b|(?<!after )\btomorrow\b", t):
         add(m, 1)
     for m in re.finditer(r"\baaj(?: hi)?\b|\btoday\b|\btonight\b|\babhi\b(?! tak| batao| bolo| bata)", t):
         add(m, 0)
@@ -726,6 +738,10 @@ def truck_fit(load):
     Returns the type to source, why, and the material rule; never smaller than what the broker asked for."""
     w = load.get("weight_ton") or 0
     m = MATERIALS[load.get("material_class") or "general"]
+    if re.search(r"\bodc\b|over.?dimension|transformer|boiler|reactor|windmill|blade", str(load.get("material") or ""), re.I):
+        return {"type": None, "material": m, "volume": 0,
+                "why": f"{w:g} T {load.get('material')}: ODC (over-dimensional) maal hai, low-bed/hydraulic trailer, route survey aur "
+                       "permit chahiye. Ye load aap khud dekh lijiye; hum abhi ODC ka rate nahi nikalte"}
     vol = load.get("volume_cft") or (round(w * 1000 / m["kgPerCft"]) if m.get("kgPerCft") and w else 0)
     caps, cft = rates["capacityTonByType"], rates["volumeCftByType"]
     fits = lambda t: caps[t] >= w and cft[t] >= vol and body_ok(t, m["body"])

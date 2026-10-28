@@ -231,6 +231,9 @@ ok &= check("owner amounts: lakh + hazaar, 2.5L, saade, percentages and plates i
 ok &= check("hold replies: 'no problem bhai' and 'koi dikkat nahi' are yes; unclear is asked again",
             live.yes_no("No problem bhai, gaadi ready hai") == "yes" and live.yes_no("haan, koi dikkat nahi") == "yes"
             and live.yes_no("sorry gaadi nikal gayi") == "no" and live.yes_no("kya rate tha?") is None)
+ok &= check("hold replies: haanji / ji nahi / 'abhi nahi bata sakta'",
+            live.yes_no("haanji") == "yes" and live.yes_no("ji nahi") == "no" and live.yes_no("bilkul nahi") == "no"
+            and live.yes_no("abhi nahi bata sakta") is None)
 ok &= check("'haan na' is not a no", not live.NO.search("haan na bhai") and bool(live.NO.search("na") and live.NO.search("nahi")))
 
 print("\nALL PASS" if ok else "\nSOME FAILED")

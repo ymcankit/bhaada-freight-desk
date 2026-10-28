@@ -77,6 +77,12 @@ def run_tests():
                     E.intake_rules([{"role": "user", "text": "Surat ke liye Bhiwandi se 18 ton kapda"}])["origin"] == "bhiwandi"
                     and E.intake_rules([{"role": "user", "text": "Bhiwandi se Surat 500 kg parcel"}])["weight_ton"] == 0.5
                     and E.intake_rules([{"role": "user", "text": "Pune se Nagpur 10 ton steel budget 25k"}])["budget_rs"] == "25k")
+        dev = E.normalise_load(E.intake_rules([{"role": "user", "text": "भिवंडी से सूरत 18 टन कपड़ा"}]))
+        ok &= check("rules intake reads Devanagari cities", dev["origin"] == "Bhiwandi" and dev["destination"] == "Surat", str(dev))
+        E.NEW_PLACES.clear()
+        ok &= check("a near-miss city name is never silently a known city", E.norm_city("Raipur") != "Jaipur" or "Jaipur" in E.NEW_PLACES)
+        ok &= check("explicit ODC escalates even when a truck could carry the weight",
+                    E.truck_fit({"weight_ton": 20, "material_class": "machinery", "material": "transformer ODC"})["type"] is None)
         ok &= check("ODC is not 'split it'", "ODC" in E.truck_fit({"weight_ton": 35, "material_class": "machinery", "material": "transformer"})["why"])
         ok &= check("volume and lengths are not weights", E.norm_tons("1500 cft") is None and E.norm_tons("800 carton 4 ton") == 4
                     and E.norm_tons("32 ft") is None and E.norm_tons("14 ton 1500 cft") == 14)

@@ -45,10 +45,10 @@
   "Trailer 40 ft": 30
  },
  "tollPerKmByAxle": {
-  "2": 3.4,
-  "3": 3.7,
-  "4": 5.3,
-  "5": 5.3
+  "2": 4.2,
+  "3": 4.8,
+  "4": 6.8,
+  "5": 6.8
  },
  "driverCostPerDay": 1200,
  "avgSpeedKmPerDay": 350,
@@ -176,7 +176,7 @@
   "Trailer 40 ft": "open"
  },
  "_truckComment": "Typical body and load space (cubic feet) in the Indian market: 14-22 ft LCV/ICV come as open or closed bodies, SXL/MXL are closed containers, a Taurus is an open high-side truck. Owners confirm the body when they quote.",
- "_tollComment": "Per-km toll by axle class, from NHAI's base rates (2008 fee rules: 2-axle 2.20, 3-axle 2.40, 4-6 axle 3.45 per km) with the yearly revisions to 2026, about +55%; expressways cost more. An estimate until per-plaza totals are summed.",
+ "_tollComment": "Per-km toll by axle class, from NHAI's base rates (2008 fee rules: 2-axle 2.20, 3-axle 2.40, 4-6 axle 3.45 per km) with the yearly revisions to 2026, about +90% with expressway stretches; expressways cost more. An estimate until per-plaza totals are summed.",
  "seasons": [
   {
    "name": "Diwali",

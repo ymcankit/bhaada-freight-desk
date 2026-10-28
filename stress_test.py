@@ -710,13 +710,14 @@ def phase_faults():
     rows = []
 
     # 1. model provider errors: a fake key so every call goes to the (failing) provider
+    D.settings["aiAgents"] = True                         # demo owners near Bhiwandi bid, so the fault hits real negotiation
     for mode in ("429", "500", "timeout"):
         E.LLM["key"], E.LLM["openai_key"] = "fake-groq", "fake-openai"
         E.LLM["coolUntil"], E.LLM["cools"], E.LLM["down"] = 0, {}, {}
         LLMF["mode"] = mode
         t0, e0, n0 = time.time(), len(EVENTS), NET["api.openai.com"] + NET["api.groq.com"]
         L = fresh_load(50900)
-        ok = L and wait_for(lambda: L["status"] in live.Desk.CLOSED + ("needs_approval", "waiting_trucks"), 150)
+        ok = L and wait_for(lambda: L["status"] in live.Desk.CLOSED + ("needs_approval",), 150)
         t_close = time.time() - t0
         neg = [s for k, s in list(EVENTS)[e0:] if k == "owner_message"]
         hs = health_summary(t0)

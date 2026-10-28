@@ -50,14 +50,21 @@ def _unpack(raw):
 geo.seed_cities(E.CITY["cities"])
 E.CITY_RESOLVER = geo.resolve_city
 
-YES = re.compile(r"\b(haan|haa|ha|han|yes|yep|ok|okay|pakka|confirm|confirmed|done|theek|thik|chalega|sure|book|ji|ready|"
+YES = re.compile(r"\b(haanji|hanji|haan ji|haan|haa|ha|han|yes|yep|ok|okay|pakka|confirm|confirmed|done|theek|thik|chalega|sure|book|ji|ready|"
                  r"hold kar (diya|di|dunga|denge)|de dunga|de denge|ho jayega|bilkul)\b|👍|✅", re.I)
 NO = re.compile(r"\b(nahi|nahin|nhi|no|cancel|sorry|nikal|nikal gayi|not|mat)\b|^\W*na+\W*$|❌", re.I)   # "haan na" is a yes
 BENIGN_NO = re.compile(r"\bno problem\b|\b(koi )?(dikkat|problem|tension|issue|chinta) nahi\b|\bnahi nahi\b|\bmana nahi\b", re.I)
 
+UNSURE = re.compile(r"nahi bata (sakta|sakti|paunga)|pata nahi|nahi pata|baad mein batata|sochke batata|confirm karke batata|thodi der|"
+                    r"poochta|puchta|pooch ke|puch ke|check karke|dekh ke batata|driver se baat", re.I)
+
 def yes_no(text):
-    """'yes', 'no' or None. 'No problem bhai', 'koi dikkat nahi' and 'nahi nahi, de dunga' are not refusals."""
-    t = BENIGN_NO.sub(" ", text)
+    """'yes', 'no' or None. 'No problem bhai', 'koi dikkat nahi' and 'nahi nahi, de dunga' are not refusals;
+    'abhi nahi bata sakta' is not an answer yet."""
+    if UNSURE.search(text):
+        return None
+    t = re.sub(r"\b(ji|bilkul)\s+(nahi|nahin|na)\b", "nahi", text, flags=re.I)        # "ji nahi", "bilkul nahi" are no
+    t = BENIGN_NO.sub(" ", t)
     y = bool(YES.search(t)) or (bool(BENIGN_NO.search(text)) and not NO.search(t))
     n = bool(NO.search(t))
     return "yes" if y and not n else "no" if n and not y else None
@@ -269,8 +276,9 @@ class Desk:
         for k in ("floorPct", "targetPct", "ceilingPct"):
             E.MARGIN[k] = float(self.settings[k])
 
-    def timeout(self):
-        return self.settings["replyTimeoutSec"][self.settings["mode"]]
+    def timeout(self, load=None):
+        """Owner reply window: a load's own mode decides (an open-console demo load runs on sandbox timers)."""
+        return self.settings["replyTimeoutSec"][(load or {}).get("mode") or self.settings["mode"]]
 
     # ---------------- event plumbing ----------------
     def post(self, kind, **data):
@@ -537,7 +545,8 @@ class Desk:
                 th["messages"].append({"dir": "in", "text": text, "t": now()})
                 return self._to_owner(load, th, f"{load['id']}: kya gaadi nahi aa payegi? Pakka cancel ho to *haan cancel* likhiye. "
                                                 "Koi aur baat ho (time, kagaz, payment) to bataiye, booking bani rahegi.")
-            if in_window and (SURE_CANCEL.search(text) or (th.get("cancelAsked") and (CANCEL.search(text) or YES.search(text)))):
+            # after "pakka cancel?", only a cancel word un-books: "haan aa jayegi" means the truck is coming
+            if in_window and (SURE_CANCEL.search(text) or (th.get("cancelAsked") and CANCEL.search(text))):
                 th["messages"].append({"dir": "in", "text": text, "t": now()})
                 th["status"] = "backed_out"
                 self._event(load, "Booking", f"{th['name']} cancelled: “{text[:60]}”.")
@@ -568,7 +577,7 @@ class Desk:
             rows.append(f"- {load['id']}: {lane.get('origin')} → {lane.get('destination')}, {lane.get('distanceKm')} km, "
                         f"{f.get('weight_ton')} T, {th['type']}, pickup {f.get('pickup_when') or 'kal'}. Load stage: {stage}. "
                         f"Owner's thread: {th['status']}" + (f", owner asked ₹{th['ask']}/km" if th.get("ask") else "")
-                        + (f", desk countered ₹{th['counter']}/km" if th.get("counter") else "")
+                        + (f", desk countered ₹{th['counter']:.1f}/km" if th.get("counter") else "")
                         + (f", {agreed}" if agreed else "") + (f". {won}" if won else ""))
             if len(rows) >= 4:
                 break
@@ -768,6 +777,8 @@ class Desk:
                 "raw": raw, "load": fields, "status": "routing", "events": [], "threads": {}, "brokerMessages": [],
                 "quote": None, "winner": None, "rounds": 0, "mode": self.settings["mode"], "phase": "quote",
                 "fixedSell": None, "contacted": [], "reason": "", "widenLeft": 1, "demoOnly": demo_only}
+        if demo_only:
+            load["mode"] = "sandbox"                    # demo owners and demo timers: a judge's load finishes in a minute or two
         self.post("new_load", load=load)               # the worker owns self.loads
         return load
 
@@ -799,10 +810,15 @@ class Desk:
                         "returnLoadProb": known["returnLoadProb"] if known else self.settings["defaultReturnLoadProb"],
                         "memory": self._lane_memory(f"{o['name']}-{d['name']}")}
         self._event(load, "Routing", f"{r['km']} km by road ({r['src']})" + (f", about {r['hours']} h driving" if r.get("hours") else ""))
-        if f.get("budget_rs") and f["budget_rs"] < 300:     # "40 rupaye per km" lands here as 40: a rate, not a total
-            per_km = f["budget_rs"]
-            f["budget_rs"] = round(per_km * load["lane"]["distanceKm"])
-            self._event(load, "Intake", f"Budget ₹{per_km:g}/km × {load['lane']['distanceKm']} km = ₹{f['budget_rs']:,}")
+        if f.get("budget_rs") and f["budget_rs"] < 300:     # "40 rupaye per km", or "budget 25" meaning ₹25,000
+            small, km = f["budget_rs"], load["lane"]["distanceKm"]
+            mkt = E.market_rate(km, f.get("truck_type") if f.get("truck_type") in E.KNOWN_TYPES else "32 ft MXL")
+            if 0.4 * mkt <= small * 1000 <= 2.5 * mkt and not 0.4 * mkt <= small * km <= 2.5 * mkt:
+                f["budget_rs"] = small * 1000
+                self._event(load, "Intake", f"Budget ₹{small:g} read as ₹{f['budget_rs']:,.0f} (thousands; ₹{small:g}/km would be far off the market)")
+            else:
+                f["budget_rs"] = round(small * km)
+                self._event(load, "Intake", f"Budget ₹{small:g}/km × {km} km = ₹{f['budget_rs']:,}")
         f.setdefault("material_class", E.material_class(f.get("material"), load.get("raw")))
         fit = E.truck_fit(f)
         m = fit["material"]
@@ -879,7 +895,7 @@ class Desk:
             return self._wait_for_trucks(load, radius)
         load["rounds"] += 1
         load["status"] = "sourcing"
-        load["deadline"] = now() + self.timeout()
+        load["deadline"] = now() + self.timeout(load)
         f, lane = load["load"], load["lane"]
         for c in cands:
             key = c["ownerKey"]
@@ -906,7 +922,7 @@ class Desk:
                                      "Gaadi free hai? Rate batayiye (₹/km ya total).")
         self._event(load, "Sourcing", f"Messaged {len(cands)} owners near {lane['origin']} at once"
                                       + (f" (round {load['rounds']}, within {radius} km)" if load["rounds"] > 1 else "")
-                                      + f". Waiting up to {self.timeout() // 60 or 1} min for replies.")
+                                      + f". Waiting up to {self.timeout(load) // 60 or 1} min for replies.")
         self.save()
 
     WAIT_HOURS = 6
@@ -991,12 +1007,12 @@ class Desk:
             th["status"], th["agreedBuy"] = "deal", round(d["rate"] * ec["km"])
             if d["rate"] <= ec["target"] and load["status"] == "sourcing":   # a good offer is in: give the rest 45 s, not the full window
                 load["deadline"] = min(load.get("deadline", now() + 45), now() + 45)
-            reply = d["reply"] or f"Done ✅ ₹{d['rate']}/km. Confirm karke batate hain."
-            self._event(load, "Negotiation", f"{th['name']} agreed at ₹{d['rate']}/km.")
+            reply = d["reply"] or f"Done ✅ ₹{d['rate']:.1f}/km. Confirm karke batate hain."
+            self._event(load, "Negotiation", f"{th['name']} agreed at ₹{d['rate']:.1f}/km (₹{th['agreedBuy']:,}).")
         elif d["action"] == "counter":
             th["status"], th["counter"] = "countered", d["rate"]
             reply = d["reply"] or f"₹{d['rate']}/km ho jayega? Regular load denge 👍"
-            self._event(load, "Negotiation", f"Countered {th['name']}: ₹{th['ask'] or '?'}/km → ₹{d['rate']}/km.")
+            self._event(load, "Negotiation", f"Countered {th['name']}: ₹{th['ask'] or '?'}/km → ₹{d['rate']:.1f}/km.")
         elif d["action"] == "decline":
             th["status"] = "declined"
             reply = d["reply"] or "Koi baat nahi, agli baar 🙏"
@@ -1027,7 +1043,7 @@ class Desk:
                 out = self._llm_json(
                     "Read a truck owner's latest reply in a freight rate negotiation (Indian road freight, Hinglish chat).\n"
                     f"Load: {lane['origin']} → {lane['destination']}, {km} km, {f.get('weight_ton')} T, {th['type']}, "
-                    f"pickup {f.get('pickup_when') or 'kal'}. Our last offer: {('₹' + str(th['counter']) + '/km') if th['counter'] else 'none yet'}.\n"
+                    f"pickup {f.get('pickup_when') or 'kal'}. Our last offer: {('₹%.1f/km' % th['counter']) if th['counter'] else 'none yet'}.\n"
                     f"Terms you may state: the rate includes diesel and toll. {self.terms_line()} Anything else (loading time, "
                     "documents) the broker confirms.\n"
                     f"Conversation (latest last):\n{hist}\n"
@@ -1129,8 +1145,8 @@ class Desk:
         km, ask, rnd, last = ec["km"], th["ask"], th["rounds"], self.settings["maxRounds"]
         target, ceiling = ec["target"], ec["ceiling"]
         rival = self._best_rival(load, th)
-        done = lambda r: {"action": "accept", "rate": round(r, 1),
-                          "reply": f"Done ✅ ₹{round(r, 1)}/km (₹{round(r * km):,} total). Broker se confirm karke turant batate hain."}
+        done = lambda r: {"action": "accept", "rate": r,              # unrounded: the booked total is exactly what was said
+                          "reply": f"Done ✅ ₹{round(r * km):,} total (₹{r:.1f}/km). Broker se confirm karke turant batate hain."}
         if read["intent"] == "refuse":
             return {"action": "decline", "rate": None, "reply": "Koi baat nahi 🙏 Agla load aate hi aapko batayenge."}
         if read["intent"] == "accept_offer" and th["counter"]:
@@ -1171,7 +1187,9 @@ class Desk:
         offer = round(min(offer, cap), 1)
         if offer >= ask:
             return done(ask)
-        lump = f"₹{round(offer * km / 500) * 500:,} total (₹{offer}/km)"     # owners think in lump sums: "27 hazaar"
+        total = max(500, int(offer * km // 500) * 500)                     # owners think in lump sums: "27 hazaar"
+        offer = total / km                                                   # so a "haan" books exactly the total we said
+        lump = f"₹{total:,} total (₹{offer:.1f}/km)"
         lines = [f"Aapke liye {lump} tak badha diya, isse zyada mushkil hai." if rnd >= last - 1 else
                  f"{lump} de sakte hain." if rnd == 1 else f"Aapke liye {lump} tak badha diya."]
         if rnd == 1:
@@ -1426,7 +1444,7 @@ class Desk:
         sell = load["fixedSell"] or E.target_sell(load["lane"], load["searchType"])
         ceiling = round(sell * (1 - E.MARGIN["floorPct"] / 100) / km, 1)
         load["rounds"] += 1
-        load["status"], load["deadline"] = "sourcing", now() + self.timeout()
+        load["status"], load["deadline"] = "sourcing", now() + self.timeout(load)
         for t in load["threads"].values():
             if t.get("ask") and t["status"] in ("declined", "countered") and t["ask"] <= ceiling * 1.12:
                 t.update(status="countered", counter=ceiling, round=load["rounds"], finalOffer=True, sell=sell)
@@ -1541,7 +1559,7 @@ class Desk:
         if not load or load["status"] != "needs_approval":
             return
         th = load["threads"][load["winner"]]
-        hold = self.settings.get("holdTimeoutSec", {}).get(self.settings["mode"], self.timeout())
+        hold = self.settings.get("holdTimeoutSec", {}).get(load["mode"], self.timeout(load))
         load["status"], load["approvedAt"], load["deadline"] = "holding", now(), now() + hold
         load["fixedSell"] = load["quote"]["sell_total"]
         self._event(load, "Broker", "Approved the quote.")
@@ -1597,6 +1615,11 @@ class Desk:
             th["status"] = "backed_out"
             self._event(load, "Booking", f"{th['name']} backed out: “{text[:60]}”.")
             return self._replan(load, key)
+        if th["status"] == "hold_requested" and said == "yes" and re.search(r"\b(lekin|but|par|magar|bas)\b", text, re.I) \
+                and (re.search(r"\d", text) or re.search(r"toll|diesel|extra|alag", text, re.I)):
+            rate = round(th["agreedBuy"] / load["lane"]["distanceKm"], 1)   # "haan lekin 30 chahiye": a new ask, not a yes
+            return self._to_owner(load, th, f"{load['id']}: rate ₹{th['agreedBuy']:,} (₹{rate}/km, diesel-toll shaamil) tay hua tha. "
+                                            "Usi pe gaadi hold karni hai? *HAAN* ya *NAHI* likhiye 🙏")
         if th["status"] == "hold_requested" and said == "yes":
             th["status"] = "held"
             load["status"], load["bookedAt"] = "booked", now()
@@ -1635,7 +1658,7 @@ class Desk:
                               f"wahi ₹{load['fixedSell']:,} rahega. Margin floor khatre mein aaya tabhi aapko bolunga.")
         if load["prefer"]:
             load["rounds"] += 1
-            load["deadline"] = now() + self.timeout()
+            load["deadline"] = now() + self.timeout(load)
             for k in load["prefer"]:
                 th = load["threads"][k]
                 th["status"], th["round"] = "reconfirm", load["rounds"]
@@ -1651,7 +1674,7 @@ class Desk:
     def _sim_reply(self, load, th):
         o = self.owners[th["ownerKey"]]
         b = o["behavior"]
-        delay = max(1.5, min(20.0, b["responseDelaySec"] / 10, 0.5 * self.timeout()))   # always inside the reply window
+        delay = max(1.5, min(20.0, b["responseDelaySec"] / 10, 0.5 * self.timeout(load)))   # always inside the reply window
         seed = int(hashlib.md5(f"{th['ownerKey']}|{load['id']}|{th['rounds']}|{th['status']}".encode()).hexdigest(), 16)
         km = load["lane"]["distanceKm"]
         cost = E.lane_cost(load["lane"], th["type"])["est_cost"]
@@ -1667,7 +1690,7 @@ class Desk:
             text = f"₹{ask:.1f}/km lagega." + (f" Gaadi {th['city']} mein hai." if th["deadheadKm"] else "")
         elif st == "countered":
             if th["counter"] and th["counter"] >= floor - 0.05:
-                text = f"Theek hai, ₹{th['counter']}/km chalega 👍"
+                text = f"Theek hai, ₹{th['counter']:.1f}/km chalega 👍"
             elif b["ratePremium"] > 1.08 or th["rounds"] >= 2:
                 text = "Nahi bhai, isse kam nahi hoga."
             else:
