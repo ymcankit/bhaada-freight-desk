@@ -38,7 +38,8 @@ geo.seed_cities(E.CITY["cities"])
 E.CITY_RESOLVER = geo.resolve_city
 
 YES = re.compile(r"\b(haan|haa|ha|han|yes|yep|ok|okay|pakka|confirm|confirmed|done|theek|thik|chalega|sure|book)\b|👍|✅", re.I)
-NO = re.compile(r"\b(nahi|nahin|nhi|na|no|cancel|sorry|nikal|nikal gayi|not|mat)\b|❌", re.I)
+NO = re.compile(r"\b(nahi|nahin|nhi|no|cancel|sorry|nikal|nikal gayi|not|mat)\b|^\W*na+\W*$|❌", re.I)   # "haan na" is a yes
+CANCEL = re.compile(r"cancel|back\s*out|nahi\s+(aa|ja|ho)\s+(pa|sak)|nikal\s+ga(yi|ya)|mana\s+kar", re.I)
 
 def now():
     return time.time()
@@ -193,6 +194,14 @@ class Desk:
     # ---------------- inbound ----------------
     def _on_owner_message(self, key, text):
         th, load = self._open_thread(key)
+        if th and th["status"] == "held":
+            # a booked owner writes about many things (payment, timing, tomorrow's truck); only a clear cancel un-books
+            if CANCEL.search(text) and load["status"] in ("booked", "recovered") and now() - (load.get("bookedAt") or 0) < 48 * 3600:
+                th["messages"].append({"dir": "in", "text": text, "t": now()})
+                th["status"] = "backed_out"
+                self._event(load, "Booking", f"{th['name']} cancelled: “{text[:60]}”.")
+                return self._replan(load, key)
+            th = None
         if th:
             th["messages"].append({"dir": "in", "text": text, "t": now()})
             return self._owner_reply(load, th, text)
@@ -225,6 +234,22 @@ class Desk:
                   for t in self.pool if t["ownerKey"] == key]
         return rows, trucks
 
+    def _owner_status_line(self, key):
+        """Without the model: where this owner's latest deal stands, in plain words, instead of a canned truck question."""
+        for load in reversed(self.loads[-30:]):
+            th, lane = load["threads"].get(key), load.get("lane") or {}
+            if not th:
+                continue
+            rate = f" ₹{th['agreedBuy'] / lane['distanceKm']:.1f}/km" if th.get("agreedBuy") and lane.get("distanceKm") else ""
+            stage = ("booking pakki hai" + rate if load.get("winner") == key and load["status"] in ("booked", "recovered")
+                     else f"rate{rate} tay hua, broker ke approval ka intezaar hai" if th["status"] == "deal" and load["status"] == "needs_approval"
+                     else "ye load abhi kisi aur ko gaya" if load.get("winner") and load["winner"] != key
+                     else "abhi koi deal pakki nahi hui")
+            return (f"{load['id']} ({lane.get('origin')} → {lane.get('destination')}): {stage}. "
+                    "Payment, advance aur loading time broker batayenge 🙏")
+        return ("Abhi aapke liye koi load nahi hai. Load aate hi yahin message karenge 🙏\n"
+                "Gaadi free ho to aise bhejiye: *32 ft MXL, Surat, aaj, ₹38/km*")
+
     def _owner_chat(self, o, text):
         """An owner message outside a live negotiation: a truck report, or a question to answer from the facts."""
         rows, trucks = self._owner_story(o["key"])
@@ -244,21 +269,26 @@ class Desk:
                 "'32 ft MXL, Surat, aaj, ₹38/km' only if they haven't reported one.\n"
                 "- Payment, advance, documents, loading time and anything else not in the facts: the broker handles it; "
                 "say the broker will tell them. Don't guess.\n"
+                "- If they seem to cancel a booked trip, ask them to write *cancel* to confirm.\n"
                 "- Reply in Hinglish: Hindi words in Roman script, like \"Aapka rate ₹33/km tay hua hai, broker ka approval "
                 "aate hi bata denge.\" Never write plain English sentences.\n"
                 'Return ONLY JSON {"intent":"checkin|reply","reply":""}')
         except Exception as e:
-            print("owner chat failed, reading it as a check-in:", repr(e))
-            return self._parse_checkin(o, text)
+            print("owner chat failed, using rules:", repr(e))
+            if E.norm_type(text) or (NO.search(text) and len(text.split()) <= 4 and "?" not in text):
+                return self._parse_checkin(o, text)
+            return self._wa(o, self._owner_status_line(o["key"]))
         if out.get("intent") == "reply" and (out.get("reply") or "").strip():
             return self._wa(o, out["reply"].strip()[:600])
         self._parse_checkin(o, text)
 
     def _open_thread(self, key):
-        for load in reversed(self.loads):
-            th = load["threads"].get(key)
-            if th and th["status"] in ("sent", "countered", "hold_requested", "reconfirm", "held"):
-                return th, load
+        """The negotiation this owner is answering, newest first; a booked trip only if nothing is being negotiated."""
+        for states in (("sent", "countered", "hold_requested", "reconfirm"), ("held",)):
+            for load in reversed(self.loads):
+                th = load["threads"].get(key)
+                if th and th["status"] in states:
+                    return th, load
         return None, None
 
     def remove_owner(self, key):
@@ -523,6 +553,9 @@ class Desk:
         # guardrails, enforced in code whatever the model said
         if d["action"] == "accept":
             rate = d["rate"] or th["counter"] or th["ask"]
+            said = [x for x in (th["ask"], th["counter"]) if x]
+            if rate and said and all(abs(rate - x) > 0.5 for x in said):
+                rate = th["ask"] if d.get("ask") else (th["counter"] or th["ask"])   # only a rate someone actually said
             if not rate:
                 d = {"action": "ask", "rate": None, "reply": ""}
             elif rate > ec["ceiling"]:
@@ -538,14 +571,29 @@ class Desk:
                 d = {"action": "decline", "rate": None, "reply": ""}
             else:
                 d["rate"] = round(rate, 1)
+        quoted = [float(a or b) for a, b in re.findall(r"₹\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:/|per\s*)km", d.get("reply") or "")]
+        if quoted and (d["action"] not in ("accept", "counter") or any(abs(q - d["rate"]) > 0.05 for q in quoted)):
+            d["reply"] = ""                              # the model's words must not promise a rate the code didn't set
         return d
 
+    @staticmethod
+    def _owner_rate(text, km):
+        """The owner's ask in ₹/km: '38/km', '38k', '35 hazaar total'; ignores tons, feet, times and toll add-ons."""
+        t = text.lower().replace(",", "")
+        m = re.search(r"(\d+(?:\.\d+)?)\s*(?:rs\.?|₹|rupaye|rupees|rupee)?\s*(?:/|per|prati)\s*(?:km|kilo)", t)
+        if m:
+            return float(m.group(1))
+        nums = []
+        for v, unit in re.findall(r"(\d+(?:\.\d+)?)\s*(lakh|lac|k\b|hazaa?r|thousand|tonne|ton|t\b|ft|feet|foot|baje|tyre|km|din|ghante|gaadi|truck)?", t):
+            if unit in ("", "lakh", "lac", "k", "hazar", "hazaar", "thousand"):
+                nums.append(float(v) * {"": 1, "lakh": 1e5, "lac": 1e5}.get(unit, 1e3))
+        if not nums:
+            return None
+        n = max(nums)
+        return n / km if n > 300 else n
+
     def _negotiate_rules(self, th, text, ec):
-        nums = [float(x.replace(",", "")) for x in re.findall(r"\d[\d,]*\.?\d*", text)]
-        ask = None
-        if nums:
-            n = max(nums)
-            ask = n / ec["km"] if n > 300 else n
+        ask = self._owner_rate(text, ec["km"])
         if YES.search(text) and th["counter"] and not ask:
             return {"action": "accept", "rate": th["counter"], "ask": None, "reply": ""}
         if NO.search(text) and not ask:
@@ -681,6 +729,9 @@ class Desk:
                 self._decide(load)
             return
         if NO.search(text) and not YES.search(text):
+            if re.search(r"\d", text):                     # "35 nahi, 38 chahiye" is haggling, not a back-out
+                rate = round(th["agreedBuy"] / load["lane"]["distanceKm"], 1)
+                return self._to_owner(load, th, f"Rate ₹{rate}/km tay hua tha. Usi rate pe gaadi hold karni hai? *HAAN* ya *NAHI* likhiye 🙏")
             th["status"] = "backed_out"
             self._event(load, "Booking", f"{th['name']} backed out: “{text[:60]}”.")
             return self._replan(load, key)

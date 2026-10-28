@@ -89,6 +89,10 @@ ok &= check("owner asked to hold", "HAAN" in last_to(winner))
 text(winner, "haan")
 ok &= check("booked after the hold", wait(("booked",), 8) == "booked")
 
+text(winner, "payment kab milega? advance nahi mila na")    # a booked owner's question is not a back-out
+time.sleep(1)
+ok &= check("booked owner's question keeps the booking", load()["status"] == "booked" and load()["threads"][winner]["status"] == "held"
+            and "booking pakki" in last_to(winner), last_to(winner))
 text(winner, "sorry bhai gaadi nahi aa payegi, cancel")
 backup = [k for k in OWNERS if k not in (winner, OWNERS[2])][0]
 time.sleep(1)
@@ -102,6 +106,10 @@ ok &= check("broker told about the recovery", "re-booked" in last_to(BROKER))
 state = c.get("/api/state").json()
 ok &= check("state API reports the day", state["kpis"]["received"] == 1 and state["kpis"]["booked"] == 1, str(state["kpis"]))
 ok &= check("owner phones masked in the API", all(o["phone"].startswith("••••") for o in state["owners"]))
+R = live.Desk._owner_rate
+ok &= check("owner rates read in context", R("₹38/km lagega", 280) == 38 and R("38k", 1000) == 38 and R("35 hazaar total", 1000) == 35
+            and R("32 ft hai, 36 per km, 1500 toll alag", 280) == 36 and R("14 ton ka 40", 280) == 40 and R("kal 10 baje", 280) is None)
+ok &= check("'haan na' is not a no", not live.NO.search("haan na bhai") and bool(live.NO.search("na") and live.NO.search("nahi")))
 
 print("\nALL PASS" if ok else "\nSOME FAILED")
 import sys; sys.stdout.flush(); os._exit(0 if ok else 1)
