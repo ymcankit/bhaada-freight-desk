@@ -72,12 +72,29 @@ def tg_send(to, text, buttons=None):
     body = {"chat_id": to[3:], "text": text[:4000]}
     if buttons:
         body["reply_markup"] = {"inline_keyboard": [[{"text": t[:30], "callback_data": i[:64]} for i, t in buttons[:3]]]}
-    try:
-        r = requests.post(f"{TG_API}/sendMessage", json=body, timeout=20)
-        if not r.ok:
-            print("Telegram send failed:", r.status_code, r.text[:300])
-    except Exception as e:
-        print("Telegram send error:", safe(e))
+    for attempt in range(3):
+        try:
+            r = requests.post(f"{TG_API}/sendMessage", json=body, timeout=20)
+            if r.status_code == 429 and attempt < 2:      # a burst (a load to many owners): Telegram says when to retry
+                try:
+                    wait = float(r.json().get("parameters", {}).get("retry_after", 1))
+                except Exception:
+                    wait = 1.0
+                time.sleep(min(max(wait, 0.5), 10))
+                continue
+            if r.status_code >= 500 and attempt < 2:
+                time.sleep(1 + attempt)
+                continue
+            if not r.ok:
+                print("Telegram send failed:", r.status_code, r.text[:300])
+        except requests.ConnectionError as e:             # never reached Telegram: safe to try again
+            if attempt < 2:
+                time.sleep(1 + attempt)
+                continue
+            print("Telegram send error:", safe(e))
+        except Exception as e:                            # a timeout may have been delivered: don't send it twice
+            print("Telegram send error:", safe(e))
+        return
 
 CONVO = {}                                            # address -> the last few lines both ways, so replies follow the chat
 
