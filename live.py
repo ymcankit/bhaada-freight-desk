@@ -924,8 +924,9 @@ class Desk:
         return n / km if n > 300 else n
 
     def _llm_json(self, prompt, tier="smart"):
-        # timeout 12: negotiation calls this on the worker, so one slow reply must not stall every other load
-        msg = E.chat([{"role": "user", "content": prompt}], json_mode=True, timeout=12, retries=2, max_wait=8, tier=tier)
+        # timeout 12: negotiation calls this on the worker, so one slow reply must not stall every other load;
+        # max_wait 3: a provider asking us to wait longer is skipped for the next one, not slept on by the worker
+        msg = E.chat([{"role": "user", "content": prompt}], json_mode=True, timeout=12, retries=2, max_wait=3, tier=tier)
         return E.parse_json(msg.get("content") or "")
 
     def _all_answered(self, load):

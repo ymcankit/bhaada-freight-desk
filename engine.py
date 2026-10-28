@@ -91,6 +91,9 @@ def chat(messages, tools=None, json_mode=False, timeout=25, retries=3, max_wait=
         raise RuntimeError("No language model key is set (GROQ_API_KEY or OPENAI_API_KEY)")
     last = None
     for name, url, key, model in chain:
+        if LLM.setdefault("down", {}).get(url, 0) > time.time():   # just timed out or 5xx'd: skip it, don't wait on it again
+            last = last or RuntimeError(f"{name} unreachable (skipped for a few seconds)")
+            continue
         try:
             return _complete(name, url, key, model, messages, tools, json_mode, timeout, retries, max_wait)
         except Exception as e:
@@ -136,9 +139,15 @@ def _complete(name, url, key, model, messages, tools, json_mode, timeout, retrie
             return r.json()["choices"][0]["message"]
         except PermissionError:
             raise
+        except (requests.Timeout, requests.ConnectionError) as e:
+            # a hung or unreachable provider: every retry would cost the caller (often the desk's one worker) a full
+            # timeout again, so the next provider answers and this one is skipped for 30 s (same host: both Groq models)
+            LLM.setdefault("down", {})[url] = time.time() + 30
+            raise RuntimeError(f"{name} unreachable: {str(e)[:120]}") from e
         except Exception as e:
             last = e
-            time.sleep(1.5 * (i + 1))
+            if i < retries - 1:                        # no pause after the last try: the next provider is waiting
+                time.sleep(1.5 * (i + 1))
     raise last
 
 def gen(prompt, json_mode=False, tier="cheap"):
