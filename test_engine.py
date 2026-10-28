@@ -114,6 +114,7 @@ def run_tests():
     finally:
         E.chat, E.LLM["key"] = real_chat, real_key
     ok &= rate_limit_tests()
+    ok &= geo_tests()
     print("\nALL PASS" if ok else "\nSOME FAILED")
     return ok
 
@@ -152,6 +153,33 @@ def rate_limit_tests():
         ok &= check("bad key is not retried", len(calls) == 2)
     finally:
         E.requests.post, E.LLM["key"], E.LLM["coolUntil"] = real_post, real_key, 0
+    return ok
+
+def geo_tests():
+    """A place the geocoders don't know is asked once, not on every message; a service outage is not remembered."""
+    import geo
+    calls, real_get, real_save = [], geo.requests.get, geo._save
+    class R:
+        ok = True
+        def json(self):
+            return [] if "nominatim" in calls[-1] else {"features": []}
+    def get(url, **k):
+        calls.append(url)
+        if down[0]:
+            raise ConnectionError("down")
+        return R()
+    geo.requests.get, geo._save, down = get, (lambda: None), [True]
+    try:
+        geo.resolve_city("Qwxzplace")
+        geo.resolve_city("Qwxzplace")
+        ok = check("outage not remembered as 'no such place'", len(calls) == 4)
+        down[0] = False
+        geo.resolve_city("Qwxzplace")
+        n = len(calls)
+        geo.resolve_city("Qwxzplace")
+        ok &= check("unknown place looked up once", len(calls) == n == 6)
+    finally:
+        geo.requests.get, geo._save = real_get, real_save
     return ok
 
 if __name__ == "__main__":
