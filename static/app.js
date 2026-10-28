@@ -117,8 +117,10 @@ function renderDesk() {
     ["Loads today", k.received], ["Quoted", k.quoted], ["Booking-ready", k.booked], ["Waiting on you", k.waiting],
     ["Median time to quote", med === null ? null : [med, "min"]],
     ["Avg margin booked", k.avgMargin === null ? null : [k.avgMargin, "%"]],
+    ["Quotes within ±3% of broker's own", k.shadowWithin3Pct == null ? null : [k.shadowWithin3Pct, `% of ${k.shadowCompared}`]],
   ];
-  $("kpis").replaceChildren(...kp.map(([label, v]) => el("div", { title: label.startsWith("Median") ? "Real loads only: AI-broker demo loads are left out" : null }, el("dt", { text: label }),
+  $("kpis").replaceChildren(...kp.map(([label, v]) => el("div", { title: label.startsWith("Median") ? "Real loads only: AI-broker demo loads are left out"
+    : label.startsWith("Quotes within") ? "Shadow mode: the broker types 'mera rate BH-xxxx 27500' after quoting the shipper themselves" : null }, el("dt", { text: label }),
     v === null ? el("dd", { class: "dash", text: "–" }) : Array.isArray(v) ? el("dd", {}, String(v[0]), el("small", { text: v[1] })) : el("dd", { text: String(v) }))));
 
   const loads = d.loads;
