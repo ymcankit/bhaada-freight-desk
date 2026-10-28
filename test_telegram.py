@@ -41,7 +41,20 @@ def check(name, cond, detail=""):
 
 ok = check("wrong webhook path refused", c.post("/telegram/nope", json={}).status_code == 404)
 text(BROKER, "/start")
-ok &= check("/start greets the broker", "Bhaada desk" in last_to(BROKER))
+menu = next((b for to, t, b in reversed(SENT) if to == f"tg:{BROKER}"), None)
+ok &= check("/start offers owner or broker buttons", menu and [i for i, _ in menu] == ["role:owner", "role:broker"])
+def tap(chat, data):
+    n[0] += 1
+    c.post(URL, json={"update_id": n[0], "callback_query": {"id": f"q{n[0]}", "data": data, "message": {"chat": {"id": chat}}}})
+tap(6900, "role:owner")
+ok &= check("tapping Truck owner asks for name and city", "naam ya company" in last_to(6900))
+text(6900, "Tap Transport, Surat")
+time.sleep(0.5)
+ok &= check("the next message registers them", "tg:6900" in server.desk.owners and server.desk.owners["tg:6900"]["name"] == "Tap Transport")
+text(6900, "hi")
+ok &= check("hi again shows their current role", "Tap Transport" in last_to(6900))
+tap(6900, "role:broker")
+ok &= check("tapping Broker switches them", "tg:6900" not in server.desk.owners and "Aap broker hain" in last_to(6900))
 for i, ch in enumerate(OWNERS):
     text(ch, f"owner TG Owner {i + 1}, Bhiwandi")
 ok &= check("owners register over Telegram", "fleet owner ke roop mein jud gaye" in last_to(OWNERS[0]))

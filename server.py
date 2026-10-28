@@ -344,20 +344,41 @@ REJECT = re.compile(r"^\s*(?:(reject(ed)?|nahi|nahin|nhi|no|mat|rehne do|cancel)
 STATUS_Q = re.compile(r"\b(status|update|kya hua|kya scene|kahan tak pahunch|progress)\b", re.I)
 LOAD_ID = re.compile(r"\bBH[-\s]?(\d{4,})\b", re.I)
 
+GREETING = re.compile(r"^\s*(hi+|hello|helo|hey|new|reset|namaste|namaskar|start|menu)\s*[!.]*\s*$", re.I)
+ROLE_BUTTONS = [("role:owner", "🚚 Truck owner"), ("role:broker", "📦 Broker")]
+
+def role_menu(wa):
+    o = desk.owners.get(wa)
+    now_as = f"Abhi aap *{o['name']}* (truck owner) ke roop mein jude hain.\n" if o and not o.get("sandbox") else ""
+    send(wa, "Namaste 🙏 Bhaada freight desk.\n" + now_as + "Aap kaun hain? Neeche button dabaiye:\n"
+             "🚚 *Truck owner*: gaadi khaali batao, load aur rate yahin milenge\n"
+             "📦 *Broker*: load bhejo (text ya voice), hum truck dhoondh ke quote denge", ROLE_BUTTONS)
+
+def join_as_owner(wa, name, city):
+    o = desk.register_owner(wa, name, city)
+    desk.brokers.pop(wa, None)
+    if desk.settings["mode"] != "live":
+        desk.settings["mode"] = "live"
+        desk.post("save")
+    send(wa, f"Namaste {o['name']} 🙏 Aap fleet owner ke roop mein jud gaye" + (f" ({o['baseCity']})" if o.get("baseCity") else "")
+             + ".\nGaadi khaali ho to aise bhejiye: *32 ft MXL, Bhiwandi, aaj, ₹38/km*\n(Role badalna ho to *hi* likhiye.)")
+
 def on_text(wa, text):
+    if GREETING.match(text):
+        return role_menu(wa)
+    waiting = desk.brokers.get(wa) or {}
+    if waiting.get("await") == "owner" and wa not in desk.owners:     # they tapped "Truck owner": this is their name
+        parts = [p.strip() for p in re.split(r",|\bfrom\b|\bse\b|\n", re.sub(r"^\s*owner\b[\s:,-]*", "", text, flags=re.I)) if p.strip()]
+        if not parts or len(parts[0]) > 40 or re.search(r"\d", parts[0]):
+            return send(wa, "Apna naam ya company aur shehar bhejiye, e.g. *Sharma Transport, Bhiwandi*")
+        return join_as_owner(wa, parts[0], parts[1] if len(parts) > 1 else None)
     m = REGISTER.match(text)
     # "owner ne cancel kiya?" or "transporter chahiye Surat se 14 ton" is a broker talking, not a registration
     if m and not NOT_A_NAME.search(m.group(2)) and ("," in m.group(2) or not desk.broker_loads(wa)):
         parts = [p.strip() for p in re.split(r",|\bfrom\b|\bse\b", m.group(2)) if p.strip()]
         if not parts:
             return send(wa, "Aise likhiye: *owner Sharma Transport, Bhiwandi*")
-        o = desk.register_owner(wa, parts[0], parts[1] if len(parts) > 1 else None)
-        if desk.settings["mode"] != "live":
-            desk.settings["mode"] = "live"
-            desk.post("save")
-        return send(wa, f"Namaste {o['name']} 🙏 Aap fleet owner ke roop mein jud gaye"
-                           + (f" ({o['baseCity']})" if o.get("baseCity") else "") + ".\nAaj ki gaadi bhejiye: "
-                           "*32 ft MXL, Bhiwandi, aaj, ₹38/km*\n(Load bhejna hai? *broker* likhiye.)")
+        return join_as_owner(wa, parts[0], parts[1] if len(parts) > 1 else None)
     if AS_BROKER.match(text):
         was = desk.remove_owner(wa) if wa in desk.owners and not desk.owners[wa].get("sandbox") else None
         desk.brokers[wa] = {"chat": [], "load": {}}
@@ -367,11 +388,6 @@ def on_text(wa, text):
         return desk.post("owner_message", key=wa, text=text)
     # anyone else is a broker
     s = desk.brokers.setdefault(wa, {"chat": [], "load": {}})
-    if text.lower() in ("hi", "hello", "new", "reset", "namaste", "start"):
-        desk.brokers[wa] = {"chat": [], "load": {}}
-        return send(wa, "Namaste 🙏 Bhaada desk. Load text ya voice note mein bhejiye.\n"
-                           "e.g. _Kal subah Bhiwandi se Surat, 18 ton kapda, 32 MXL_\n"
-                           "Truck owner ho? *owner Naam, Shehar* likhiye.")
     if broker_command(wa, text):
         return
     if not E.llm_ready():
@@ -465,6 +481,19 @@ def broker_command(wa, text):
 
 def on_button(wa, bid):
     action, _, lid = bid.partition(":")
+    if action == "role":
+        is_owner = wa in desk.owners and not desk.owners[wa].get("sandbox")
+        if lid == "owner":
+            if is_owner:
+                return send(wa, f"Aap pehle se truck owner hain ({desk.owners[wa]['name']}) 👍 Gaadi khaali ho to bhejiye: "
+                                "*32 ft MXL, Bhiwandi, aaj, ₹38/km*")
+            desk.brokers[wa] = {"chat": [], "load": {}, "await": "owner"}
+            return send(wa, "Badhiya 🙏 Apna naam ya company aur shehar bhejiye, e.g. *Sharma Transport, Bhiwandi*")
+        if is_owner:
+            desk.remove_owner(wa)
+        desk.brokers[wa] = {"chat": [], "load": {}}
+        return send(wa, ("Owner list se hata diya. " if is_owner else "") + "Aap broker hain 👍 Load text ya voice note mein bhejiye.\n"
+                        "e.g. _Kal subah Bhiwandi se Surat, 18 ton kapda, 32 MXL_")
     load = desk._find(lid) if lid else None
     if action in ("approve", "reject") and load and load.get("brokerPhone") == wa:
         if load["status"] != "needs_approval":
