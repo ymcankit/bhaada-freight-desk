@@ -227,13 +227,13 @@ load, th, ec = neg_load()
 load["threads"]["k2"] = {**th, "name": "Suresh", "ownerKey": "k2", "messages": list(th["messages"])}   # still open: no decision yet
 th["messages"].append({"dir": "in", "text": f"{low}/km", "t": 1})
 script(read("quote", low))
-D._owner_reply(load, th, f"{low}/km")
+D._owner_reply(load, th, f"{low}/km", read=D._model_read(th, f"{low}/km", load["lane"], load["load"]), pre=True)   # what the worker does when the background read lands
 ev = load["events"][-1]
 ok &= check("event log: a negotiation step the model read is marked AI", ev["actor"] == "Negotiation" and ev["by"] == "AI", str(ev))
 load, th, ec = neg_load()
 load["threads"]["k2"] = {**th, "name": "Suresh", "ownerKey": "k2", "messages": list(th["messages"])}
 script("not json at all")
-D._owner_reply(load, th, f"{low}/km")
+D._owner_reply(load, th, f"{low}/km", read=D._model_read(th, f"{low}/km", load["lane"], load["load"]), pre=True)   # what the worker does when the background read lands
 ok &= check("event log: the same step read by the rules is marked Code", load["events"][-1]["by"] == "Code", str(load["events"][-1]))
 
 # ---------------- strategist (Desk._strategize) ----------------
@@ -337,6 +337,13 @@ ok &= check("/healthz shows calls, tokens and cost", "llmStats" in h.json() and 
             and h.json()["llmStats"]["tokens"] == 2400 and h.json()["llmStats"]["usd"] > 0, body[:300])
 ok &= check("/healthz carries no message content and no keys", not any(x in body for x in
             ("SECRET-PROMPT-TEXT", "SECRET-OWNER-TEXT", "test-openai", "test-groq")))
+
+# the model reads off the worker: a reading that comes back after a newer message, or after the round closed, is dropped
+load, th, ec = neg_load()
+th["readSeq"], th["status"] = 2, "sent"
+before = (th["status"], th.get("ask"))
+D._on_owner_read(load["id"] if D._find(load["id"]) else "missing", th["ownerKey"], "50/km", {"intent": "quote", "ask": 50, "answer": ""}, 1)
+ok &= check("a stale background reading changes nothing", (th["status"], th.get("ask")) == before)
 
 print("\nALL PASS" if ok else "\nSOME FAILED")
 import sys; sys.stdout.flush(); os._exit(0 if ok else 1)

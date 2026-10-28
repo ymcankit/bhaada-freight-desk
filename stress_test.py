@@ -693,7 +693,7 @@ def fresh_load(broker, lane=("Bhiwandi", "Surat"), w=14, tt="32 ft MXL", goods="
     n0 = set(TRACK["ack"])
     b.pending.append(time.time())
     text(broker, f"Kal {lane[0]} se {lane[1]} {w} ton {goods + ' ' if goods else ''}{tt}", "load")
-    wait_for(lambda: set(TRACK["ack"]) - n0, 20)
+    wait_for(lambda: set(TRACK["ack"]) - n0, 60)        # after the throughput phase the queue may still be draining
     lid = next(iter(set(TRACK["ack"]) - n0), None)
     return D._find(lid) if lid else None
 

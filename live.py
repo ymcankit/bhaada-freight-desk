@@ -951,12 +951,19 @@ class Desk:
         return {"km": km, "target": round(sell * (1 - E.MARGIN["targetPct"] / 100) / km, 1),
                 "ceiling": round(sell * (1 - E.MARGIN["floorPct"] / 100) / km, 1)}
 
-    def _owner_reply(self, load, th, text):
+    def _owner_reply(self, load, th, text, read=None, pre=False):
         if th["status"] in ("hold_requested", "held", "reconfirm"):
             return self._hold_reply(load, th, text)
+        if E.llm_ready() and not pre:
+            # the model reads the owner off the worker (a second or two, more when a provider is slow); the worker
+            # goes on with other loads and applies the reading when it comes back, if this round is still open
+            th["readSeq"] = th.get("readSeq", 0) + 1
+            snap = {**th, "messages": list(th["messages"][-6:])}
+            args = (load["id"], th["ownerKey"], text, snap, dict(load["lane"]), dict(load["load"]), th["readSeq"])
+            return threading.Thread(target=self._read_bg, args=args, daemon=True).start()
         ec = self._econ(load, th)
         th["rounds"] += 1
-        d = self._negotiate(load, th, text, ec)
+        d = self._negotiate(load, th, text, ec, read=read, pre=pre)
         if d["action"] == "accept":
             th["status"], th["agreedBuy"] = "deal", round(d["rate"] * ec["km"])
             if d["rate"] <= ec["target"] and load["status"] == "sourcing":   # a good offer is in: give the rest 45 s, not the full window
@@ -977,11 +984,20 @@ class Desk:
         if self._all_answered(load):
             self._decide(load)
 
-    def _negotiate(self, load, th, text, ec):
-        """The model reads what the owner said; the code decides the move (a concession ladder inside the ceiling)
-        and explains it with the trip's real costs, so every counter comes with a reason the owner can check."""
-        f, lane, km = load["load"], load["lane"], ec["km"]
-        read = None
+    def _read_bg(self, lid, key, text, th, lane, f, seq):
+        self.post("owner_read", lid=lid, key=key, text=text, read=self._model_read(th, text, lane, f), seq=seq)
+
+    def _on_owner_read(self, lid, key, text, read, seq):
+        load = self._find(lid)
+        th = (load or {}).get("threads", {}).get(key)
+        if not th or th.get("readSeq") != seq or th["status"] not in ("sent", "countered"):
+            return                                      # a newer message, or the round closed while the model read
+        self._owner_reply(load, th, text, read=read, pre=True)
+
+    def _model_read(self, th, text, lane, f):
+        """The model's reading of an owner's reply (intent, rate, an answer from the terms), or None. Touches no
+        desk state, so it can run on any thread; the code's guardrails apply where it is used."""
+        km = lane["distanceKm"]
         if E.llm_ready():
             try:
                 hist = "\n".join(("Bhaada: " if m["dir"] == "out" else "Owner: ") + m["text"] for m in th["messages"][-6:])
@@ -1008,9 +1024,17 @@ class Desk:
                 nums = lambda s: re.findall(r"\d+(?:[,.]\d+)*", s)
                 if any(n not in nums(self.terms_line()) for n in nums(answer)):
                     answer = ""                         # guardrail: only the code's terms carry numbers; a model never names a rate
-                read = {"intent": out.get("intent"), "ask": ask, "answer": answer}
+                return {"intent": out.get("intent"), "ask": ask, "answer": answer}
             except Exception as e:
                 print("negotiation LLM failed, using rules:", repr(e))
+        return None
+
+    def _negotiate(self, load, th, text, ec, read=None, pre=False):
+        """The model reads what the owner said; the code decides the move (a concession ladder inside the ceiling)
+        and explains it with the trip's real costs, so every counter comes with a reason the owner can check."""
+        km = ec["km"]
+        if not pre:
+            read = self._model_read(th, text, load["lane"], load["load"])
         th["readBy"] = "AI" if read and read["intent"] in ("quote", "accept_offer", "refuse", "question", "other") else "Code"
         if not read or read["intent"] not in ("quote", "accept_offer", "refuse", "question", "other"):
             ask = self._owner_rate(text, km)
