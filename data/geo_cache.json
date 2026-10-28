@@ -716,6 +716,11 @@
    "km": 784,
    "hours": 9.3,
    "src": "OSRM road route"
+  },
+  "Nashik|Surat": {
+   "km": 226,
+   "hours": 2.8,
+   "src": "OSRM road route"
   }
  }
 }

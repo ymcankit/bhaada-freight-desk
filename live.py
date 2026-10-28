@@ -77,6 +77,7 @@ class Desk:
         self.loads = []
         self.brokers = {}                    # WhatsApp number -> intake chat in progress
         self.reliability = {}                # learned penalties, ownerKey -> delta
+        self.lane_rates = {}                 # "Origin-Destination|type" -> recent agreed buy ₹/km: lane memory
         self.checkin = {"sentAt": None, "asked": 0}
         self._seq = 1000
         self._seq_lock = threading.Lock()
@@ -117,6 +118,7 @@ class Desk:
         self.pool = s.get("pool", [])
         self.loads = s.get("loads", [])
         self.reliability = s.get("reliability", {})
+        self.lane_rates = s.get("laneRates", {})
         self.brokers = s.get("brokers", {})
         self.ai_due = s.get("aiDue", {})
         self._seq = s.get("seq", self._seq)
@@ -125,7 +127,7 @@ class Desk:
         """Upstash was down at boot: fold what it holds into what this process learned since."""
         for k, o in s.get("owners", {}).items():
             self.owners.setdefault(k, o)
-        for name in ("reliability", "brokers"):
+        for name in ("reliability", "brokers", "lane_rates"):
             for k, v in s.get(name, {}).items():
                 getattr(self, name).setdefault(k, v)
         mine = {t["ownerKey"] for t in self.pool}
@@ -189,7 +191,7 @@ class Desk:
         for attempt in range(5):                       # the server thread may add an owner or a broker chat meanwhile
             try:
                 live_owners = {k: v for k, v in list(self.owners.items()) if not v.get("sandbox")}
-                data = {"settings": self.settings, "owners": live_owners, "reliability": self.reliability, "seq": self._seq,
+                data = {"settings": self.settings, "owners": live_owners, "reliability": self.reliability, "seq": self._seq, "laneRates": self.lane_rates,
                         "pool": [t for t in self.pool if t.get("source") == "checkin"], "loads": self.loads,
                         "brokers": self.brokers, "aiDue": self.ai_due}
                 text = json.dumps(data, ensure_ascii=False)
@@ -392,7 +394,7 @@ class Desk:
             return (f"{load['id']} ({lane.get('origin')} → {lane.get('destination')}): {stage}. "
                     "Payment, advance aur loading time broker batayenge 🙏")
         return ("Abhi aapke liye koi load nahi hai. Load aate hi yahin message karenge 🙏\n"
-                "Gaadi free ho to aise bhejiye: *32 ft MXL, Surat, aaj, ₹38/km*")
+                "Gaadi free ho to aise bhejiye: *32 ft MXL, Surat, aaj, ₹85/km*")
 
     def _owner_chat(self, o, text):
         """An owner message outside a live negotiation: a truck report, a question or small talk. The model call runs
@@ -420,7 +422,7 @@ class Desk:
                 "Quote agreed or countered prices exactly as given. Never invent a load, a price or a promise. If a deal is "
                 "waiting for the broker's approval, say so and that they'll be told. If you don't know, say the desk will update them. "
                 "If they have no load yet, say loads come here as soon as one fits, and ask them to send their truck as "
-                "'32 ft MXL, Surat, aaj, ₹38/km' only if they haven't reported one.\n"
+                "'32 ft MXL, Surat, aaj, ₹85/km' only if they haven't reported one.\n"
                 "- Payment, advance, documents, loading time and anything else not in the facts: the broker handles it; "
                 "say the broker will tell them. Don't guess.\n"
                 "- If they seem to cancel a booked trip, ask them to write *cancel* to confirm.\n"
@@ -467,7 +469,7 @@ class Desk:
         for o in live:
             if self.send_wa:
                 self.send_wa(o["phone"], f"Namaste {o['name']} 🙏 Bhaada desk se. Aaj gaadi khaali hai?\n"
-                                         "Aise bhejiye: *32 ft MXL, Bhiwandi, aaj, ₹38/km* (ek line mein ek gaadi).\n"
+                                         "Aise bhejiye: *32 ft MXL, Bhiwandi, aaj, ₹85/km* (ek line mein ek gaadi).\n"
                                          "Koi gaadi free nahi to *nahi* likh dijiye.")
         self.checkin = {"sentAt": now(), "asked": len(live)}
         return len(live)
@@ -510,7 +512,7 @@ class Desk:
                           "ratePerKm": rate if rate and 10 < rate < 200 else None, "source": "checkin", "at": now()})
         if not added:
             return self._wa(o, "Gaadi ka type samajh nahi aaya 🙏 Inme se kaunsi hai: " + ", ".join(E.KNOWN_TYPES[:-1])
-                               + "? Aur kahan khadi hai? e.g. *32 ft MXL, Surat, aaj, ₹38/km*")
+                               + "? Aur kahan khadi hai? e.g. *32 ft MXL, Surat, aaj, ₹85/km*")
         self.pool = [t for t in self.pool if t["ownerKey"] != o["key"]] + added
         self.save()
         day = {"today": "aaj", "tomorrow": "kal", "in 2 days": "parso"}
@@ -521,7 +523,7 @@ class Desk:
             self.ai_due[o["key"]] = now() + 20
 
     def _checkin_rules(self, o, text):
-        """Fallback when the model is unavailable: one truck per line, '32 ft MXL, Bhiwandi, aaj, ₹38/km'."""
+        """Fallback when the model is unavailable: one truck per line, '32 ft MXL, Bhiwandi, aaj, ₹85/km'."""
         out = []
         for line in re.split(r"[\n;]+", text):
             tt = E.norm_type(line)
@@ -577,7 +579,8 @@ class Desk:
         known = E.find_lane(o["name"], d["name"])
         load["lane"] = {"laneId": f"{o['name']}-{d['name']}", "origin": o["name"], "destination": d["name"],
                         "distanceKm": max(1, r["km"]), "hours": r.get("hours"), "distanceSrc": r["src"],
-                        "returnLoadProb": known["returnLoadProb"] if known else self.settings["defaultReturnLoadProb"]}
+                        "returnLoadProb": known["returnLoadProb"] if known else self.settings["defaultReturnLoadProb"],
+                        "memory": self._lane_memory(f"{o['name']}-{d['name']}")}
         self._event(load, "Routing", f"{r['km']} km by road ({r['src']})" + (f", about {r['hours']} h driving" if r.get("hours") else ""))
         if f.get("budget_rs") and f["budget_rs"] < 300:     # "40 rupaye per km" lands here as 40: a rate, not a total
             per_km = f["budget_rs"]
@@ -804,15 +807,34 @@ class Desk:
         d["ask"] = None                                 # th["ask"] is already set above
         return d
 
+    def _lane_memory(self, lane_id):
+        """Median agreed ₹/km per truck type on this lane over the last 30 days (at least 2 deals)."""
+        out = {}
+        for k, rows in list(self.lane_rates.items()):
+            lid, _, tt = k.partition("|")
+            recent = sorted(r for r, t in rows if lid == lane_id and now() - t < 30 * 86400)
+            if len(recent) >= 2:
+                out[tt] = recent[len(recent) // 2]
+        return out
+
+    def _remember_rate(self, load, th):
+        """A booked trip teaches the desk what owners really take on this lane."""
+        lane = load["lane"]
+        rows = self.lane_rates.setdefault(f"{lane['laneId']}|{th['type']}", [])
+        rows.append((round(th["agreedBuy"] / lane["distanceKm"], 1), now()))
+        del rows[:-10]
+
     def _rationale(self, load, th, km):
-        """The owner-facing reason behind a number: this trip's diesel, toll and driver cost, from the rate card."""
-        c = E.fair_cost(km, th["type"], load["lane"].get("returnLoadProb", 0.5))
-        per = round((c["fuel"] + c["toll"] + c["driver"] + c["misc"]) / km, 1)
-        why = (f"Hisaab: {km} km mein diesel ~₹{c['fuel']:,} (₹{E.rates['dieselPerLitre']:g}/L), toll ~₹{c['toll']:,}, "
-               f"driver ~₹{c['driver']:,} → kharcha lagbhag ₹{per}/km.")
-        if load["lane"].get("returnLoadProb", 0) >= 0.6:
-            why += (f" {load['lane']['destination']} se wapsi ka load aasaani se milta hai, to asli kharcha "
-                    f"~₹{round(c['est_cost'] / km, 1)}/km padta hai.")
+        """The owner-facing reason behind a number: the lane's market rate and what this trip really costs them."""
+        lane = load["lane"]
+        c = E.fair_cost(km, th["type"], lane.get("returnLoadProb", 0.5), E.lane_memory(lane, th["type"]))
+        why = (f"Hisaab: is route pe {th['type']} ka market bhaada ~₹{round(c['market'] / km)}/km (shipper rate) chalta hai. "
+               f"Aapka kharcha: diesel ~₹{c['fuel']:,} (₹{E.rates['dieselPerLitre']:g}/L), toll ~₹{c['toll']:,}, driver+helper "
+               f"~₹{c['driver']:,}, EMI/maintenance ~₹{c['fixed']:,} → lagbhag ₹{round(c['owner_cost'] / km)}/km.")
+        if E.lane_memory(lane, th["type"]):
+            why += f" Is lane pe haal mein owners ne ~₹{E.lane_memory(lane, th['type'])}/km liya hai."
+        if lane.get("returnLoadProb", 0) >= 0.6:
+            why += f" {lane['destination']} se wapsi ka load aasaani se milta hai."
         if th.get("deadheadKm"):
             why += f" Gaadi pickup se sirf {th['deadheadKm']} km door hai."
         return why
@@ -928,6 +950,9 @@ class Desk:
                 self._to_owner(load, th, f"⏰ {load['id']}: gaadi hold karni hai? {mins} min mein *HAAN* likhiye, warna load kisi aur ko jayega.")
             elif load["status"] == "needs_approval" and t >= load.get("autoApproveAt", t + 1):
                 self._on_approve(load["id"])                # the AI broker's own demo load
+            elif load["status"] == "needs_call" and t - load.get("quoteAt", t) > \
+                    self.settings.get("approvalExpireSec", {}).get(load["mode"], 3600):
+                self._escalate(load, "Broker didn't answer the strategist in time.", "Aapka jawab nahi aaya, load aapke paas hai.")
             elif load["status"] == "needs_approval" and load.get("quoteAt"):
                 ttl = self.settings.get("approvalExpireSec", {}).get(load["mode"], 3600)
                 if t - load["quoteAt"] > ttl:
@@ -957,14 +982,7 @@ class Desk:
                 if q["above_floor"]:
                     offers.append((q["margin_pct"], th["reliability"], key))
         if not offers:
-            if load.get("widenLeft", 0) > 0 and not final:
-                load["widenLeft"] -= 1
-                self._event(load, "Orchestrator", "No offer clears the floor yet. Widening the search.")
-                return self._broadcast(load)
-            if any(t["status"] in ("deal", "declined", "countered") for t in load["threads"].values()):
-                return self._escalate(load, "No owner agreed a rate that clears the margin floor.",
-                                      "Kisi owner ka rate margin floor ke andar nahi baitha.")
-            return self._escalate(load, "No owner replied.", "Kisi owner ne jawab nahi diya.")
+            return self._strategize(load, final)
         offers.sort(reverse=True)
         best = offers[0]
         for m, rel, key in offers[1:]:              # a clearly more reliable owner wins a near tie
@@ -983,6 +1001,7 @@ class Desk:
         if load["phase"] == "replan":
             th["status"] = "held"
             load["status"], load["bookedAt"] = "recovered", now()
+            self._remember_rate(load, th)
             self._to_owner(load, th, f"Booked ✅ {lane['origin']} → {lane['destination']} at ₹{round(th['agreedBuy'] / lane['distanceKm'], 1)}/km. "
                                      "Pickup details jaldi bhejte hain.")
             self._event(load, "Booking", f"Re-booked with {th['name']}: margin {q['margin_pct']}% at the shipper's fixed ₹{q['sell_total']:,}.")
@@ -996,6 +1015,161 @@ class Desk:
                                          f"(floor {E.MARGIN['floorPct']:g}%)." + (f" {q['note']}." if q.get("note") else ""))
             self._to_broker(load, self.quote_text(load), [("approve:" + load["id"], "Approve ✅"), ("reject:" + load["id"], "Reject ❌")])
         self.save()
+
+    # ---------------- the strategist: an AI decision when the plan is stuck, checked by code ----------------
+    def _options(self, load, final):
+        """Every recovery move that is possible right now, with the numbers the code has worked out for it."""
+        lane, f, km = load["lane"], load["load"], load["lane"]["distanceKm"]
+        ths = list(load["threads"].values())
+        opts = {}
+        if load.get("widenLeft", 0) > 0 and not final:
+            opts["widen"] = f"message owners up to {self.settings['maxDeadheadKm'] * 2} km from {lane['origin']} (not asked yet)"
+        bigger = [t for t in E.type_check({"truck_type": load["searchType"], "weight_ton": f["weight_ton"]})["suggest"]
+                  if t not in load.get("triedTypes", []) and t != load["searchType"]
+                  and E.rates["capacityTonByType"][t] > E.rates["capacityTonByType"][load["searchType"]]] \
+            if E.rates["capacityTonByType"].get(load["searchType"]) else []
+        if not bigger:
+            caps = E.rates["capacityTonByType"]
+            bigger = sorted((t for t in caps if caps[t] > caps[load["searchType"]] and t not in load.get("triedTypes", [])
+                             and t != "20 ft container"), key=lambda t: caps[t])
+        if bigger:
+            opts["_bigger"] = bigger[0]
+            opts["bigger_truck"] = f"look for a {bigger[0]} instead of {load['searchType']} (more capacity, usually a higher rate)"
+        sell = load["fixedSell"] or E.target_sell(lane, load["searchType"])
+        ceiling = round(sell * (1 - E.MARGIN["floorPct"] / 100) / km, 1)
+        near = [t for t in ths if t.get("ask") and t["status"] in ("declined", "countered") and not t.get("finalOffer")
+                and t["ask"] <= ceiling * 1.12]
+        if near and not load.get("finalSweep"):
+            opts["final_offer"] = f"offer ₹{ceiling}/km (the most the floor allows) to {len(near)} owner(s) who asked up to 12% more"
+        asks = sorted((t["ask"], t["ownerKey"]) for t in ths if t.get("ask") and t["status"] in ("declined", "countered", "deal"))
+        if asks and not load.get("brokerCallAsked"):
+            ask, key = asks[0]
+            if load["phase"] == "replan":
+                m = round((load["fixedSell"] - ask * km) / load["fixedSell"] * 100, 1)
+                opts["ask_broker"] = (f"ask the broker to book {load['threads'][key]['name']} at their ₹{ask}/km anyway: "
+                                      f"margin {m}% (below the {E.MARGIN['floorPct']:g}% floor) at the shipper's fixed ₹{load['fixedSell']:,}")
+            else:
+                need = round(ask * km / (1 - E.MARGIN["floorPct"] / 100))
+                opts["ask_broker"] = (f"ask the broker to quote the shipper ₹{need:,} (₹{round(need / km, 1)}/km) so "
+                                      f"{load['threads'][key]['name']}'s ₹{ask}/km clears the floor")
+            opts["_broker_pick"] = (key, ask)
+        opts["escalate"] = "hand the load to the broker with what was tried"
+        return opts
+
+    def _strategize(self, load, final):
+        """Nothing clears the floor. The model picks the recovery from the moves the code says are possible;
+        the code checks the choice and carries it out, and falls back to a fixed order if the model is unavailable."""
+        load["strategySteps"] = load.get("strategySteps", 0) + 1
+        opts = self._options(load, final)
+        moves = [k for k in opts if not k.startswith("_")]
+        if load["strategySteps"] > 4:
+            moves = ["escalate"]
+        ths = list(load["threads"].values())
+        tally = ", ".join(f"{sum(t['status'] == s for t in ths)} {s}" for s in ("deal", "countered", "declined", "silent") if
+                          any(t["status"] == s for t in ths)) or "nobody asked yet"
+        asks = sorted(t["ask"] for t in ths if t.get("ask"))
+        choice, why, by = None, "", "rules"
+        if len(moves) > 1 and E.llm_ready():
+            try:
+                f, lane = load["load"], load["lane"]
+                out = self._llm_json(
+                    "You are the recovery strategist of an Indian freight desk. A load is stuck: no owner's rate leaves the "
+                    "broker's minimum margin. Pick the single best next move.\n"
+                    f"Load {load['id']}: {lane['origin']} → {lane['destination']}, {lane['distanceKm']} km, {f['weight_ton']} T, "
+                    f"truck {load['searchType']}, pickup {f.get('pickup_when') or 'kal'}, phase "
+                    f"{'RE-PLAN: an owner backed out and the shipper already has the price' if load['phase'] == 'replan' else 'first quote'}.\n"
+                    f"Owners: {tally}. Their asks (₹/km): {asks or 'none'}. Moves tried so far: {load.get('tried', []) or 'none'}.\n"
+                    "Possible moves:\n" + "\n".join(f"- {k}: {opts[k]}" for k in moves) + "\n"
+                    "Guidance: owners who stayed silent are a supply problem: widen or try a bigger truck before anything else. "
+                    "An owner whose ask is within ~12% of the limit: final_offer. Asks far above the limit with nothing left to "
+                    "try: ask_broker (the broker decides whether to pay more; in a re-plan the shipper already has the price, so "
+                    "asking the broker is faster than escalating). escalate only when no other move is listed or the others "
+                    "were already tried. Only list facts that are true; nothing has been tried unless it says so above.\n"
+                    'Return ONLY JSON {"move":"<one of the moves>","why":"<one short sentence>"}')
+                if out.get("move") in moves:
+                    choice, why, by = out["move"], (out.get("why") or "").strip()[:200], "AI"
+            except Exception as e:
+                print("strategist model failed, using the fixed order:", repr(e))
+        if choice == "escalate" and len(moves) > 1 and load["strategySteps"] == 1:
+            choice, why, by = None, "", "rules"            # handing over at the first dead end wastes the moves still open
+        if not choice:
+            choice = next(m for m in ("widen", "final_offer", "bigger_truck", "ask_broker", "escalate") if m in moves)
+            why = "fixed order: widen, final offer, bigger truck, ask the broker, hand over"
+        load.setdefault("tried", []).append(choice)
+        self._event(load, "Strategist", f"({by}) {choice.replace('_', ' ')}: {opts[choice]}." + (f" Why: {why}" if why else ""))
+        getattr(self, "_move_" + choice)(load, opts)
+
+    def _move_widen(self, load, opts):
+        load["widenLeft"] -= 1
+        self._broadcast(load)
+
+    def _move_bigger_truck(self, load, opts):
+        load.setdefault("triedTypes", []).append(load["searchType"])
+        load["searchType"], load["widenLeft"] = opts["_bigger"], max(load.get("widenLeft", 0), 1)
+        self._broadcast(load)
+
+    def _move_final_offer(self, load, opts):
+        load["finalSweep"] = True
+        km = load["lane"]["distanceKm"]
+        sell = load["fixedSell"] or E.target_sell(load["lane"], load["searchType"])
+        ceiling = round(sell * (1 - E.MARGIN["floorPct"] / 100) / km, 1)
+        load["rounds"] += 1
+        load["status"], load["deadline"] = "sourcing", now() + self.timeout()
+        for t in load["threads"].values():
+            if t.get("ask") and t["status"] in ("declined", "countered") and t["ask"] <= ceiling * 1.12:
+                t.update(status="countered", counter=ceiling, round=load["rounds"], finalOffer=True, sell=sell)
+                self._to_owner(load, t, f"{load['id']}: ek aakhri koshish 🙏 ₹{ceiling}/km (₹{round(ceiling * km):,} total) pe "
+                                        "gaadi de sakte ho? Isse upar sach mein nahi ho payega. *haan* likhiye.")
+
+    def _move_ask_broker(self, load, opts):
+        key, ask = opts["_broker_pick"]
+        load["brokerCallAsked"], load["brokerCall"] = True, {"owner": key, "ask": ask}
+        load["status"], load["quoteAt"] = "needs_call", now()
+        km, th = load["lane"]["distanceKm"], load["threads"][key]
+        if load["phase"] == "replan":
+            text = (f"🤔 {load['id']}: backup ke liye sabse sasta {th['name']} ₹{ask}/km maang raha hai. Shipper ka ₹{load['fixedSell']:,} "
+                    f"wahi rakhein to margin floor se kam bachega ({opts['ask_broker'].split('margin ')[1].split(' (')[0]}). Book karein?")
+            buttons = [("call_yes:" + load["id"], "Haan, book karo"), ("call_no:" + load["id"], "Nahi")]
+        else:
+            need = round(ask * km / (1 - E.MARGIN["floorPct"] / 100))
+            text = (f"🤔 {load['id']}: owners ka sabse kam rate {th['name']} ka ₹{ask}/km hai. Shipper ko ₹{need:,} "
+                    f"(₹{round(need / km, 1)}/km) bol sakte ho to {E.MARGIN['floorPct']:g}% margin bachega. Is rate pe quote banaun?")
+            buttons = [("call_yes:" + load["id"], f"Haan ₹{need:,}"), ("call_no:" + load["id"], "Nahi")]
+        self._to_broker(load, text, buttons)
+        self.save()
+
+    def _move_escalate(self, load, opts):
+        ths = list(load["threads"].values())
+        if any(t["status"] in ("deal", "declined", "countered") for t in ths):
+            return self._escalate(load, "No owner agreed a rate that clears the margin floor.",
+                                  "Kisi owner ka rate margin floor ke andar nahi baitha.")
+        self._escalate(load, "No owner replied.", "Kisi owner ne jawab nahi diya.")
+
+    def _on_broker_call(self, lid, yes):
+        """The broker's answer to the strategist's question: book the cheapest owner at their ask, or hand over."""
+        load = self._find(lid)
+        if not load or load["status"] != "needs_call":
+            return
+        call = load["brokerCall"]
+        th, km = load["threads"][call["owner"]], load["lane"]["distanceKm"]
+        self._event(load, "Broker", ("Agreed" if yes else "Declined") + " to the strategist's proposal.")
+        if not yes:
+            return self._escalate(load, "Broker declined the strategist's proposal.", "Aapne mana kiya, load aapke paas hai.")
+        th["status"], th["agreedBuy"] = "deal", round(call["ask"] * km)
+        self._to_owner(load, th, f"{load['id']}: aapka ₹{call['ask']}/km chalega 👍 Thodi der mein confirm karte hain.")
+        if load["phase"] == "replan":
+            q = E.price_quote(load["lane"], th["type"], th["agreedBuy"], load["fixedSell"])
+            th["quote"], load["quote"], load["winner"] = q, q, call["owner"]
+            th["status"] = "held"
+            load["status"], load["bookedAt"] = "recovered", now()
+            self._remember_rate(load, th)
+            self._event(load, "Booking", f"Re-booked with {th['name']} at {q['margin_pct']}% margin, below the floor, on the broker's say-so.")
+            self._to_owner(load, th, "Booked ✅ Pickup details jaldi bhejte hain.")
+            self._to_broker(load, f"✅ {load['id']} {th['name']} ke saath book. Margin {q['margin_pct']}%, shipper ka rate wahi.")
+            return self.save()
+        load["fixedSell"] = round(call["ask"] * km / (1 - E.MARGIN["floorPct"] / 100))
+        load["status"] = "sourcing"
+        self._decide(load, final=True)
 
     def _escalate(self, load, reason, hi=None):
         """reason: English, for the console; hi: the same in Hinglish for the broker's chat."""
@@ -1071,6 +1245,7 @@ class Desk:
         if th["status"] == "hold_requested" and YES.search(text):
             th["status"] = "held"
             load["status"], load["bookedAt"] = "booked", now()
+            self._remember_rate(load, th)
             secs = load["bookedAt"] - load["createdAt"]
             self._event(load, "Booking", f"{th['name']} confirmed the hold. Booking-ready in {int(secs // 60)}:{int(secs % 60):02d}.")
             self._to_owner(load, th, "Dhanyavaad ✅ Booking pakki. Pickup details jaldi bhejte hain.")
@@ -1226,7 +1401,7 @@ class Desk:
         booked = [l for l in loads if l["status"] in ("booked", "recovered")]
         margins = [l["quote"]["margin_pct"] for l in booked if l.get("quote")]
         kpis = {"received": len(loads), "quoted": len(ready), "booked": len(booked),
-                "waiting": sum(l["status"] == "needs_approval" for l in loads),
+                "waiting": sum(l["status"] in ("needs_approval", "needs_call") for l in loads),
                 "escalated": sum(l["status"] == "escalated" for l in loads),
                 "medianQuoteMin": round(mins[len(mins) // 2], 1) if mins else None,
                 "avgMargin": round(sum(margins) / len(margins), 1) if margins else None}

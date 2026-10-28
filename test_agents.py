@@ -124,5 +124,36 @@ ok &= check("timers survive a restart", R.ai_due.get("tg:8001") == D.ai_due["tg:
 h = c.get("/healthz")
 ok &= check("health check reports the worker", h.status_code == 200 and h.json()["worker"] == "ok", h.text)
 
+# 6. the strategist: stuck loads get a recovery move, checked by code; the broker's call books it
+def stuck(lid, ask_mult, phase="quote"):
+    lane = {"laneId": "Bhiwandi-Surat", "origin": "Bhiwandi", "destination": "Surat", "distanceKm": 284, "returnLoadProb": 0.75}
+    sell = E.target_sell(lane, "32 ft MXL")
+    ceil = round(sell * (1 - E.MARGIN["floorPct"] / 100) / 284, 1)
+    ask = round(ceil * ask_mult, 1)
+    th = {"ownerKey": "tg:8001", "name": "Solo Transport", "type": "32 ft MXL", "status": "declined", "messages": [], "sell": sell,
+          "rounds": 3, "ask": ask, "counter": ceil - 3, "agreedBuy": None, "round": 1, "deadheadKm": 5, "sandbox": False,
+          "reliability": 4.5}
+    L = {"id": lid, "createdAt": time.time(), "source": "telegram", "brokerPhone": "tg:7009", "load": {"weight_ton": 14, "truck_type": "32 ft MXL",
+         "pickup_when": "kal"}, "status": "sourcing", "events": [], "threads": {"tg:8001": th}, "brokerMessages": [], "quote": None,
+         "winner": None, "rounds": 1, "mode": "live", "phase": phase, "fixedSell": None, "contacted": ["tg:8001"], "reason": "",
+         "widenLeft": 0, "lane": lane, "searchType": "32 ft MXL", "raw": ""}
+    D.loads.append(L)
+    return L, ask
+D.settings["aiAgents"] = False
+S1, ask1 = stuck("BH-9001", 1.05)
+D._decide(S1, final=True)
+ok &= check("strategist makes a final offer to a near owner", "final offer" in S1["events"][-1]["text"] and S1["threads"]["tg:8001"]["finalOffer"]
+            and "aakhri koshish" in last_to(8001), S1["events"][-1]["text"][:80])
+S2, ask2 = stuck("BH-9002", 1.4)
+S2["triedTypes"] = list(E.rates["capacityTonByType"])          # nothing bigger left to try
+D._decide(S2, final=True)
+ok &= check("far apart: strategist asks the broker", S2["status"] == "needs_call" and "Is rate pe quote banaun" in last_to(7009), S2["status"])
+tap_id = next(b for to, t, b in reversed(SENT) if to == "tg:7009" and b)[0][0]
+n[0] += 1
+c.post(URL, json={"update_id": n[0], "callback_query": {"id": "qz", "data": tap_id, "message": {"chat": {"id": 7009}}}})
+time.sleep(1)
+ok &= check("broker's yes turns it into a quote at the floor", S2["status"] == "needs_approval" and S2["quote"]["margin_pct"] >= E.MARGIN["floorPct"] - 0.1,
+            f"{S2['status']} {S2.get('quote', {}) and S2['quote'].get('margin_pct')}")
+
 print("\nALL PASS" if ok else "\nSOME FAILED")
 import sys; sys.stdout.flush(); os._exit(0 if ok else 1)

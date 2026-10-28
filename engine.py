@@ -384,29 +384,48 @@ def pickup_phrase(texts):
 AVAIL_DAY = {"today": 0, "tomorrow": 1, "in 2 days": 2}
 
 # =============================== deterministic pricing ===============================
-def fair_cost(d, tt, rp):
-    """Market cost of the loaded trip for this truck type. This is what the sell price is built on."""
+def market_rate(d, tt):
+    """What a shipper pays for this truck over d km, in rupees: fixed + per-km, fitted to published lane rates."""
+    m = rates["marketRateByType"][tt]
+    return round(m["fixedRs"] + m["perKm"] * d)
+
+def fair_cost(d, tt, rp, memory=None):
+    """Expected buy price of the loaded trip. Owners get the market's shipper price less a normal broker margin,
+    and never less than what running the truck really costs them (fuel, toll, driver and helper,
+    EMI/maintenance/insurance, handling). memory: ₹/km actually agreed on this lane and type lately; it pulls
+    the estimate halfway towards what owners really took. The sell price is built on this."""
     fuel = d / rates["mileageKmPerLitre"][tt] * rates["dieselPerLitre"]
     toll = d * rates["tollPerKmByAxle"][str(rates["axlesByType"][tt])]
-    driver = max(1, math.ceil(d / rates["avgSpeedKmPerDay"])) * rates["driverCostPerDay"]
-    cost = fuel + toll + driver + rates["handlingMiscPerTrip"]
-    if rp >= 0.6:
-        cost *= (1 - rates["returnLoadDiscountPct"] / 100)
-    return {"fuel": round(fuel), "toll": round(toll), "driver": round(driver),
-            "misc": rates["handlingMiscPerTrip"], "est_cost": round(cost)}
+    days = max(1, math.ceil(d / rates["avgSpeedKmPerDay"]))
+    driver = days * (rates["driverCostPerDay"] + rates["driverAllowancePerDay"] + rates["helperPerDay"])
+    fixed = d * rates["fixedCostPerKmByType"][tt]
+    run = fuel + toll + driver + fixed + rates["handlingMiscPerTrip"]
+    if rp >= 0.6:                                     # a likely return load lowers what the owner needs from this leg
+        run *= (1 - rates["returnLoadDiscountPct"] / 100)
+    market = market_rate(d, tt)
+    owner_market = market * (1 - MARGIN["targetPct"] / 100)
+    if memory:
+        owner_market = (owner_market + memory * d) / 2
+    est = max(run, owner_market)
+    return {"fuel": round(fuel), "toll": round(toll), "driver": round(driver), "fixed": round(fixed),
+            "misc": rates["handlingMiscPerTrip"], "owner_cost": round(run), "market": market,
+            "owner_market": round(owner_market), "basis": "market" if owner_market >= run else "cost", "est_cost": round(est)}
 
 def deadhead_cost(km, tt):
     """Owner's cost of driving empty to the pickup point: fuel + tolls. Owners price it into their ask."""
     per_km = rates["dieselPerLitre"] / rates["mileageKmPerLitre"][tt] + rates["tollPerKmByAxle"][str(rates["axlesByType"][tt])]
     return round(km * per_km)
 
+def lane_memory(lane, tt):
+    return (lane.get("memory") or {}).get(tt)
+
 def target_sell(lane, tt):
-    return fair_cost(lane["distanceKm"], tt, lane["returnLoadProb"])["est_cost"] / (1 - MARGIN["targetPct"] / 100)
+    return fair_cost(lane["distanceKm"], tt, lane["returnLoadProb"], lane_memory(lane, tt))["est_cost"] / (1 - MARGIN["targetPct"] / 100)
 
 def price_quote(lane, tt, buy, fixed_sell=None, budget=None):
     """Sell price = cost-plus at target margin, capped at the ceiling, matched to the shipper's budget
     only if the floor still holds. After booking, the shipper price is fixed (re-plan)."""
-    br = fair_cost(lane["distanceKm"], tt, lane["returnLoadProb"])
+    br = fair_cost(lane["distanceKm"], tt, lane["returnLoadProb"], lane_memory(lane, tt))
     note = ""
     if fixed_sell:
         sell = fixed_sell

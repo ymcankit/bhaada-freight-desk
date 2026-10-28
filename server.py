@@ -218,9 +218,12 @@ async def intake(request: Request):
 
 @app.post("/api/loads/{lid}/{action}", dependencies=[Depends(console_auth)])
 def load_action(lid: str, action: str):
-    if action not in ("approve", "reject", "backout"):
+    if action not in ("approve", "reject", "backout", "call_yes", "call_no"):
         raise HTTPException(404)
-    desk.post(action, lid=lid)
+    if action.startswith("call_"):
+        desk.post("broker_call", lid=lid, yes=action == "call_yes")
+    else:
+        desk.post(action, lid=lid)
     return {"ok": True}
 
 @app.post("/api/mode", dependencies=[Depends(console_auth)])
@@ -419,7 +422,7 @@ def join_as_owner(wa, name, city):
         desk.settings["mode"] = "live"
         desk.post("save")
     send(wa, f"Namaste {o['name']} 🙏 Aap fleet owner ke roop mein jud gaye" + (f" ({o['baseCity']})" if o.get("baseCity") else "")
-             + ".\nGaadi khaali ho to aise bhejiye: *32 ft MXL, Bhiwandi, aaj, ₹38/km*\n(Role badalna ho to *hi* likhiye.)")
+             + ".\nGaadi khaali ho to aise bhejiye: *32 ft MXL, Bhiwandi, aaj, ₹85/km*\n(Role badalna ho to *hi* likhiye.)")
 
 def on_text(wa, text):
     remember(wa, "Them", text)
@@ -564,7 +567,7 @@ def on_button(wa, bid):
         if lid == "owner":
             if is_owner:
                 return send(wa, f"Aap pehle se truck owner hain ({desk.owners[wa]['name']}) 👍 Gaadi khaali ho to bhejiye: "
-                                "*32 ft MXL, Bhiwandi, aaj, ₹38/km*")
+                                "*32 ft MXL, Bhiwandi, aaj, ₹85/km*")
             desk.brokers[wa] = {"chat": [], "load": {}, "await": "owner"}
             return send(wa, "Badhiya 🙏 Apna naam ya company aur shehar bhejiye, e.g. *Sharma Transport, Bhiwandi*")
         if is_owner:
@@ -573,6 +576,11 @@ def on_button(wa, bid):
         return send(wa, ("Owner list se hata diya. " if is_owner else "") + "Aap broker hain 👍 Load text ya voice note mein bhejiye.\n"
                         "e.g. _Kal subah Bhiwandi se Surat, 18 ton kapda, 32 MXL_")
     load = desk._find(lid) if lid else None
+    if action in ("call_yes", "call_no") and load and load.get("brokerPhone") == wa:
+        if load["status"] != "needs_call":
+            return send(wa, "Ye sawaal ab khula nahi hai. *status* likh ke haal dekhiye.")
+        desk.post("broker_call", lid=lid, yes=action == "call_yes")
+        return send(wa, "👍 Theek hai, kar raha hoon…" if action == "call_yes" else "Theek hai, load aapke paas hai.")
     if action in ("approve", "reject") and load and load.get("brokerPhone") == wa:
         if load["status"] != "needs_approval":
             text, buttons = desk.broker_status(load)

@@ -46,7 +46,7 @@ async function api(path, body, retry = true) {
 
 const STATUS = {
   routing: ["Finding the route", "neutral"], sourcing: ["Waiting on owners", "neutral"],
-  waiting_trucks: ["Waiting for a truck", "wait"], needs_approval: ["Needs your approval", "wait"],
+  waiting_trucks: ["Waiting for a truck", "wait"], needs_call: ["Needs your call", "wait"], needs_approval: ["Needs your approval", "wait"],
   holding: ["Waiting for the hold", "neutral"], booked: ["Booking-ready", "ok"], recovered: ["Re-booked", "ok"],
   escalated: ["Escalated to you", "bad"], rejected: ["Rejected", "neutral"],
 };
@@ -272,13 +272,11 @@ function renderDetail(l) {
       el("div", { class: "muted", style: "font-size:12px;margin:-2px 0 10px", text: `Floor ${s.floorPct}% · target ${s.targetPct}% · ceiling ${s.ceilingPct}%` }),
       el("dl", { class: "kv" },
         el("dt", { text: "Owner" }), el("dd", { text: w ? `${w.name} · ${w.reliability}/5` : "–" }),
-        el("dt", { text: `Fuel, ${l.lane.distanceKm} km at ₹${s.dieselPerLitre}/L` }), el("dd", { text: rs(q.fuel) }),
-        el("dt", { text: "Tolls (estimate)" }), el("dd", { text: rs(q.toll) }),
-        el("dt", { text: "Driver" }), el("dd", { text: rs(q.driver) }),
-        el("dt", { text: "Handling" }), el("dd", { text: rs(q.misc) }),
-        ...(q.fuel + q.toll + q.driver + q.misc - q.est_cost > 0 ? [el("dt", { text: `Return-load discount (${Math.round(l.lane.returnLoadProb * 100)}% chance)` }),
-          el("dd", { text: "−" + rs(q.fuel + q.toll + q.driver + q.misc - q.est_cost) })] : []),
-        el("dt", { class: "tot", text: "Cost basis" }), el("dd", { class: "tot", text: rs(q.est_cost) }),
+        ...(q.market ? [el("dt", { text: `Market rate (shipper), ${l.lane.distanceKm} km` }), el("dd", { text: rs(q.market) })] : []),
+        el("dt", { text: `Owner's running cost: fuel at ₹${s.dieselPerLitre}/L, tolls, driver and helper, EMI/maintenance, handling` }),
+        el("dd", { text: rs(q.owner_cost || (q.fuel + q.toll + q.driver + q.misc)) }),
+        el("dt", { class: "tot", text: q.basis === "cost" ? "Cost basis (owner's running cost)" : "Cost basis (market less a broker margin)" }),
+        el("dd", { class: "tot", text: rs(q.est_cost) }),
         el("dt", { text: "Buy from owner" }), el("dd", { text: rs(q.buy_total) }),
         el("dt", { class: "tot", text: "Sell to shipper" }), el("dd", { class: "tot", text: rs(q.sell_total) })));
     if (q.note) card.append(el("p", { class: "note", text: q.note }));
@@ -292,6 +290,14 @@ function renderDetail(l) {
         text: l.mode === "sandbox" ? "Rehearse: owner backs out" : "Owner cancelled by phone" })));
     }
     parts.push(card);
+  } else if (l.status === "needs_call") {
+    const c = l.brokerCall || {}, th = l.threads[c.owner] || {};
+    parts.push(el("div", { class: "qcard" }, el("h2", { text: "The strategist needs your call" }),
+      el("p", { class: "flag", text: (l.events.filter((e) => e.actor === "Strategist").pop() || {}).text || "" }),
+      el("p", { class: "muted", text: `${th.name || "Owner"} asks ₹${c.ask}/km.` }),
+      el("div", { class: "actions" },
+        el("button", { class: "btn primary", onclick: () => act(l.id, "call_yes"), text: l.phase === "replan" ? "Book below floor" : "Quote at that rate" }),
+        el("button", { class: "btn", onclick: () => act(l.id, "call_no"), text: "No, hand it to me" }))));
   } else if (l.status === "escalated") {
     parts.push(el("div", { class: "qcard" }, el("h2", { text: "Not quoted" }), el("p", { class: "flag", text: l.reason }),
       el("p", { class: "note", text: "Nothing was sent to the shipper. Call an owner you trust or quote by hand." })));
