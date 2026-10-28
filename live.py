@@ -309,7 +309,7 @@ class Desk:
         load["events"].append({"t": t, "actor": actor, "text": text, "by": by, **extra})
         # one structured line per lifecycle step: no names, phone numbers or message text
         print(json.dumps({"log": "load", "load": load.get("id"), "step": actor, "by": by, "status": load.get("status"),
-                          "ms": round((t - prev) * 1000), "sinceStartMs": round((t - load.get("createdAt", t)) * 1000)}))
+                          "ms": round((t - prev) * 1000), "sinceStartMs": round((t - load.get("createdAt", t)) * 1000)}), flush=True)
 
     # ---------------- owners ----------------
     def register_owner(self, phone, name, city=None):

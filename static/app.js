@@ -64,6 +64,7 @@ function cd(deadline) { return el("span", { class: "cd", "data-deadline": deadli
 function tickCountdowns() {
   if (!S.data) return;
   document.querySelectorAll(".cd").forEach((n) => { n.textContent = mmss(+n.dataset.deadline - nowEst()); });
+  document.querySelectorAll(".sw-live").forEach((n) => { n.textContent = mmss(nowEst() - +n.dataset.start); });
 }
 setInterval(tickCountdowns, 1000);
 
@@ -110,14 +111,14 @@ function render() {
 
 // ---------------- desk ----------------
 function renderDesk() {
-  const d = S.data, k = d.kpis;
+  const d = S.data, k = d.kpis, med = medianQuoteMin(d);
   renderFinding();
   const kp = [
     ["Loads today", k.received], ["Quoted", k.quoted], ["Booking-ready", k.booked], ["Waiting on you", k.waiting],
-    ["Median time to quote", k.medianQuoteMin === null ? null : [k.medianQuoteMin, "min"]],
+    ["Median time to quote", med === null ? null : [med, "min"]],
     ["Avg margin booked", k.avgMargin === null ? null : [k.avgMargin, "%"]],
   ];
-  $("kpis").replaceChildren(...kp.map(([label, v]) => el("div", {}, el("dt", { text: label }),
+  $("kpis").replaceChildren(...kp.map(([label, v]) => el("div", { title: label.startsWith("Median") ? "Real loads only: AI-broker demo loads are left out" : null }, el("dt", { text: label }),
     v === null ? el("dd", { class: "dash", text: "–" }) : Array.isArray(v) ? el("dd", {}, String(v[0]), el("small", { text: v[1] })) : el("dd", { text: String(v) }))));
 
   const loads = d.loads;
@@ -184,11 +185,15 @@ function renderOpen(l) {
       el("button", { class: "back", onclick: () => { S.sel = null; renderDesk(); }, text: "‹ All loads" }),
       el("h2", {}, `${lane.origin || f.origin} → ${lane.destination || f.destination}`),
       el("div", { class: "meta", text: [l.id, lane.distanceKm ? `${lane.distanceKm} km by road` : null, `${f.weight_ton} T`, l.searchType || f.truck_type,
-        f.pickup_when || "kal", f.budget_rs ? `budget ${rs(f.budget_rs)}` : null, l.source === "whatsapp" ? "from WhatsApp" : l.source === "telegram" ? "from Telegram" : "from console"].filter(Boolean).join(" · ") })),
+        f.pickup_when || "kal", f.budget_rs ? `budget ${rs(f.budget_rs)}` : null, l.source === "whatsapp" ? "from WhatsApp" : l.source === "telegram" ? "from Telegram" : "from console",
+        l.aiBroker ? "AI-broker demo" : null].filter(Boolean).join(" · ") }),
+      el("div", { class: "meta" }, stopwatch(l))),
     el("span", { class: `pill ${cls}`, text: word }));
   const parts = [head];
   const threads = Object.values(l.threads);
   if (threads.length) parts.push(race(l, threads));
+  const st = strategist(l);
+  if (st) parts.push(st);
   parts.push(log(l));
   $("open").replaceChildren(...parts);
 }
@@ -241,9 +246,65 @@ function race(l, threads) {
 }
 const load_winner = (l) => l.winner;
 
+// Who decided each step: the server marks it (e.by); older saved events are read from their actor and text.
+const BY_TITLE = { AI: "A language model read or chose this; code checked it", Code: "Decided by code: pricing, guardrails, routing, timers, fixed rules",
+  Human: "A person: the broker or an owner" };
+function byOf(e) {
+  if (e.by) return e.by;
+  if (e.actor === "Broker") return "Human";
+  if (e.actor === "Strategist") return e.text.startsWith("(AI)") ? "AI" : "Code";
+  if (e.actor === "Intake") return e.text.startsWith("Budget") ? "Code" : "AI";
+  if (/ (cancelled|backed out|confirmed the|is no longer free)|^Dispatch:/.test(e.text)) return "Human";
+  return "Code";
+}
+const badge = (by) => el("span", { class: `by by-${by.toLowerCase()}`, title: BY_TITLE[by] || null, text: by });
+
 function log(l) {
-  return el("div", { class: "log" }, el("h3", { text: "What the agents did" }),
-    el("ol", {}, ...l.events.map((e) => el("li", {}, el("time", { text: clock(e.t) }), el("span", { class: "actor", text: e.actor }), el("span", { text: e.text })))));
+  return el("div", { class: "log" },
+    el("div", { class: "log-head" }, el("h3", { text: "What the agents did" }), el("span", { class: "muted", text: "Who decided: AI · Code · Human" })),
+    el("ol", {}, ...l.events.map((e) => el("li", {}, el("time", { text: clock(e.t) }), el("span", { class: "actor", text: e.actor }),
+      el("span", {}, badge(byOf(e))), el("span", { text: e.text })))));
+}
+
+// The strategist's decisions: every move the code offered, the one chosen, and why.
+const MOVE = { widen: "Widen the search", bigger_truck: "Bigger truck", final_offer: "Final offer", ask_broker: "Ask the broker", escalate: "Hand over" };
+function stratOf(e) {
+  if (e.chosen) return { chosen: e.chosen, moves: e.moves, why: e.why };
+  const m = /^\((?:AI|rules)\) ([^:]+): (.*?)(?:\. Why: (.*))?$/.exec(e.text) || [];
+  const chosen = (m[1] || "").replace(/ /g, "_");
+  return { chosen, moves: chosen ? { [chosen]: m[2] } : null, why: m[3] || "" };
+}
+function strategist(l) {
+  const evs = l.events.filter((e) => e.actor === "Strategist");
+  if (!evs.length) return null;
+  return el("div", { class: "strat" },
+    el("div", { class: "log-head" }, el("h3", { text: "Strategist" }), el("span", { class: "muted", text: `${evs.length} decision${evs.length === 1 ? "" : "s"}` })),
+    el("ol", {}, ...evs.map((e) => {
+      const s = stratOf(e);
+      return el("li", {},
+        el("div", { class: "strat-head" }, el("time", { text: clock(e.t) }), el("b", { text: MOVE[s.chosen] || s.chosen || "Decision" }), badge(byOf(e))),
+        s.moves ? el("ul", { class: "moves", "aria-label": "Moves considered" }, ...Object.entries(s.moves).map(([k, v]) =>
+          el("li", { class: k === s.chosen ? "chosen" : null }, el("span", { class: "mv", text: (k === s.chosen ? "Chosen · " : "") + (MOVE[k] || k) }),
+            el("span", { text: v })))) : el("p", { class: "muted", text: e.text }),
+        s.why ? el("p", { class: "why", text: `Why: ${s.why}` }) : null);
+    })));
+}
+
+// Inquiry → booking-ready: live while the load is open, frozen once an owner holds the truck.
+function stopwatch(l) {
+  const ready = ["booked", "recovered"].includes(l.status) && l.bookedAt;
+  if (ready) return el("span", { class: "sw done", title: "Inquiry to booking-ready" }, "Booking-ready in ", el("b", { text: mmss(l.bookedAt - l.createdAt) }));
+  if (["escalated", "rejected"].includes(l.status)) return el("span", { class: "sw", text: "Not booked" });
+  return el("span", { class: "sw", title: "Inquiry to booking-ready, still running" }, "Open for ",
+    el("b", { class: "sw-live", "data-start": l.createdAt, text: mmss(nowEst() - l.createdAt) }));
+}
+
+// Median time to quote over today's real loads: the AI broker's demo loads would flatter it.
+function medianQuoteMin(d) {
+  const day = (t) => new Date(t * 1000).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" });
+  const mins = d.loads.filter((l) => !l.aiBroker && l.quoteAt && day(l.createdAt) === day(d.now))
+    .map((l) => (l.quoteAt - l.createdAt) / 60).sort((a, b) => a - b);
+  return mins.length ? Math.round(mins[Math.floor(mins.length / 2)] * 10) / 10 : null;
 }
 
 function rail(q, s) {
