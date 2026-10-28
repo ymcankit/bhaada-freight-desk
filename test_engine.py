@@ -57,6 +57,11 @@ def run_tests():
         ok &= check("normaliser maps '32 MXL'", E.norm_type("32 MXL") == "32 ft MXL")
         ok &= check("normaliser asks on ambiguous '32 ft'", E.norm_type("32 ft") is None)
         ok &= check("normaliser maps 'Bhiwandi (Mumbai)'", E.norm_city("Bhiwandi (Mumbai)") == "Bhiwandi")
+        ok &= check("kg read as tons", E.norm_tons("18000 kg") == 18 and E.norm_tons(18000) == 18 and E.norm_tons("14 ton") == 14
+                    and E.norm_tons("150 quintal") == 15)
+        ok &= check("lakh and k budgets", E.norm_money("25k") == 25000 and E.norm_money("1.2 lakh") == 120000
+                    and E.norm_money("35 hazaar") == 35000 and E.norm_money("1,20,000") == 120000 and E.norm_money(40) == 40
+                    and E.norm_money("40/km") == 40)
 
         # 2. deterministic planner on the hero load
         r = E.run_quote(HERO, POOL, use_llm=False)

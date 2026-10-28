@@ -202,14 +202,42 @@ def norm_weight(x):
     m = re.search(r"\d+(\.\d+)?", str(x))
     return float(m.group(0)) if m else None
 
+def norm_tons(x):
+    """'18000 kg' or a bare 18000 is kilograms, '150 quintal' is 15 T: no truck carries 100 T."""
+    v = norm_weight(str(x).replace(",", "") if x not in (None, "") else x)
+    if v is None:
+        return None
+    s = str(x).lower()
+    if "quintal" in s:
+        v /= 10
+    elif "kg" in s or "kilo" in s or v >= 100:
+        v /= 1000
+    return round(v, 2) or None
+
+MONEY_MULT = [(r"crore|\bcr\b", 1e7), (r"lakh|lac|\bl\b", 1e5), (r"\d\s*k\b|hazaa?r|thousand", 1e3)]
+
+def norm_money(x):
+    """'25k', '1.2 lakh', '35 hazaar', '1,20,000' -> rupees. A per-km figure stays small; the desk converts it."""
+    if isinstance(x, (int, float)):
+        return float(x)
+    v = norm_weight(str(x).replace(",", "") if x not in (None, "") else x)
+    if v is None:
+        return None
+    s = str(x).lower()
+    if not re.search(r"/\s*km|per\s*km|prati", s):
+        for pat, mult in MONEY_MULT:
+            if re.search(pat, s):
+                return v * mult
+    return v
+
 def normalise_load(load):
     """Validate every LLM-extracted field against the known lists; anything unmatched becomes missing."""
     out = dict(load or {})
     out["origin"] = norm_city(out.get("origin"))
     out["destination"] = norm_city(out.get("destination"))
     out["truck_type"] = norm_type(out.get("truck_type"))
-    out["weight_ton"] = norm_weight(out.get("weight_ton"))
-    out["budget_rs"] = norm_weight(out.get("budget_rs"))
+    out["weight_ton"] = norm_tons(out.get("weight_ton"))
+    out["budget_rs"] = norm_money(out.get("budget_rs"))
     return out
 
 def missing_fields(load):
