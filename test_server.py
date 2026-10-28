@@ -10,6 +10,7 @@ import engine as E
 import live
 live.STATE_FILE = Path(tempfile.gettempdir()) / "bhaada_test_state.json"
 live.STATE_FILE.unlink(missing_ok=True)
+live._store = lambda: None                            # never the real Upstash, even with its keys in the shell
 import server
 from fastapi.testclient import TestClient
 
@@ -28,9 +29,13 @@ c = TestClient(server.app)
 BROKER, OWNERS = "919800000001", ["919800000011", "919800000012", "919800000013"]
 n = [0]
 
+import hmac, hashlib, json as _json
+server.WA_SECRET = "s3cret"                          # Meta signs every POST; the test does the same
+
 def wa(frm, **content):
     n[0] += 1
-    c.post("/webhook", json={"entry": [{"changes": [{"value": {"messages": [{"id": f"m{n[0]}", "from": frm, **content}]}}]}]})
+    body = _json.dumps({"entry": [{"changes": [{"value": {"messages": [{"id": f"m{n[0]}", "from": frm, **content}]}}]}]}).encode()
+    c.post("/webhook", content=body, headers={"X-Hub-Signature-256": "sha256=" + hmac.new(b"s3cret", body, hashlib.sha256).hexdigest()})
 
 def text(frm, body):
     wa(frm, type="text", text={"body": body})
@@ -137,13 +142,12 @@ text(BROKER, "owner ne rate kya bola?")                    # after the day's che
 ok &= check("a broker saying 'owner ...' is not registered as an owner", BROKER not in server.desk.owners)
 
 # webhook signature, console password and settings validation
-import hmac, hashlib, json as _json
-server.WA_SECRET = "s3cret"
 body = _json.dumps({"entry": []}).encode()
 sig = "sha256=" + hmac.new(b"s3cret", body, hashlib.sha256).hexdigest()
 ok &= check("unsigned WhatsApp POST refused", c.post("/webhook", content=body).status_code == 403)
 ok &= check("signed WhatsApp POST accepted", c.post("/webhook", content=body, headers={"X-Hub-Signature-256": sig}).status_code == 200)
 server.WA_SECRET = ""
+ok &= check("no app secret: WhatsApp POSTs refused, not trusted", c.post("/webhook", content=body).status_code == 403)
 server.CONSOLE_PW = "pw"
 ok &= check("console locked without the password", c.get("/api/state").json() == {"locked": True}
             and c.post("/api/mode", json={"mode": "live"}).status_code == 401 and c.get("/healthz").status_code == 200)

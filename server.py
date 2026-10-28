@@ -34,7 +34,13 @@ TG_TOKEN = cfg("TELEGRAM_BOT_TOKEN").strip()
 TG_READY = bool(re.fullmatch(r"\d+:[\w-]{30,}", TG_TOKEN))
 TG_API = f"https://api.telegram.org/bot{TG_TOKEN}"
 TG_PATH = hashlib.sha256(TG_TOKEN.encode()).hexdigest()[:24]   # unguessable webhook path, derived from the token
-TG_BOT = {"username": None}
+TG_SECRET = hashlib.sha256(("secret:" + TG_TOKEN).encode()).hexdigest()[:48]   # sent back by Telegram in a header
+TG_BOT = {"username": None, "hooked": False}
+
+def safe(e):
+    """An error for the logs: requests puts the URL in its errors, and Telegram's URLs carry the bot token."""
+    s = repr(e)
+    return s.replace(TG_TOKEN, "<bot-token>") if TG_TOKEN else s
 
 # ---------------- WhatsApp sending ----------------
 def wa_send(to, text, buttons=None):
@@ -69,7 +75,7 @@ def tg_send(to, text, buttons=None):
         if not r.ok:
             print("Telegram send failed:", r.status_code, r.text[:300])
     except Exception as e:
-        print("Telegram send error:", repr(e))
+        print("Telegram send error:", safe(e))
 
 def send(to, text, buttons=None):
     """One sender for the desk: picks the channel from the address."""
@@ -79,17 +85,22 @@ def send(to, text, buttons=None):
     return wa_send(to, text, buttons) if WA_READY else None
 
 def tg_setup():
+    """Point the bot at this server, with a secret header; retried, since a cold boot often meets a slow network."""
     base = (cfg("PUBLIC_URL") or os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
-    try:
-        TG_BOT["username"] = requests.get(f"{TG_API}/getMe", timeout=15).json()["result"]["username"]
-        if base:
-            r = requests.post(f"{TG_API}/setWebhook", json={"url": f"{base}/telegram/{TG_PATH}",
-                              "allowed_updates": ["message", "callback_query"]}, timeout=15)
-            print("Telegram webhook:", r.json().get("description"))
-        else:
-            print("Telegram: set PUBLIC_URL so the bot can reach this server")
-    except Exception as e:
-        print("Telegram setup failed:", repr(e))
+    for wait in (0, 5, 20, 60):
+        threading.Event().wait(wait)
+        try:
+            TG_BOT["username"] = requests.get(f"{TG_API}/getMe", timeout=15).json()["result"]["username"]
+            if not base:
+                return print("Telegram: set PUBLIC_URL so the bot can reach this server")
+            r = requests.post(f"{TG_API}/setWebhook", json={"url": f"{base}/telegram/{TG_PATH}", "secret_token": TG_SECRET,
+                              "allowed_updates": ["message", "callback_query"]}, timeout=15).json()
+            print("Telegram webhook:", r.get("description"))
+            if r.get("ok"):
+                TG_BOT["hooked"] = True
+                return
+        except Exception as e:
+            print("Telegram setup failed:", safe(e))
 
 desk = live.Desk(sender=send if (WA_READY or TG_READY) else None)
 if TG_READY:
@@ -232,7 +243,7 @@ def checkin():
 SEEN, SEEN_ORDER, LOCKS = set(), collections.deque(), {}
 WA_SECRET = cfg("WHATSAPP_APP_SECRET").strip()      # Meta app secret: proves a webhook POST came from Meta
 if WA_READY and not WA_SECRET:
-    print("WARNING: WHATSAPP_APP_SECRET is not set, so WhatsApp webhook POSTs are not verified")
+    print("WARNING: WHATSAPP_APP_SECRET is not set, so WhatsApp webhook POSTs are refused")
 
 def first_time(mid):
     """Meta and Telegram retry deliveries; remember the last few thousand ids, not every id forever."""
@@ -254,10 +265,11 @@ def verify(request: Request):
 @app.post("/webhook")
 async def receive(request: Request, bg: BackgroundTasks):
     raw = await request.body()
-    if WA_SECRET:
-        good = "sha256=" + hmac.new(WA_SECRET.encode(), raw, hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(request.headers.get("x-hub-signature-256", "").encode(), good.encode()):
-            raise HTTPException(403, "bad signature")
+    if not WA_SECRET:                                   # unsigned, anyone could pose as any number and message real owners
+        raise HTTPException(403, "WHATSAPP_APP_SECRET is not set")
+    good = "sha256=" + hmac.new(WA_SECRET.encode(), raw, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(request.headers.get("x-hub-signature-256", "").encode(), good.encode()):
+        raise HTTPException(403, "bad signature")
     body = json.loads(raw or b"{}")
     for entry in body.get("entry", []):
         for change in entry.get("changes", []):
@@ -268,8 +280,12 @@ async def receive(request: Request, bg: BackgroundTasks):
 
 @app.post("/telegram/{path}")
 async def telegram(path: str, request: Request, bg: BackgroundTasks):
-    if not TG_READY or path != TG_PATH:
+    if not TG_READY or not hmac.compare_digest(path.encode(), TG_PATH.encode()):
         raise HTTPException(404)
+    got = request.headers.get("x-telegram-bot-api-secret-token")
+    # once setWebhook took our secret, every real update carries it; a path seen in a log is not enough to post
+    if (TG_BOT["hooked"] or got is not None) and not hmac.compare_digest((got or "").encode(), TG_SECRET.encode()):
+        raise HTTPException(403)
     u = await request.json()
     if first_time("tg:" + str(u.get("update_id"))):
         bg.add_task(handle_telegram, u)
@@ -309,7 +325,7 @@ def handle_telegram(u):
                 return send(key, ONLY_TEXT)
             on_text(key, text)
         except Exception as e:
-            print("telegram message failed:", repr(e))
+            print("telegram message failed:", safe(e))
             send(key, OOPS)
 
 def handle_message(msg):
