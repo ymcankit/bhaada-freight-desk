@@ -11,6 +11,8 @@ Nothing here is filled in yet; record only what really happened, with dates.
 | `lane_quotes.csv` | Real market quotes for the demo lanes, to check the FR8-fitted rate card | 3 lanes × 3 quotes |
 | `pilot_plan.md` | 3-week shadow → co-pilot plan with the KPIs the desk already measures | — |
 | `loi_template.md` | One-page letter of intent for a pilot agency | — |
+| `unit_economics.md` | Cost per load (measured tokens) and the one pricing model | — |
+| `pitch_alignment.md` | Where the master doc and deck must match the code | — |
 
 The desk measures its own evidence in the pilot:
 - **Shadow accuracy:** a broker types `mera rate BH-1005 27500` after quoting the shipper themselves; the console's

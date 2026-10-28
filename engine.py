@@ -856,7 +856,8 @@ def _thread(p, deal, status, ask, final, chat, fair):
     return {"owner": p, "deal": deal, "status": status, "ask": round(ask, 1) if ask else None,
             "final": round(final, 1) if final else None, "delay": p["responseDelaySec"], "chat": chat, "fair": round(fair)}
 
-# =============================== the load session: tools the orchestrator can call ===============================
+# ===== Earlier tool-calling planner (LoadSession + plan_llm): used only by test_engine, smoke_test and legacy/app.py. =====
+# ===== The live desk that serves brokers and owners is live.py (event-driven code, model reads, checked strategist). =====
 class LoadSession:
     def __init__(self, load, lane, pool, fixed_sell=None, exclude=(), prefer=None, mode="quote"):
         self.load, self.lane, self.pool, self.mode = load, lane, pool, mode

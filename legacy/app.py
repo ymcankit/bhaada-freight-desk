@@ -1,9 +1,13 @@
 """
 Bhaada - Agentic Freight Desk (Streamlit MVP, Abhikalp 2026 Case 9)
-Run:  pip install -r requirements.txt  ->  streamlit run app.py
+Legacy: the first prototype, kept for reference. The product is server.py + live.py.
+Run:  pip install streamlit  ->  streamlit run legacy/app.py   (from the repo root)
 Keys: put GROQ_API_KEY in .streamlit/secrets.toml (local) or the Streamlit Cloud secrets box.
 Without a key the desk still runs, on the deterministic planner (chat intake needs the key).
 """
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))   # engine.py lives in the repo root
+
 import os, json, time
 from datetime import datetime
 from zoneinfo import ZoneInfo

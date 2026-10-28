@@ -41,5 +41,5 @@ it to anyone). `PUBLIC_VIEW=1` lets anyone watch while only the password approve
     smoke_test.py    Live check of the LLM orchestrator with your key
     test_telegram.py End-to-end test over fake Telegram traffic
     test_agents.py   AI owners/broker, timers, strategist, two-load routing
-    app.py           Earlier Streamlit prototype (not deployed)
+    legacy/app.py    Earlier Streamlit prototype (not deployed)
     render.yaml      One-click deploy on Render
