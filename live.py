@@ -412,6 +412,8 @@ class Desk:
                 "Recent chat (oldest first):\n" + ("\n".join(list(getattr(self, "convo", {}).get(o["key"], []))[:-1][-8:])
                                                    or "(new chat)") + "\n"
                 "Mention a load only when the message is about it; don't repeat what they were just told.\n"
+                "If they ask whether their truck suits some goods or weight, advise from this truck guide:\n" + E.truck_catalogue()
+                + "\nGoods rules:\n" + E.material_guide() + "\n"
                 f'Owner\'s message: "{text}"\n'
                 "Rules:\n"
                 "- If the message reports a free/empty truck, its type, location or rate, set intent=\"checkin\" and leave reply empty.\n"
@@ -586,13 +588,17 @@ class Desk:
             per_km = f["budget_rs"]
             f["budget_rs"] = round(per_km * load["lane"]["distanceKm"])
             self._event(load, "Intake", f"Budget ₹{per_km:g}/km × {load['lane']['distanceKm']} km = ₹{f['budget_rs']:,}")
-        tc = E.type_check(f)
-        load["searchType"] = f["truck_type"] if tc["fits"] else (tc["suggest"][0] if tc["suggest"] else None)
+        f.setdefault("material_class", E.material_class(f.get("material"), load.get("raw")))
+        fit = E.truck_fit(f)
+        m = fit["material"]
+        load["searchType"] = fit["type"]
+        load["lane"]["premiumPct"] = m.get("premiumPct", 0)
         if not load["searchType"]:
-            return self._escalate(load, f"No truck type carries {f['weight_ton']:g} T. Split the load or quote a trailer.",
-                                  f"{f['weight_ton']:g} T kisi bhi gaadi mein nahi aayega. Load do gaadiyon mein baantiye ya trailer ka rate lijiye.")
-        if load["searchType"] != f["truck_type"]:
-            self._event(load, "Orchestrator", f"{f['truck_type']} carries max {tc['capacity_ton']} T, so sourcing a {load['searchType']}.")
+            return self._escalate(load, f"No truck fits: {fit['why']}.", f"{fit['why']}.")
+        self._event(load, "Orchestrator", f"Goods: {m['label']} → {m['body']} body" + (", hazardous handling" if m.get("hazmat") else "")
+                    + (f", +{m['premiumPct']}% rate" if m.get("premiumPct") else "")
+                    + (f". Sourcing a {load['searchType']} ({fit['why']})." if load["searchType"] != f.get("truck_type") or f.get("truck_type_asked")
+                       else f". Sourcing a {load['searchType']}."))
         self._broadcast(load)
 
     # ---------------- sourcing ----------------
@@ -668,8 +674,12 @@ class Desk:
             when = f.get("pickup_when") or "kal"
             hint = f" Aapne subah ₹{c['ratePerKm']}/km bataya tha." if c.get("ratePerKm") else ""
             demo = "🧪 Demo load (AI broker) · " if load.get("aiBroker") else ""
+            m = E.MATERIALS.get(f.get("material_class") or "general", {})
+            goods = f" {f['material']}" if f.get("material") and f["material"] != "general" else ""
+            need = (" Band (closed) body chahiye." if m.get("body") == "closed" else "") + \
+                   (" ⚠️ Khatarnaak maal: Hazchem permit + trained driver zaroori. Nahi ho to mana kar dijiye." if m.get("hazmat") else "")
             self._to_owner(load, th, f"🚚 {demo}{load['id']} Load: {lane['origin']} → {lane['destination']} ({lane['distanceKm']} km), {when}, "
-                                     f"{f['weight_ton']:g} T, {c['type']}.{hint} Gaadi free hai? Rate batayiye (₹/km ya total).")
+                                     f"{f['weight_ton']:g} T{goods}, {c['type']}.{need}{hint} Gaadi free hai? Rate batayiye (₹/km ya total).")
         self._event(load, "Sourcing", f"Messaged {len(cands)} owners near {lane['origin']} at once"
                                       + (f" (round {load['rounds']}, within {radius} km)" if load["rounds"] > 1 else "")
                                       + f". Waiting up to {self.timeout() // 60 or 1} min for replies.")
@@ -827,7 +837,7 @@ class Desk:
     def _rationale(self, load, th, km):
         """The owner-facing reason behind a number: the lane's market rate and what this trip really costs them."""
         lane = load["lane"]
-        c = E.fair_cost(km, th["type"], lane.get("returnLoadProb", 0.5), E.lane_memory(lane, th["type"]))
+        c = E.lane_cost(lane, th["type"])
         why = (f"Hisaab: is route pe {th['type']} ka market bhaada ~₹{round(c['market'] / km)}/km (shipper rate) chalta hai. "
                f"Aapka kharcha: diesel ~₹{c['fuel']:,} (₹{E.rates['dieselPerLitre']:g}/L), toll ~₹{c['toll']:,}, driver+helper "
                f"~₹{c['driver']:,}, EMI/maintenance ~₹{c['fixed']:,} → lagbhag ₹{round(c['owner_cost'] / km)}/km.")
@@ -1297,10 +1307,13 @@ class Desk:
         delay = max(1.5, min(20.0, b["responseDelaySec"] / 10, 0.5 * self.timeout()))   # always inside the reply window
         seed = int(hashlib.md5(f"{th['ownerKey']}|{load['id']}|{th['rounds']}|{th['status']}".encode()).hexdigest(), 16)
         km = load["lane"]["distanceKm"]
-        cost = E.fair_cost(km, th["type"], load["lane"]["returnLoadProb"])["est_cost"]
+        cost = E.lane_cost(load["lane"], th["type"])["est_cost"]
         cost += E.deadhead_cost(th["deadheadKm"] or 0, th["type"]) * E.SRC["deadheadChargedShare"]
         ask, floor = cost * b["ratePremium"] / km, cost * b["minRateMult"] / km
         st, last = th["status"], th["messages"][-1]["text"]
+        if st == "sent" and E.MATERIALS.get(load["load"].get("material_class") or "general", {}).get("hazmat") and seed % 2:
+            text = "Hazardous maal nahi le jaate bhai, permit nahi hai. Sorry 🙏"     # many real owners refuse it
+            return threading.Timer(delay, lambda: self.post("owner_message", key=th["ownerKey"], text=text, lid=load["id"])).start()
         if st == "sent":
             if b["responseDelaySec"] > 180 or seed % 10 == 0:
                 return                                      # this one never answers: the timeout handles it
@@ -1325,9 +1338,13 @@ class Desk:
         th, q, f, lane = load["threads"][load["winner"]], load["quote"], load["load"], load["lane"]
         ths = [t for t in load["threads"].values()]
         n = lambda s: sum(t["status"] == s for t in ths)
-        lines = [f"*{load['id']}* {lane['origin']} → {lane['destination']} · {lane['distanceKm']} km · {f['weight_ton']:g} T"]
+        m = E.MATERIALS.get(f.get("material_class") or "general", {})
+        lines = [f"*{load['id']}* {lane['origin']} → {lane['destination']} · {lane['distanceKm']} km · {f['weight_ton']:g} T"
+                 + (f" {f['material']}" if f.get("material") and f["material"] != "general" else "")]
         if load["searchType"] != f["truck_type"]:
-            lines.append(f"🔄 {f['truck_type']} mein {f['weight_ton']:g} T nahi aayega, isliye {load['searchType']} li hai")
+            lines.append(f"🔄 {f['truck_type']} ki jagah {load['searchType']} li hai")
+        if m.get("premiumPct"):
+            lines.append(f"📦 {m['label']}: +{m['premiumPct']}% rate" + (". Hazchem permit, UN number e-way bill/LR par, trained driver." if m.get("hazmat") else ""))
         lines += [f"📲 {len(ths)} owners se poocha: {n('deal')} raazi, {n('declined')} mana, {n('silent')} ka jawab nahi",
                   f"🚛 {th['name']}{' (AI owner)' if th.get('sandbox') and load['mode'] == 'live' else ''} · {th['type']} · {th['reliability']}★",
                   f"💰 Quote *₹{q['sell_total']:,}* (₹{q['rate_per_km']}/km) · owner ko ₹{q['buy_total']:,}",

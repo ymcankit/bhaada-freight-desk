@@ -118,5 +118,28 @@
    "basis": "FR8 20/22/24 ft container listings"
   }
  },
- "_marketComment": "Market full-truck price = fixedRs + perKm x distance, fitted to FR8 published lane rates (fr8.in, Mumbai to Vapi/Ankleshwar/Ahmedabad/Bhopal/Hyderabad/Bangalore/Chennai/Coimbatore, Oct 2026). Short trips cost more per km. Agreed rates on a lane (lane memory) are blended in as they come."
+ "_marketComment": "Market full-truck price = fixedRs + perKm x distance, fitted to FR8 published lane rates (fr8.in, Mumbai to Vapi/Ankleshwar/Ahmedabad/Bhopal/Hyderabad/Bangalore/Chennai/Coimbatore, Oct 2026). Short trips cost more per km. Agreed rates on a lane (lane memory) are blended in as they come.",
+ "volumeCftByType": {
+  "14 ft": 560,
+  "17 ft": 800,
+  "19 ft": 1000,
+  "22 ft": 1300,
+  "24 ft SXL": 1500,
+  "32 ft SXL": 2000,
+  "32 ft MXL": 2000,
+  "Taurus (10-tyre)": 1300,
+  "20 ft container": 1150
+ },
+ "bodyByType": {
+  "14 ft": "open or closed",
+  "17 ft": "open or closed",
+  "19 ft": "open or closed",
+  "22 ft": "open or closed",
+  "24 ft SXL": "closed",
+  "32 ft SXL": "closed",
+  "32 ft MXL": "closed",
+  "Taurus (10-tyre)": "open",
+  "20 ft container": "closed"
+ },
+ "_truckComment": "Typical body and load space (cubic feet) in the Indian market: 14-22 ft LCV/ICV come as open or closed bodies, SXL/MXL are closed containers, a Taurus is an open high-side truck. Owners confirm the body when they quote."
 }

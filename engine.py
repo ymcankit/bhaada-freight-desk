@@ -21,9 +21,10 @@ sample_inq, CITY = _load("sample_inquiries.json"), _load("cities.json")
 MARGIN, SRC = rates["marginBand"], rates["sourcing"]
 KNOWN_CITIES = sorted({l["origin"] for l in lanes} | {l["destination"] for l in lanes})
 KNOWN_TYPES = list(rates["mileageKmPerLitre"].keys())
+MATERIALS = _load("materials.json")["classes"]
 TRUCKS_BY_ID = {t["truckId"]: t for t in trucks}
 OWNERS_BY_ID = {o["ownerId"]: o for o in owners}
-REQUIRED = ["origin", "destination", "weight_ton", "truck_type"]
+REQUIRED = ["origin", "destination", "weight_ton", "material"]     # the truck type is advised from these when not given
 
 # =============================== LLM: OpenAI (paid credit) first for what people read, then free Groq ===============================
 GROQ_CHAT = "https://api.groq.com/openai/v1/chat/completions"
@@ -287,10 +288,16 @@ def normalise_load(load):
     out["truck_type"] = norm_type(out.get("truck_type"))
     out["weight_ton"] = norm_tons(out.get("weight_ton"))
     out["budget_rs"] = norm_money(out.get("budget_rs"))
+    out["volume_cft"] = norm_money(out.get("volume_cft"))
+    if out.get("material"):
+        out["material"] = str(out["material"]).strip()[:60]
     return out
 
 def missing_fields(load):
-    return [k for k in REQUIRED if not load.get(k)]
+    miss = [k for k in REQUIRED if not load.get(k)]
+    if not miss and MATERIALS.get(load.get("material_class"), {}).get("askHazard") and load.get("hazardous") is None:
+        miss.append("hazard")
+    return miss
 
 # =============================== conversational intake (shared by the web desk and WhatsApp) ===============================
 def _hist(h):
@@ -299,6 +306,8 @@ def _hist(h):
 
 ASK = {"origin": "Kahan se load uthana hai?", "destination": "Kahan tak jaana hai?",
        "weight_ton": "Kitna ton hai?",
+       "material": "Kya maal hai? (kapda, steel, chemical, dawai, carton, anaaj…) Isse sahi gaadi chunta hoon.",
+       "hazard": "Ye chemical khatarnaak hai (acid, solvent, gas, jwalansheel) ya normal? Khatarnaak ho to alag permit wali gaadi lagti hai.",
        "truck_type": "Kaunsi gaadi chahiye? (" + ", ".join(KNOWN_TYPES[:6]) + " …)"}
 
 def intake_turn(hist, load, user_msg):
@@ -314,25 +323,43 @@ Conversation so far:
 {_hist(hist)}
 Latest broker message: "{user_msg}"
 Merge new details into the load; keep existing values unless the broker corrects them.
-Required fields: origin, destination, weight_ton, truck_type. Optional: pickup_when, budget_rs (shipper's budget in rupees, number).
+Required fields: origin, destination, weight_ton, material (what the goods are, in the broker's words, e.g. "kapda", "steel saria", "acid drums"; "pata nahi"/"general" is fine if they don't say). Optional: truck_type (only if the broker names one; never guess it - the desk advises the truck), pickup_when, budget_rs (shipper's budget in rupees, number), volume_cft (cubic feet if given), hazardous (true/false only if the broker said whether a chemical is dangerous).
 Return ONLY JSON:
-{{"reply":"<one or two short lines>","load":{{"origin":null,"destination":null,"weight_ton":null,"truck_type":null,"pickup_when":null,"budget_rs":null}},"missing":["..."],"complete":false}}
+{{"reply":"<one or two short lines>","load":{{"origin":null,"destination":null,"weight_ton":null,"material":null,"truck_type":null,"pickup_when":null,"budget_rs":null,"volume_cft":null,"hazardous":null}},"missing":["..."],"complete":false}}
 Fill load with everything known so far. If all required fields are known set complete=true and reply that you are finding the best truck now.
 If anything required is missing, the reply must ASK for exactly those details (e.g. "Kahan se kahan tak?") and must not say you are finding a truck.
 Reply language: always Hinglish - Hindi words in Roman script, like "Theek hai, kitne ton maal hai?" - even if the broker wrote in English or in Devanagari. Never reply in plain English."""
     out = parse_json(gen(prompt, json_mode=True, tier="smart"))
     raw = {**(load or {}), **{k: v for k, v in (out.get("load") or {}).items() if v not in (None, "")}}
+    raw.pop("blocked", None)
     merged = normalise_load(raw)                      # anything that doesn't match our lists becomes missing
+    said_all = " ".join(m["text"] for m in hist if m["role"] == "user")
+    merged["material_class"] = material_class(merged.get("material"), said_all)
+    if merged["material_class"] == "chemical" and merged.get("hazardous") is True:
+        merged["material_class"] = "hazardous"
+    if merged.get("material") is None and re.search(r"pata nahi|general|kuch bhi|mixed", user_msg, re.I):
+        merged["material"] = "general"
     said = pickup_phrase([m["text"] for m in hist if m["role"] == "user"])
     if said and pickup_day(said) != pickup_day(merged.get("pickup_when")):
         merged["pickup_when"] = said                  # the broker's words win over the model's
     miss = missing_fields(merged)
     reply = out.get("reply", "")
-    if miss and (out.get("complete") or "?" not in reply):    # a reply that doesn't ask can't move the load forward
-        reply = "Ek cheez confirm karni hai — " + ASK[miss[0]]
-    if not miss:      # read back what will be booked, from the validated fields rather than the model's wording
-        reply = (f"Theek hai ✅ {merged['origin']} → {merged['destination']}, {merged['weight_ton']:g} T, {merged['truck_type']}, "
-                 f"{merged.get('pickup_when') or 'kal'}" + (f", budget ₹{merged['budget_rs']:,.0f}" if merged.get("budget_rs") else "")
+    if miss and (out.get("complete") or "?" not in reply or "hazard" in miss):   # a reply that doesn't ask can't move the load forward
+        reply = ("Ek cheez confirm karni hai — " if len(miss) == 1 else "") + " ".join(ASK[k] for k in miss[:2])
+    if not miss:      # advise the truck, then read back what will be booked, from the validated fields
+        fit = truck_fit(merged)
+        m = fit["material"]
+        if not fit["type"]:
+            merged["blocked"] = fit["why"]
+            return merged, f"🙏 {fit['why']}. Load badal ke bhejna ho to nayi details bhejiye, ya *hi* likh ke naya shuru kijiye.", ["blocked"]
+        advice = ""
+        if fit["type"] != merged.get("truck_type"):
+            advice = f" (meri salah: {fit['why']})" if merged.get("truck_type") else f" (sujhaav: {fit['why']})"
+            merged["truck_type_asked"], merged["truck_type"] = merged.get("truck_type"), fit["type"]
+        reply = (f"Theek hai ✅ {merged['origin']} → {merged['destination']}, {merged['weight_ton']:g} T {m['hi']}, "
+                 f"{merged['truck_type']}{advice}, {merged.get('pickup_when') or 'kal'}"
+                 + (f", budget ₹{merged['budget_rs']:,.0f}" if merged.get("budget_rs") else "")
+                 + (". ⚠️ Khatarnaak maal: sirf Hazchem permit aur trained driver wali gaadi" if m.get("hazmat") else "")
                  + ". Owners ko message kar raha hoon.")
     return merged, reply, miss
 
@@ -419,13 +446,21 @@ def deadhead_cost(km, tt):
 def lane_memory(lane, tt):
     return (lane.get("memory") or {}).get(tt)
 
+def lane_cost(lane, tt):
+    """fair_cost for a load's lane, with its goods premium (hazardous, perishable...) on the expected buy price."""
+    c = fair_cost(lane["distanceKm"], tt, lane["returnLoadProb"], lane_memory(lane, tt))
+    p = lane.get("premiumPct") or 0
+    if p:
+        c = {**c, "est_cost": round(c["est_cost"] * (1 + p / 100)), "market": round(c["market"] * (1 + p / 100)), "premiumPct": p}
+    return c
+
 def target_sell(lane, tt):
-    return fair_cost(lane["distanceKm"], tt, lane["returnLoadProb"], lane_memory(lane, tt))["est_cost"] / (1 - MARGIN["targetPct"] / 100)
+    return lane_cost(lane, tt)["est_cost"] / (1 - MARGIN["targetPct"] / 100)
 
 def price_quote(lane, tt, buy, fixed_sell=None, budget=None):
     """Sell price = cost-plus at target margin, capped at the ceiling, matched to the shipper's budget
     only if the floor still holds. After booking, the shipper price is fixed (re-plan)."""
-    br = fair_cost(lane["distanceKm"], tt, lane["returnLoadProb"], lane_memory(lane, tt))
+    br = lane_cost(lane, tt)
     note = ""
     if fixed_sell:
         sell = fixed_sell
@@ -454,6 +489,76 @@ def type_check(load):
     suggest = [] if ok else sorted((k for k, c in rates["capacityTonByType"].items() if c >= w),
                                    key=lambda k: rates["capacityTonByType"][k])
     return {"requested_type": tt, "capacity_ton": cap, "weight_ton": w, "fits": ok, "suggest": suggest}
+
+def material_class(*texts):
+    """Which rule applies to the goods: matched on the broker's own words (Roman Hinglish or Hindi)."""
+    t = " " + " ".join(str(x or "") for x in texts).lower() + " "
+    for key, m in MATERIALS.items():
+        if any(re.search(r"(?<![\w])" + re.escape(w.lower()) + r"(?:s|es)?(?![\w])", t) for w in m["words"]):
+            return key
+    return "general"
+
+def body_ok(tt, body):
+    """closed: rain/theft-sensitive goods; open: crane- or forklift-loaded goods (steel, machinery) that a box can't take."""
+    have = rates["bodyByType"][tt]
+    return body == "any" or body in have
+
+def truck_fit(load):
+    """Which truck this load needs, from weight, the goods' body rule and their volume.
+    Returns the type to source, why, and the material rule; never smaller than what the broker asked for."""
+    w = load.get("weight_ton") or 0
+    m = MATERIALS[load.get("material_class") or "general"]
+    vol = load.get("volume_cft") or (round(w * 1000 / m["kgPerCft"]) if m.get("kgPerCft") and w else 0)
+    caps, cft = rates["capacityTonByType"], rates["volumeCftByType"]
+    fits = lambda t: caps[t] >= w and cft[t] >= vol and body_ok(t, m["body"])
+    asked = load.get("truck_type")
+    if m["body"] == "reefer":
+        return {"type": None, "why": "reefer chahiye, hamare pool mein abhi reefer nahi", "material": m, "volume": vol}
+    if asked and fits(asked):
+        return {"type": asked, "why": "", "material": m, "volume": vol}
+    options = sorted((t for t in KNOWN_TYPES if fits(t)), key=lambda t: market_rate(500, t))
+    if asked:                                       # keep at least the size they asked for
+        options = [t for t in options if caps[t] >= caps.get(asked, 0)] or options
+    if not options:
+        why = (f"{w:g} T" + (f" aur ~{vol:,} cft" if vol else "") + f" ek {m['hi']} wali gaadi mein nahi aayega; load do gaadiyon mein baantna padega")
+        return {"type": None, "why": why, "material": m, "volume": vol}
+    best = options[0]
+    bits = []
+    if asked and caps[asked] < w:
+        bits.append(f"{asked} mein {w:g} T nahi aayega")
+    elif asked and cft[asked] < vol:
+        bits.append(f"{asked} mein ~{vol:,} cft {m['hi']} nahi samayega")
+    elif asked and not body_ok(asked, m["body"]):
+        bits.append(f"{m['hi']} ke liye band (closed) body chahiye")
+    bulky = m.get("kgPerCft", 99) <= 10
+    why = ", ".join(bits) or f"{w:g} T {m['hi']}" + (f" (~{vol:,} cft)" if vol and bulky else "") + " ke liye sabse sasti sahi gaadi"
+    return {"type": best, "why": why, "material": m, "volume": vol}
+
+def advise(text):
+    """The desk's own truck pick for goods and tons named in a free-text question, so the chat explains the same
+    answer sourcing would use. None if the message doesn't say how many tons."""
+    w = norm_tons((re.search(r"(\d+(?:\.\d+)?)\s*(?:ton|tonne|t\b|टन)", str(text), re.I) or [None, None])[1])
+    if not w:
+        return None
+    vol = re.search(r"(\d{3,5})\s*(?:cft|cubic|cu\.? ?ft)", str(text), re.I)
+    fit = truck_fit({"weight_ton": w, "material_class": material_class(text), "volume_cft": float(vol.group(1)) if vol else None})
+    if not fit["type"]:
+        return f"{w:g} T {fit['material']['hi']}: {fit['why']}"
+    caps = rates["capacityTonByType"]
+    alts = [t for t in KNOWN_TYPES if t != fit["type"] and truck_fit({"weight_ton": w, "material_class": material_class(text),
+                                                                       "truck_type": t})["type"] == t][:2]
+    return (f"{w:g} T {fit['material']['hi']} → {fit['type']} ({caps[fit['type']]} T, {rates['bodyByType'][fit['type']]} body): "
+            f"{fit['why']}" + (f". Also fits: {', '.join(alts)}" if alts else ""))
+
+def truck_catalogue():
+    """One line per truck type, for the chat models to advise from."""
+    return "\n".join(f"- {t}: up to {rates['capacityTonByType'][t]} T, ~{rates['volumeCftByType'][t]:,} cft, "
+                     f"{rates['bodyByType'][t]} body, market ~₹{round(market_rate(500, t) / 500)}/km at 500 km" for t in KNOWN_TYPES)
+
+def material_guide():
+    return "\n".join(f"- {m['label']}: body {m['body']}" + (", hazardous" if m.get("hazmat") else "")
+                     + (f", +{m['premiumPct']}% rate" if m.get("premiumPct") else "") + (f". {m['note']}" if m.get("note") else "")
+                     for k, m in MATERIALS.items() if k not in ("general", "chemical"))
 
 # =============================== truck pool and matching ===============================
 def build_pool(memory=None):
@@ -803,8 +908,8 @@ def modelled_timeline(sess, winner_id=None):
 
 # =============================== entry points used by the app ===============================
 def run_quote(load, pool, use_llm=True):
-    load = normalise_load(load)
-    miss = missing_fields(load)
+    load = normalise_load({"material": "general", **(load or {})})   # the earlier planner names the truck itself
+    miss = missing_fields(load) + ([] if load.get("truck_type") else ["truck_type"])
     if miss:
         return {"status": "need_info", "load": load, "missing": miss}
     lane = find_lane(load["origin"], load["destination"])

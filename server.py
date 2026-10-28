@@ -456,6 +456,9 @@ def on_text(wa, text):
         return send(wa, "Desk abhi load padh nahi sakta (language model band hai) 🙏 Thodi der baad bhejiye.")
     intent, said = ("load", None) if plainly_load(text) else broker_brain(wa, text, s)
     if intent == "reply":
+        if TONS.search(text) or E.material_class(text) != "general":   # load details in a question: keep them for "haan, dhoondo"
+            s["chat"] += [{"role": "user", "text": text}, {"role": "bot", "text": said}]
+            desk.post("save")
         return send(wa, said)
     s["chat"].append({"role": "user", "text": text})
     try:
@@ -489,7 +492,7 @@ TONS = re.compile(r"\b\d+(?:\.\d+)?\s*(?:ton|tonne|tan|t|mt)\b", re.I)
 def plainly_load(text):
     """Load details nobody would mistake for small talk ("Bhiwandi se Surat 14 ton 32 MXL"): skip the routing call,
     which saves a model call per message against Groq's per-minute cap."""
-    if "?" in text or len(text) > 300:
+    if "?" in text or len(text) > 300 or re.search(r"\b(kaunsi|konsi|kaun si|which|suggest|salah)\b", text, re.I):
         return False
     low = text.lower()
     cities = sum(bool(re.search(r"\b" + re.escape(c.lower()) + r"\b", low)) for c in E.KNOWN_CITIES)
@@ -509,15 +512,23 @@ def broker_brain(wa, text, s):
             "Approve/Reject buttons; on approval the owner holds the truck; if an owner backs out the desk re-books a "
             "backup at the same shipper price. *status* shows their loads; *reject BH-xxxx* cancels a quote.\n"
             "Recent chat (oldest first):\n" + ("\n".join(recent) or "(new chat)") + "\n"
-            "Their recent loads (newest last):\n" + ("\n".join("- " + x for x in loads) or "- none") + "\n"
+            "Truck guide (advise from this when they ask which truck suits a load; the cheapest that fits weight, volume "
+            "and the goods' body rule; light bulky goods like cloth or cartons fill space before weight):\n" + E.truck_catalogue()
+            + "\nGoods rules:\n" + E.material_guide() + "\n"
+            + (f"The desk's computed pick for this message (recommend exactly this, explain it simply): {E.advise(text)}\n"
+               if E.advise(text) else "")
+            + "Their recent loads (newest last):\n" + ("\n".join("- " + x for x in loads) or "- none") + "\n"
             + (f"A new load is being collected: known so far {json.dumps(s['load'], ensure_ascii=False)}; "
                f"your last question was: \"{asked}\"\n" if s["chat"] else "")
             + f'Broker\'s message: "{text}"\n'
             "Decide:\n"
-            "- intent=\"load\" if the message gives or changes load details (cities, weight, truck, pickup day, budget), asks "
-            "for a truck, or answers your last question. Leave reply empty.\n"
+            "- intent=\"load\" if the message gives or changes load details (cities, weight, goods, truck, pickup day, budget), "
+            "asks you to find or book a truck, or answers your last question. Leave reply empty.\n"
+            "- If they ASK which truck suits their goods (kaunsi gaadi, which truck, suggest), intent=\"reply\": recommend one "
+            "truck from the guide with a one-line reason (weight, volume, body), mention one alternative if useful, and ask "
+            "whether to find that truck now (e.g. \"Ye gaadi dhoondh dun?\").\n"
             "- intent=\"reply\" for everything else: thanks, greetings, ok, small talk, questions about their loads, owners, "
-            "prices or how the desk works. Answer in 1-3 short lines using ONLY the facts above; never invent a load, "
+            "prices, which truck to use, or how the desk works. Answer in 1-3 short lines using ONLY the facts above; never invent a load, "
             "truck, owner or price. Thanks/ok gets a short warm reply (e.g. \"Shukriya ji 🙏 Aur koi load ho to bhejiye.\") "
             "and never a question about tons or cities. Mention their loads only when the message is about them; don't "
             "repeat a load status they already got. Market or rate trends: you have no market feed, say so briefly and "

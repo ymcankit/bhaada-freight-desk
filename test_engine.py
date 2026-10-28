@@ -63,6 +63,19 @@ def run_tests():
                     and E.norm_money("35 hazaar") == 35000 and E.norm_money("1,20,000") == 120000 and E.norm_money(40) == 40
                     and E.norm_money("40/km") == 40)
 
+        fit = lambda w, words, asked=None: E.truck_fit({"weight_ton": w, "material_class": E.material_class(words), "truck_type": asked})
+        ok &= check("goods classified", E.material_class("14 ton kapda") == "textile" and E.material_class("acid drums") == "hazardous"
+                    and E.material_class("garments") == "textile" and E.material_class("TMT saria") == "steel_construction"
+                    and E.material_class("केमिकल") == "chemical" and E.material_class("machine parts") == "machinery")
+        ok &= check("cloth is bulky: 14 T needs a 32 ft MXL", fit(14, "kapda")["type"] == "32 ft MXL" and fit(14, "kapda", "19 ft")["type"] == "32 ft MXL")
+        ok &= check("closed goods never get an open Taurus", fit(3, "dawai", "Taurus (10-tyre)")["type"] != "Taurus (10-tyre)")
+        ok &= check("perishables and overweight loads are blocked with a reason",
+                    fit(9, "fruits")["type"] is None and "reefer" in fit(9, "fruits")["why"] and fit(25, "cement")["type"] is None)
+        ok &= check("chemical asks whether it is hazardous",
+                    E.missing_fields({"origin": "A", "destination": "B", "weight_ton": 5, "material": "chemical", "material_class": "chemical"}) == ["hazard"])
+        lane = {"distanceKm": 300, "returnLoadProb": 0.5}
+        ok &= check("hazardous premium raises the price", E.target_sell({**lane, "premiumPct": 25}, "22 ft") > E.target_sell(lane, "22 ft") * 1.2)
+
         # 2. deterministic planner on the hero load
         r = E.run_quote(HERO, POOL, use_llm=False)
         ok &= check("hero load quoted", r["status"] == "quote", r.get("reason", ""))
