@@ -18,6 +18,10 @@ E.LLM["key"] = E.LLM["openai_key"] = ""          # no real model calls: rules ta
 E.llm_ready = lambda: True
 SENT = []
 server.tg_send = lambda to, text, buttons=None: SENT.append((to, text, buttons))
+DOCS = []
+server.tg_send_document = lambda to, att, caption="": DOCS.append((to, att))
+FILES = {}                                            # file_id -> bytes, in place of Telegram's getFile and download
+server.tg_fetch = lambda fid: FILES[fid]
 server.desk.send_wa = server.send
 server.desk.settings["mode"] = "live"
 server.desk.settings["aiAgents"] = False                # AI owners and the AI broker have their own test (test_agents.py)
@@ -80,6 +84,9 @@ text(BROKER, "haan")                                        # typed instead of t
 time.sleep(1)
 w = L["winner"]
 ok &= check("typed 'haan' approves and owner is asked to hold", L["status"] == "holding" and "HAAN" in last_to(w[3:]), L["status"])
+fwd = next((t for to, t, b in SENT if to == f"tg:{BROKER}" and "Shipper ke liye" in t), "")
+ok &= check("broker gets a forwardable shipper message", f"{L['quote']['sell_total']:,}" in fwd and "GST" in fwd and "valid" in fwd
+            and L["threads"][w]["name"] not in fwd and f"{L['quote']['buy_total']:,}" not in fwd, fwd[:160])
 n[0] += 1
 c.post(URL, json={"update_id": n[0], "callback_query": {"id": "q1", "data": btn[0][0], "message": {"chat": {"id": BROKER}}}})
 time.sleep(0.5)
@@ -97,6 +104,17 @@ card = last_to(BROKER)
 ok &= check("broker gets a dispatch card with paperwork", "MH04AB1234" in card and "9812345678" in card and "E-way bill" in card
             and "GST" in card, card[:120])
 ok &= check("vehicle stored on the load", L["threads"][w].get("vehicle") == "MH04AB1234")
+import io
+from pypdf import PdfReader, PdfWriter
+lr = next((a for to, a in DOCS if to == f"tg:{BROKER}"), None)
+lr_text = PdfReader(io.BytesIO(lr[1])).pages[0].extract_text() if lr else ""
+ok &= check("dispatch sends an LR (bilty) PDF draft", lr and lr[0] == "LR-" + L["id"][3:] + ".pdf" and "MH04AB1234" in lr_text
+            and "XXXXXX5678" in lr_text and "9812345678" not in lr_text and "DRAFT" in lr_text
+            and f"{L['quote']['sell_total']:,}" in lr_text and "Advance" in lr_text and "to fill" in lr_text, lr_text[:200])
+got = c.get(f"/api/loads/{L['id']}/lr.pdf")
+ok &= check("console downloads the LR", got.status_code == 200 and got.content[:5] == b"%PDF-"
+            and got.headers["content-type"] == "application/pdf")
+ok &= check("no LR before dispatch", c.get(f"/api/loads/BH-0000/lr.pdf").status_code == 404)
 text(OWNERS[1], "broker")
 ok &= check("an owner can switch to broker", f"tg:{OWNERS[1]}" not in server.desk.owners and "Ab aap broker" in last_to(OWNERS[1]))
 before = len(server.desk.loads)
@@ -141,8 +159,45 @@ raw = [l["raw"] for l in server.desk.broker_loads("tg:8804")]
 ok &= check("long messages are cut before anything reads them", raw and len(raw[0]) <= server.MAX_TEXT, str([len(r) for r in raw]))
 ok &= check("the welcome says what is kept and how to delete it", "delete my data" in next(
             (t for to, t, b in SENT if to == f"tg:{OWNERS[0]}" and "jud gaye" in t), ""))
+# a broker forwards a PDF load request, or a photo of a group post
+FILES["pdf1"] = (Path(__file__).parent / "data" / "sample_load_request.pdf").read_bytes()
+before = len(server.desk.loads)
+post({"message": {"chat": {"id": 8810}, "document": {"file_id": "pdf1", "mime_type": "application/pdf", "file_size": len(FILES["pdf1"])}}})
+time.sleep(1)
+raw = [l["raw"] for l in server.desk.broker_loads("tg:8810")]
+ok &= check("a PDF load request is read and becomes a load", "Padha:" in "".join(t for to, t, b in SENT if to == "tg:8810")
+            and "Bhiwandi" in next((t for to, t, b in SENT if to == "tg:8810" and "Padha" in t), "")
+            and len(server.desk.loads) == before + 1 and raw and "Ahmedabad" in raw[0], str(raw)[:80])
+w6 = PdfWriter()
+for _ in range(6):
+    w6.add_blank_page(100, 100)
+buf = io.BytesIO(); w6.write(buf); FILES["pdf6"] = buf.getvalue()
+post({"message": {"chat": {"id": 8811}, "document": {"file_id": "pdf6", "mime_type": "application/pdf", "file_size": 900}}})
+ok &= check("a PDF over 5 pages is refused", "5 page" in last_to(8811), last_to(8811))
+post({"message": {"chat": {"id": 8812}, "document": {"file_id": "x", "mime_type": "application/pdf", "file_size": 5_000_000}}})
+ok &= check("a file over 4 MB is refused before download", "4 MB" in last_to(8812))
+FILES["img"] = b"\xff\xd8fake-jpeg"
+photo = {"chat": {"id": 8813}, "photo": [{"file_id": "small", "file_size": 10}, {"file_id": "img", "file_size": 11}]}
+post({"message": photo})
+ok &= check("a photo with no OpenAI key: asked to type it", "type kar dijiye" in last_to(8813))
+seen = []
+E.LLM["openai_key"] = "test-key"
+real_chat, E.chat = E.chat, lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no model in tests"))
+E.read_image = lambda data, mime: seen.append((data, mime)) or "Surat se Bhiwandi\n14 ton kapda, 32 ft MXL, kal"
+post({"message": {**photo, "caption": "urgent"}})
+time.sleep(1)
+E.LLM["openai_key"], E.chat = "", real_chat
+ok &= check("a photo is read by the vision model (largest size) and becomes a load", seen == [(FILES["img"], "image/jpeg")]
+            and "Padha: Surat se Bhiwandi" in "".join(t for to, t, b in SENT if to == "tg:8813")
+            and any("urgent" in l["raw"] for l in server.desk.broker_loads("tg:8813")))
+post({"message": {"chat": {"id": OWNERS[0]}, "document": {"file_id": "pdf1", "mime_type": "application/pdf", "file_size": 900}}})
+ok &= check("an owner's file is not read as a load", "sirf brokers" in last_to(OWNERS[0]))
+post({"message": {"chat": {"id": -1009, "type": "group"}, "document": {"file_id": "pdf1", "mime_type": "application/pdf"}}})
+ok &= check("files in groups are ignored", not last_to(-1009))
+post({"message": {"chat": {"id": 8814}, "sticker": {"file_id": "s"}}})
+ok &= check("other media gets the 'type it' reply", "PDF aur photo" in last_to(8814))
 import json as _json
-held = lambda who: any(f"tg:{who}" in _json.dumps(x, ensure_ascii=False) for x in
+held =lambda who: any(f"tg:{who}" in _json.dumps(x, ensure_ascii=False) for x in
                        (server.desk.owners, server.desk.loads, server.desk.brokers, server.desk.pool))
 before = held(OWNERS[0]) and held(BROKER)
 text(OWNERS[0], "delete my data")

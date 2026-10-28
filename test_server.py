@@ -196,6 +196,21 @@ floor = server.desk.settings["floorPct"]
 ok &= check("bad margins refused and not kept", c.post("/api/settings", json={"floorPct": 60}).status_code == 400
             and server.desk.settings["floorPct"] == floor and c.post("/api/settings", json={"floorPct": "abc"}).status_code == 400)
 
+server.CONSOLE_PW = "pw"
+ok &= check("LR download needs the console password", c.get("/api/loads/BH-1001/lr.pdf").status_code == 401)
+server.CONSOLE_PW = ""
+# a broker on WhatsApp forwards a PDF load request (an older 3-argument sender gets the text without the file)
+pdf = (Path(__file__).parent / "data" / "sample_load_request.pdf").read_bytes()
+server.wa_media = lambda mid, cap=server.MAX_VOICE_BYTES: (pdf, "application/pdf") if mid == "doc1" else None
+server.WA_SECRET = "s3cret"
+before = len(server.desk.loads)
+wa("919800000077", type="document", document={"id": "doc1", "mime_type": "application/pdf", "filename": "tender.pdf"})
+time.sleep(1)
+ok &= check("WhatsApp PDF is read into a load", "Padha:" in "".join(t for to, t, b in SENT if to == "919800000077")
+            and len(server.desk.loads) == before + 1)
+wa("919800000078", type="image", image={"id": "big", "mime_type": "image/jpeg"})
+ok &= check("WhatsApp file over the cap is refused", "4 MB" in last_to("919800000078"))
+
 R = live.Desk._owner_rate
 ok &= check("owner rates read in context", R("₹38/km lagega", 280) == 38 and R("38k", 1000) == 38 and R("35 hazaar total", 1000) == 35
             and R("32 ft hai, 36 per km, 1500 toll alag", 280) == 36 and R("14 ton ka 40", 280) == 40 and R("kal 10 baje", 280) is None)

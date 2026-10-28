@@ -279,9 +279,14 @@ class Desk:
         elif self.send_wa:
             self.send_wa(o["phone"], text)
 
-    def _to_broker(self, load, text, buttons=None):
+    def _to_broker(self, load, text, buttons=None, attachment=None):
         load["brokerMessages"].append({"text": text, "t": now()})
         if load.get("brokerPhone") and self.send_wa:
+            if attachment:
+                try:
+                    return self.send_wa(load["brokerPhone"], text, buttons, attachment=attachment)
+                except TypeError:                     # a sender from before attachments: the text alone
+                    pass
             self.send_wa(load["brokerPhone"], text, buttons)
 
     def _event(self, load, actor, text):
@@ -378,12 +383,59 @@ class Desk:
         lane, f = load["lane"], load["load"]
         self._event(load, "Booking", f"Dispatch: vehicle {th['vehicle']}{demo}, driver ••••{th['driverPhone'][-4:]}; {check}.")
         self._to_owner(load, th, "Dhanyavaad ✅ Details broker ko bhej di. " + self.terms_line())
+        try:
+            lr = (self.lr_number(load) + ".pdf", self.lr_pdf(load))
+        except Exception as e:                             # the card goes out even if the draft cannot be drawn
+            print("LR draft failed:", repr(e)[:160])
+            lr = None
         self._to_broker(load, f"🚛 {load['id']} dispatch: gaadi *{th['vehicle']}*{demo} · driver {th['driverPhone']} · {th['name']}\n"
                               f"{lane['origin']} → {lane['destination']}, {f.get('pickup_when') or 'kal'} · {check}\n"
                               + "\n".join("🧾 " + x for x in self.paperwork_lines(load))
-                              + ("\n🔁 Gaadi badli hai: e-way bill Part B mein naya number update kijiye." if load.get("phase") == "replan" else ""))
+                              + ("\n🔁 Gaadi badli hai: e-way bill Part B mein naya number update kijiye." if load.get("phase") == "replan" else "")
+                              + ("\n📄 Bilty (LR) ka draft saath mein hai: bhejne se pehle check kar lijiye." if lr else ""),
+                        attachment=lr)
         self.save()
         return True
+
+    @staticmethod
+    def lr_number(load):
+        return "LR-" + re.sub(r"\D", "", load["id"])
+
+    def lr_pdf(self, load):
+        """A one-page Lorry Receipt (bilty) draft for a dispatched load, or None before the vehicle is known."""
+        th = load["threads"].get(load.get("winner")) or {}
+        if not th.get("vehicle"):
+            return None
+        import bilty
+        lane, f, q = load["lane"], load["load"], load.get("quote") or {}
+        goods = f["material"] if f.get("material") and f["material"] != "general" else "to fill"
+        ph = th.get("driverPhone") or ""
+        when = datetime.fromtimestamp(load.get("bookedAt") or now(), IST).strftime("%d-%b-%Y")
+        gst = self.paperwork_lines(load)
+        return bilty.one_page([
+            ("title", "LORRY RECEIPT (BILTY)"),
+            ("head", "DRAFT — check before use"), ("text", "Prepared by Bhaada freight desk; not valid until checked, signed and stamped."),
+            ("rule", ""),
+            ("kv", ("LR number", self.lr_number(load))), ("kv", ("Date", when)), ("kv", ("Load ref", load["id"])),
+            ("head", "Route"),
+            ("kv", ("From", lane["origin"])), ("kv", ("To", lane["destination"])),
+            ("kv", ("Distance", f"{lane.get('distanceKm')} km")), ("kv", ("Pickup", f.get("pickup_when") or "to fill")),
+            ("head", "Parties"),
+            ("kv", ("Consignor", "to fill (name, address, GSTIN)")), ("kv", ("Consignee", "to fill (name, address, GSTIN)")),
+            ("head", "Goods"),
+            ("kv", ("Description", goods)), ("kv", ("Weight", f"{f.get('weight_ton') or 0:g} tonne")),
+            ("kv", ("Packages / invoice no.", "to fill")),
+            ("head", "Vehicle"),
+            ("kv", ("Truck type", th.get("type") or load.get("searchType") or f.get("truck_type") or "")),
+            ("kv", ("Vehicle number", th["vehicle"] + (" (demo)" if th.get("sandbox") else ""))),
+            ("kv", ("Driver phone", "XXXXXX" + ph[-4:] if ph else "to fill")),
+            ("head", "Freight"),
+            ("kv", ("Freight amount", f"Rs. {q.get('sell_total', 0):,} (incl. diesel and toll)")),
+            ("kv", ("GST", gst[1])), ("kv", ("E-way bill", gst[0])),
+            ("kv", ("Terms", self.terms_line())),
+            ("rule", ""),
+            ("text", "Consignor: ______________      Driver: ______________      For the transporter: ______________"),
+        ])
 
     def _held_needing_dispatch(self, key, lid=None):
         for load in reversed(self.loads):
@@ -1322,7 +1374,20 @@ class Desk:
         self._to_owner(load, th, f"Pakka karte hain? {load['lane']['origin']} → {load['lane']['destination']}, "
                                  f"₹{round(th['agreedBuy'] / load['lane']['distanceKm'], 1)}/km (₹{th['agreedBuy']:,} total). {self.terms_line()} "
                                  "Gaadi hold karne ke liye *HAAN* likhiye.")
+        self._to_broker(load, self.shipper_text(load))
         self.save()
+
+    def shipper_text(self, load):
+        """What the broker can forward to the shipper as is: lane, truck, pickup, price; no owner and no buy rate."""
+        lane, f, q = load["lane"], load["load"], load["quote"]
+        gst = self.paperwork_lines(load)[1].replace(", bilty par likhein", "")
+        goods = f" {f['material']}" if f.get("material") and f["material"] != "general" else ""
+        return ("👇 Shipper ke liye (seedha forward kar sakte hain):\n"
+                f"Namaste 🙏 {lane['origin']} → {lane['destination']} ({lane['distanceKm']} km), {f['weight_ton']:g} T{goods}\n"
+                f"🚛 Gaadi: {load['searchType']}\n"
+                f"📅 Pickup: {f.get('pickup_when') or 'kal'}\n"
+                f"💰 Bhaada: ₹{q['sell_total']:,} (diesel + toll shaamil). {gst}\n"
+                "⏳ Rate 24 ghante ke liye valid, gaadi confirm hote hi number bhej denge.")
 
     def _on_reject(self, lid):
         load = self._find(lid)
