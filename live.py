@@ -155,6 +155,8 @@ class Desk:
 
     def save(self):
         """Ask for a write. A burst of changes becomes one write; the clock writes whatever is left (_on_tick)."""
+        if not self._dirty:
+            self._dirty_since = now()
         self._dirty = True
         if now() - self._saved_at >= self.SAVE_GAP:
             self.flush()
@@ -242,7 +244,8 @@ class Desk:
         busy = time.time() - self.busy_since if self.busy_since else 0
         return {"worker": "stalled" if busy > 90 else "ok", "busySec": round(busy), "queue": self.q.qsize(),
                 "store": ("upstash" if self.remote_ok else "upstash unreachable") if _store() else "local file",
-                "storeError": self.store_error, "unsavedSec": round(now() - self._saved_at) if self._dirty else 0}
+                "storeError": self.store_error,
+                "unsavedSec": round(now() - getattr(self, "_dirty_since", self._saved_at)) if self._dirty else 0}   # not _saved_at: a failed write moves it ahead
 
     def _apply_settings(self):
         E.rates["dieselPerLitre"] = float(self.settings["dieselPerLitre"])
