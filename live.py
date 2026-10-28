@@ -10,7 +10,7 @@ the clock), so a load's state never races. What is real and what is not:
   - negotiation: an LLM agent reads each owner's reply and answers in Hinglish, inside a ceiling the code enforces;
   - price: only engine.price_quote, never the LLM.
 """
-import json, os, queue, re, threading, time, hashlib, hmac, traceback
+import json, os, queue, re, threading, time, hashlib, hmac, traceback, zlib, base64
 import requests
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -39,6 +39,14 @@ def _redis(cmd):
     r = requests.post(url, headers={"Authorization": f"Bearer {tok}"}, json=cmd, timeout=8)
     r.raise_for_status()
     return r.json().get("result")
+
+def _pack(text):
+    """The state blob for Upstash, compressed: ~2 MB of JSON with 150 loads in it is ~0.27 MB this way, and it is
+    re-sent every few seconds against the free plan's monthly bandwidth."""
+    return "z:" + base64.b64encode(zlib.compress(text.encode("utf-8"), 6)).decode("ascii")
+
+def _unpack(raw):
+    return zlib.decompress(base64.b64decode(raw[2:])).decode("utf-8") if raw and raw.startswith("z:") else raw
 geo.seed_cities(E.CITY["cities"])
 E.CITY_RESOLVER = geo.resolve_city
 
@@ -103,7 +111,7 @@ class Desk:
             for i in range(3):
                 try:
                     raw = _redis(["GET", STATE_KEY])
-                    s = json.loads(raw) if raw else None
+                    s = json.loads(_unpack(raw)) if raw else None
                     print("state loaded from Upstash:", "found" if s else "empty")
                     break
                 except Exception as e:
@@ -150,6 +158,8 @@ class Desk:
 
     def save(self):
         """Ask for a write. A burst of changes becomes one write; the clock writes whatever is left (_on_tick)."""
+        if not self._dirty:
+            self._dirty_since = now()
         self._dirty = True
         if now() - self._saved_at >= self.SAVE_GAP:
             self.flush()
@@ -184,7 +194,7 @@ class Desk:
             try:
                 raw = _redis(["GET", STATE_KEY])
                 if raw:
-                    self._merge_remote(json.loads(raw))
+                    self._merge_remote(json.loads(_unpack(raw)))
                 self.remote_ok = True
             except Exception as e:
                 self._remote_retry = now() + 30           # not on every save: each try holds the worker up to the timeout
@@ -215,7 +225,7 @@ class Desk:
             self._saved_hash = digest
         elif self.remote_ok:
             try:
-                _redis(["SET", STATE_KEY, text])
+                _redis(["SET", STATE_KEY, _pack(text)])
                 self._saved_hash, self.store_error = digest, None
             except Exception as e:
                 self._dirty, self.store_error = True, repr(e)[:120]
@@ -237,7 +247,8 @@ class Desk:
         busy = time.time() - self.busy_since if self.busy_since else 0
         return {"worker": "stalled" if busy > 90 else "ok", "busySec": round(busy), "queue": self.q.qsize(),
                 "store": ("upstash" if self.remote_ok else "upstash unreachable") if _store() else "local file",
-                "storeError": self.store_error, "unsavedSec": round(now() - self._saved_at) if self._dirty else 0}
+                "storeError": self.store_error,
+                "unsavedSec": round(now() - getattr(self, "_dirty_since", self._saved_at)) if self._dirty else 0}   # not _saved_at: a failed write moves it ahead
 
     def _apply_settings(self):
         E.rates["dieselPerLitre"] = float(self.settings["dieselPerLitre"])
@@ -270,6 +281,8 @@ class Desk:
 
     # ---------------- messaging ----------------
     def _to_owner(self, load, th, text):
+        if load["id"] not in text:                     # an owner with two loads open can see (and say) which one this is
+            text = f"{load['id']}: {text}"
         th["messages"].append({"dir": "out", "text": text, "t": now()})
         o = self.owners.get(th["ownerKey"])
         if not o:
@@ -1111,8 +1124,9 @@ class Desk:
         return n / km if n > 300 else n
 
     def _llm_json(self, prompt, tier="smart"):
-        # timeout 12: negotiation calls this on the worker, so one slow reply must not stall every other load
-        msg = E.chat([{"role": "user", "content": prompt}], json_mode=True, timeout=12, retries=2, max_wait=8, tier=tier)
+        # timeout 12: negotiation calls this on the worker, so one slow reply must not stall every other load;
+        # max_wait 3: a provider asking us to wait longer is skipped for the next one, not slept on by the worker
+        msg = E.chat([{"role": "user", "content": prompt}], json_mode=True, timeout=12, retries=2, max_wait=3, tier=tier)
         return E.parse_json(msg.get("content") or "")
 
     def _all_answered(self, load):

@@ -17,6 +17,8 @@ _lock = threading.Lock()                       # the cache
 _net = threading.Lock()                        # geocoder requests, one at a time
 _last_geocode = [0.0]
 _missed = {}                                   # lookups that just failed -> when
+_down = {"geocode": 0.0, "route": 0.0}         # service hanging (timeouts) -> skip it until then
+DOWN_SECS = 60                                 # each hung try costs 10-20 s, often on the desk's one worker
 
 def _load():
     try:
@@ -48,11 +50,11 @@ def resolve_city(text):
         for k, v in list(_cache["cities"].items()):    # 'Bhiwandi (Mumbai)' contains a known name
             if len(k) > 3 and k in key:
                 return v
-        if time.time() - _missed.get(key, 0) < 600:    # just failed: don't spend another 20 s on it
+        if time.time() - _missed.get(key, 0) < 600 or time.time() < _down["geocode"]:   # just failed: don't spend another 20 s on it
             return None
     with _net:                                         # only lookups wait on lookups; cached cities never do
         with _lock:
-            if key in _cache["cities"] or time.time() - _missed.get(key, 0) < 600:
+            if key in _cache["cities"] or time.time() - _missed.get(key, 0) < 600 or time.time() < _down["geocode"]:
                 return _cache["cities"].get(key)
         wait = 1.05 - (time.time() - _last_geocode[0])  # Nominatim policy: at most 1 request a second
         if wait > 0:
@@ -87,6 +89,8 @@ def resolve_city(text):
             if len(_missed) > 500:
                 _missed.clear()
             _missed[key] = time.time()
+        elif time.time() - _last_geocode[0] > 5:       # it hung (timeouts), not refused: skip it for a minute
+            _down["geocode"] = time.time() + DOWN_SECS
         return None
     with _lock:
         _cache["cities"][key] = hit
@@ -110,6 +114,9 @@ def road_km(a, b, precise=True):
     with _lock:
         if key in _cache["routes"]:
             return _cache["routes"][key]
+    if time.time() < _down["route"]:
+        return {"km": round(_haversine_km(a, b) * ROAD_FACTOR), "src": "estimate (routing service unavailable)"}
+    started = time.time()
     try:
         r = requests.get(OSRM.format(a["lon"], a["lat"], b["lon"], b["lat"]), headers=UA, timeout=12)
         data = r.json()
@@ -121,5 +128,6 @@ def road_km(a, b, precise=True):
                 _save()
             return res
     except Exception:
-        pass
+        if time.time() - started > 5:                  # it hung, not refused: skip it for a minute
+            _down["route"] = time.time() + DOWN_SECS
     return {"km": round(_haversine_km(a, b) * ROAD_FACTOR), "src": "estimate (routing service unavailable)"}

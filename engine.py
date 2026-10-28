@@ -135,6 +135,9 @@ def chat(messages, tools=None, json_mode=False, timeout=25, retries=3, max_wait=
         raise RuntimeError("No language model key is set (GROQ_API_KEY or OPENAI_API_KEY)")
     last = None
     for i, (name, url, key, model) in enumerate(chain):
+        if LLM.setdefault("down", {}).get(url, 0) > time.time():   # just timed out or 5xx'd: skip it, don't wait on it again
+            last = last or RuntimeError(f"{name} unreachable (skipped for a few seconds)")
+            continue
         try:
             return _complete(name, url, key, model, messages, tools, json_mode, timeout, retries, max_wait)
         except Exception as e:
@@ -186,9 +189,15 @@ def _complete(name, url, key, model, messages, tools, json_mode, timeout, retrie
             return msg
         except PermissionError:
             raise
+        except (requests.Timeout, requests.ConnectionError) as e:
+            # a hung or unreachable provider: every retry would cost the caller (often the desk's one worker) a full
+            # timeout again, so the next provider answers and this one is skipped for 30 s (same host: both Groq models)
+            LLM.setdefault("down", {})[url] = time.time() + 30
+            raise RuntimeError(f"{name} unreachable: {str(e)[:120]}") from e
         except Exception as e:
             last = e
-            time.sleep(1.5 * (i + 1))
+            if i < retries - 1:                        # no pause after the last try: the next provider is waiting
+                time.sleep(1.5 * (i + 1))
     raise last
 
 def gen(prompt, json_mode=False, tier="cheap"):
@@ -401,7 +410,8 @@ def normalise_load(load):
     return out
 
 def missing_fields(load):
-    miss = [k for k in REQUIRED if not load.get(k)]
+    miss = [k for k in REQUIRED if not load.get(k) and not (k == "material" and load.get("truck_type"))]
+    # a broker who names the truck has already chosen the body; the goods are then asked only if they matter (chemicals)
     if not miss and MATERIALS.get(load.get("material_class"), {}).get("askHazard") and load.get("hazardous") is None:
         miss.append("hazard")
     return miss
@@ -416,6 +426,33 @@ ASK = {"origin": "Kahan se load uthana hai?", "destination": "Kahan tak jaana ha
        "material": "Kya maal hai? (kapda, steel, chemical, dawai, carton, anaaj…) Isse sahi gaadi chunta hoon.",
        "hazard": "Ye chemical khatarnaak hai (acid, solvent, gas, jwalansheel) ya normal? Khatarnaak ho to alag permit wali gaadi lagti hai.",
        "truck_type": "Kaunsi gaadi chahiye? (" + ", ".join(KNOWN_TYPES[:6]) + " …)"}
+
+def intake_rules(hist):
+    """A load read without a model: 'X se Y', tons, a truck name, the goods and the day, from the broker's own words."""
+    text = " ".join(m["text"] for m in hist if m["role"] == "user")
+    low = text.lower()
+    out = {}
+    pair = re.search(r"([a-z\u0900-\u097f][\w\u0900-\u097f ]{1,30}?)\s+(?:se|from)\s+([a-z\u0900-\u097f][\w\u0900-\u097f]{1,30})", low)
+    if pair:
+        out["origin"] = pair.group(1).split()[-1]
+        out["destination"] = pair.group(2)
+    else:
+        found = sorted((low.find(c.lower()), c) for c in KNOWN_CITIES if re.search(r"\b" + re.escape(c.lower()) + r"\b", low))
+        if len(found) >= 2:
+            out["origin"], out["destination"] = found[0][1], found[1][1]
+    w = re.search(r"(\d+(?:\.\d+)?)\s*(?:ton|tonne|tan|t\b|mt\b|टन)", low)
+    if w:
+        out["weight_ton"] = w.group(1)
+    truck = re.search(r"\d{2}\s*(?:ft|feet|foot|fit)?\s*(?:mxl|sxl|container)|\d{2}\s*(?:ft|feet|foot|fit)\b|\d{1,2}\s*[- ]?(?:wheeler|"
+                      r"tyre|tire|chakka)|taurus|trailer|\b407\b", low)
+    if truck and norm_type(truck.group(0)):        # only a phrase that names a truck: "14 ton" is not a 14 ft
+        out["truck_type"] = norm_type(truck.group(0))
+    if material_class(text) != "general":
+        out["material"] = material_class(text)
+    said = pickup_phrase([text])
+    if said:
+        out["pickup_when"] = said
+    return out
 
 def intake_turn(hist, load, user_msg):
     """One broker message -> (merged load, reply, missing fields). The LLM collects the load across turns;
@@ -436,7 +473,11 @@ Return ONLY JSON:
 Fill load with everything known so far. If all required fields are known set complete=true and reply that you are finding the best truck now.
 If anything required is missing, the reply must ASK for exactly those details (e.g. "Kahan se kahan tak?") and must not say you are finding a truck.
 Reply language: Hinglish - Hindi words in Roman script, like "Theek hai, kitne ton maal hai?" - even if the broker wrote in English or in Devanagari. If they write in Marathi, Gujarati, Punjabi, Bengali, Tamil, Telugu or Kannada, reply in that language in Roman script. Never reply in plain English."""
-    out = parse_json(gen(prompt, json_mode=True, tier="smart"))
+    try:
+        out = parse_json(gen(prompt, json_mode=True, tier="smart"))
+    except Exception as e:                              # every model down or a reply that isn't JSON: read it with rules
+        print("intake model failed, using rules:", str(e)[:120])
+        out = {"load": intake_rules(hist), "reply": ""}
     raw = {**(load or {}), **{k: v for k, v in (out.get("load") or {}).items() if v not in (None, "")}}
     raw.pop("blocked", None)
     merged = normalise_load(raw)                      # anything that doesn't match our lists becomes missing

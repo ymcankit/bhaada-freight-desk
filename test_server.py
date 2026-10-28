@@ -198,7 +198,7 @@ ok &= check("open demo console: judges act only on console loads, never on real 
             and c.post("/api/mode", json={"mode": "sandbox"}).status_code == 403 and st.get("publicView") is True)
 ok &= check("open demo console hides real chats", all(m["text"].startswith("(hidden") for l in st["loads"] if l.get("source") == "whatsapp"
                                                       for m in l["brokerMessages"]))
-server.HITS.clear()
+server.IP_HITS.clear()
 codes = [c.post("/api/intake", json={"text": ""}).status_code for _ in range(31)]
 ok &= check("open demo console caps model spend per visitor", codes[-1] == 429 and 429 not in codes[:30], str(codes[-3:]))
 server.CONSOLE_OPEN, server.ON_HOST = False, False

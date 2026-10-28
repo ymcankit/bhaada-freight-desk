@@ -103,12 +103,10 @@ ok &= check("intake: a truck type the model made up is replaced by the desk's ad
 
 msg = "Bhiwandi se Surat 14 ton kapda"
 script("Sure! Here is your load: Bhiwandi to Surat.")
-try:
-    E.intake_turn([{"role": "user", "text": msg}], {}, msg)
-    raised = False
-except Exception:
-    raised = True
-ok &= check("intake: prose instead of JSON raises, so the caller says 'busy, send again' rather than guess", raised)
+m, r, miss = E.intake_turn([{"role": "user", "text": msg}], {}, msg)
+ok &= check("intake: prose instead of JSON falls back to the rules reading of the broker's own words",
+            m.get("origin") == "Bhiwandi" and m.get("destination") == "Surat" and m.get("weight_ton") == 14
+            and m.get("material_class") == "textile", str({k: m.get(k) for k in ("origin", "destination", "weight_ton")}))
 
 # ---------------- broker router (server.broker_brain) ----------------
 s = {"chat": [], "load": {}}

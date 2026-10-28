@@ -120,12 +120,29 @@ def tg_send(to, text, buttons=None):
     body = {"chat_id": to[3:], "text": text[:4000]}
     if buttons:
         body["reply_markup"] = {"inline_keyboard": [[{"text": t[:30], "callback_data": i[:64]} for i, t in buttons[:3]]]}
-    try:
-        r = requests.post(f"{TG_API}/sendMessage", json=body, timeout=20)
-        if not r.ok:
-            print("Telegram send failed:", r.status_code, r.text[:300])
-    except Exception as e:
-        print("Telegram send error:", safe(e))
+    for attempt in range(3):
+        try:
+            r = requests.post(f"{TG_API}/sendMessage", json=body, timeout=20)
+            if r.status_code == 429 and attempt < 2:      # a burst (a load to many owners): Telegram says when to retry
+                try:
+                    wait = float(r.json().get("parameters", {}).get("retry_after", 1))
+                except Exception:
+                    wait = 1.0
+                time.sleep(min(max(wait, 0.5), 10))
+                continue
+            if r.status_code >= 500 and attempt < 2:
+                time.sleep(1 + attempt)
+                continue
+            if not r.ok:
+                print("Telegram send failed:", r.status_code, r.text[:300])
+        except requests.ConnectionError as e:             # never reached Telegram: safe to try again
+            if attempt < 2:
+                time.sleep(1 + attempt)
+                continue
+            print("Telegram send error:", safe(e))
+        except Exception as e:                            # a timeout may have been delivered: don't send it twice
+            print("Telegram send error:", safe(e))
+        return
 
 def tg_send_document(to, attachment, caption=""):
     name, data = attachment
@@ -283,11 +300,11 @@ def admin_only(request: Request):
     if judge_mode(request):
         raise HTTPException(403, "In the open demo console, settings and adding owners need the console password.")
 
-HITS = {}
+IP_HITS = {}
 def ip_limit(request: Request, what, per_hour):
     """Per-visitor budget for actions that spend model calls or message people."""
     ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "?")).split(",")[0].strip()
-    q = HITS.setdefault((ip, what), collections.deque())
+    q = IP_HITS.setdefault((ip, what), collections.deque())
     t = time.time()
     while q and t - q[0] > 3600:
         q.popleft()
@@ -355,8 +372,6 @@ async def intake(request: Request):
         raise HTTPException(400, "load must be an object")
     if not text:
         raise HTTPException(400, "empty message")
-    if not E.llm_ready():
-        return {"reply": "The language model isn't configured (GROQ_API_KEY), so I can't read free text yet.", "missing": ["all"]}
     hist.append({"role": "user", "text": text})
     try:
         # a model call (and geocoding) off the event loop, or every webhook and poll waits for it
@@ -511,7 +526,12 @@ async def telegram(path: str, request: Request, bg: BackgroundTasks):
     # every webhook we ever set carries this secret, so a real update always has it; a path seen in a log is not enough
     if not hmac.compare_digest(got.encode(), TG_SECRET.encode()):
         raise HTTPException(403)
-    u = await request.json()
+    try:
+        u = await request.json()
+    except ValueError:
+        u = None
+    if not isinstance(u, dict):                         # not an update: a 200, since Telegram re-sends anything else for hours
+        return {"ok": True}
     if first_time("tg:" + str(u.get("update_id"))):
         bg.add_task(handle_telegram, u)
     return {"ok": True}
@@ -560,20 +580,25 @@ def gate(who):
 
 def handle_telegram(u):
     if "callback_query" in u:
-        q = u["callback_query"]
-        chat = (q.get("message") or {}).get("chat") or {}
+        q = u["callback_query"] or {}
+        c = (q.get("message") or {}).get("chat") or {}
         # a button counts only from the person whose private chat it is in: in a group anyone could tap a broker's Approve
-        if chat.get("type", "private") != "private" or (q.get("from") and q["from"].get("id") != chat.get("id")):
+        if c.get("type", "private") != "private" or (q.get("from") and q["from"].get("id") != c.get("id")):
             return
-        if not gate(f"tg:{chat.get('id')}"):
+        chat = c.get("id")
+        if chat is None or not gate(f"tg:{chat}"):
             return
         try:
-            requests.post(f"{TG_API}/answerCallbackQuery", json={"callback_query_id": q["id"]}, timeout=10)
+            requests.post(f"{TG_API}/answerCallbackQuery", json={"callback_query_id": q.get("id")}, timeout=10)
         except Exception:
             pass                                         # only stops the button's spinner; the action still runs
-        return on_button(f"tg:{q['message']['chat']['id']}", q.get("data", ""))
+        if chat is None:
+            return
+        key = f"tg:{chat}"
+        with LOCKS.setdefault(key, threading.Lock()):     # taps and texts from one chat take turns
+            return on_button(key, str(q.get("data") or ""))
     m = u.get("message") or {}
-    if not m.get("chat"):
+    if not (m.get("chat") or {}).get("id"):
         return
     if m["chat"].get("type", "private") != "private":
         return                                           # a group would make all its members one broker or one owner
@@ -593,8 +618,8 @@ def handle_telegram(u):
                 if not text:
                     return send(key, "🎤 Awaaz saaf nahi aayi. Phone muh ke paas rakh ke dobara bolo, ya type kar do.")
                 send(key, f"🎤 Suna: {text}")
-            elif m.get("text"):
-                text = m["text"].strip()
+            elif isinstance(m.get("text"), str) and m["text"].strip():
+                text = m["text"].strip()[:MAX_TEXT]
                 if text.startswith("/start"):
                     text = "hi"
             elif m.get("photo") or (m.get("document") or {}).get("mime_type", "").startswith(("image/", "application/pdf")):
@@ -658,7 +683,7 @@ def handle_message(msg):
                     return send(wa, "🎤 Awaaz saaf nahi aayi. Phone muh ke paas rakh ke dobara bolo, ya type kar do.")
                 send(wa, f"🎤 Suna: _{text}_")
             elif kind == "text":
-                text = msg["text"]["body"].strip()
+                text = msg["text"]["body"].strip()[:MAX_TEXT]
             elif kind == "image" or (kind == "document" and msg["document"].get("mime_type") == "application/pdf"):
                 m = msg[kind]
                 fetch = lambda: (wa_media(m["id"], MAX_DOC_BYTES) or (None,))[0]
@@ -737,9 +762,8 @@ def on_text(wa, text):
     s = desk.brokers.setdefault(wa, {"chat": [], "load": {}})
     if broker_command(wa, text):
         return
-    if not E.llm_ready():
-        return send(wa, "Desk abhi load padh nahi sakta (language model band hai) 🙏 Thodi der baad bhejiye.")
-    intent, said = ("load", None) if plainly_load(text) else broker_brain(wa, text, s)
+    # with no model at all, plain load details still go through intake's rules; anything else gets a short answer
+    intent, said = ("load", None) if plainly_load(text) or not E.llm_ready() else broker_brain(wa, text, s)
     if intent == "reply":
         if TONS.search(text) or E.material_class(text) != "general":   # load details in a question: keep them for "haan, dhoondo"
             s["chat"] += [{"role": "user", "text": text}, {"role": "bot", "text": said}]
@@ -868,6 +892,8 @@ def broker_command(wa, text):
         return True
     return False
 
+DECIDED = {}                                          # load id -> the broker's approve/reject, until the worker has it
+
 def on_button(wa, bid):
     action, _, lid = bid.partition(":")
     if action == "role":
@@ -890,9 +916,14 @@ def on_button(wa, bid):
         desk.post("broker_call", lid=lid, yes=action == "call_yes")
         return send(wa, "👍 Theek hai, kar raha hoon…" if action == "call_yes" else "Theek hai, load aapke paas hai.")
     if action in ("approve", "reject") and load and load.get("brokerPhone") == wa:
+        if load["status"] == "needs_approval" and lid in DECIDED:   # a second tap before the worker took the first
+            return send(wa, f"{lid}: aapka pehla jawab (*{DECIDED[lid]}*) mil gaya hai, wahi chalega 👍")
         if load["status"] != "needs_approval":
             text, buttons = desk.broker_status(load)
             return send(wa, "Ye quote ab khula nahi hai. " + text, buttons)
+        DECIDED[lid] = action                              # under the chat's lock: the first tap wins, the rest are told so
+        while len(DECIDED) > 2000:
+            DECIDED.pop(next(iter(DECIDED)))
         desk.post(action, lid=lid)
         return send(wa, "✅ Approve ho gaya. Owner se gaadi hold karwa raha hoon…" if action == "approve" else "Reject kar diya. Kuch book nahi hua.")
     send(wa, "Ye button ab kaam ka nahi hai. Load ka haal jaanne ke liye *status* likhiye, ya naya load seedha bhejiye.")
