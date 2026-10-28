@@ -599,6 +599,8 @@ def broker_command(wa, text):
         return True
     return False
 
+DECIDED = {}                                          # load id -> the broker's approve/reject, until the worker has it
+
 def on_button(wa, bid):
     action, _, lid = bid.partition(":")
     if action == "role":
@@ -621,9 +623,14 @@ def on_button(wa, bid):
         desk.post("broker_call", lid=lid, yes=action == "call_yes")
         return send(wa, "👍 Theek hai, kar raha hoon…" if action == "call_yes" else "Theek hai, load aapke paas hai.")
     if action in ("approve", "reject") and load and load.get("brokerPhone") == wa:
+        if load["status"] == "needs_approval" and lid in DECIDED:   # a second tap before the worker took the first
+            return send(wa, f"{lid}: aapka pehla jawab (*{DECIDED[lid]}*) mil gaya hai, wahi chalega 👍")
         if load["status"] != "needs_approval":
             text, buttons = desk.broker_status(load)
             return send(wa, "Ye quote ab khula nahi hai. " + text, buttons)
+        DECIDED[lid] = action                              # under the chat's lock: the first tap wins, the rest are told so
+        while len(DECIDED) > 2000:
+            DECIDED.pop(next(iter(DECIDED)))
         desk.post(action, lid=lid)
         return send(wa, "✅ Approve ho gaya. Owner se gaadi hold karwa raha hoon…" if action == "approve" else "Reject kar diya. Kuch book nahi hua.")
     send(wa, "Ye button ab kaam ka nahi hai. Load ka haal jaanne ke liye *status* likhiye, ya naya load seedha bhejiye.")
