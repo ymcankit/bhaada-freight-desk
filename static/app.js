@@ -47,7 +47,7 @@ async function api(path, body, retry = true) {
 const STATUS = {
   routing: ["Finding the route", "neutral"], sourcing: ["Waiting on owners", "neutral"],
   waiting_trucks: ["Waiting for a truck", "wait"], needs_call: ["Needs your call", "wait"], needs_approval: ["Needs your approval", "wait"],
-  holding: ["Waiting for the hold", "neutral"], booked: ["Booking-ready", "ok"], recovered: ["Re-booked", "ok"],
+  holding: ["Waiting for the hold", "neutral"], booked: ["Booking-ready", "ok"], recovered: ["Re-booked", "ok"], lost: ["Shipper said no", "neutral"],
   escalated: ["Escalated to you", "bad"], rejected: ["Rejected", "neutral"],
 };
 function statusOf(l) {
@@ -349,6 +349,14 @@ function renderDetail(l) {
         el("button", { class: "btn primary", onclick: () => act(l.id, "approve"), text: "Approve and hold" }),
         el("button", { class: "btn", onclick: () => act(l.id, "reject"), text: "Reject" })));
     } else if (["booked", "holding", "recovered"].includes(l.status)) {
+      if (l.status !== "holding" && !l.shipper) {
+        card.append(el("p", { class: "note", text: "Truck held. Waiting for the shipper's answer to the quote." }),
+          el("div", { class: "actions" },
+            el("button", { class: "btn primary", onclick: () => act(l.id, "ship_yes"), text: "Shipper said yes" }),
+            el("button", { class: "btn", onclick: () => act(l.id, "ship_no"), text: "Shipper said no" })));
+      } else if (l.shipper === "yes") {
+        card.append(el("p", { class: "note", text: "Shipper confirmed." }));
+      }
       card.append(el("div", { class: "actions" }, el("button", { class: "btn", style: "grid-column:1/-1", onclick: () => act(l.id, "backout"),
         text: l.mode === "sandbox" ? "Rehearse: owner backs out" : "Owner cancelled by phone" })));
     }

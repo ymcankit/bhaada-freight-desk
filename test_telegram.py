@@ -104,6 +104,13 @@ card = last_to(BROKER)
 ok &= check("broker gets a dispatch card with paperwork", "MH04AB1234" in card and "9812345678" in card and "E-way bill" in card
             and "GST" in card, card[:120])
 ok &= check("vehicle stored on the load", L["threads"][w].get("vehicle") == "MH04AB1234")
+btn = next(b for to, t, b in reversed(SENT) if to == f"tg:{BROKER}" and b and b[0][0].startswith("ship_yes"))
+ok &= check("after the hold the broker relays the shipper's answer", btn[0][0] == f"ship_yes:{L['id']}")
+n[0] += 1
+c.post(URL, json={"update_id": n[0], "callback_query": {"id": "qs", "data": btn[0][0], "from": {"id": BROKER},
+                                                        "message": {"chat": {"id": BROKER, "type": "private"}}}})
+time.sleep(0.5)
+ok &= check("shipper's yes is recorded", L.get("shipper") == "yes")
 text(BROKER, f"mera rate {L['id']} 28,000 tha")
 time.sleep(0.5)
 ok &= check("shadow mode records the broker's own quote", L.get("brokerRate") == 28000 and "28,000" in last_to(BROKER)

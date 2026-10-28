@@ -150,7 +150,7 @@ class Desk:
         self._seq = max(self._seq, s.get("seq", 0))
         print("merged the Upstash state:", len(s.get("owners", {})), "owners")
 
-    CLOSED = ("escalated", "rejected", "booked", "recovered")
+    CLOSED = ("escalated", "rejected", "booked", "recovered", "lost")
 
     def _on_save(self):
         self.save()
@@ -1387,6 +1387,24 @@ class Desk:
             self._event(load, "Broker", f"Shadow mode: the broker's own quote was ₹{rs:,.0f} (Bhaada ₹{load['quote']['sell_total']:,}).")
             self.save()
 
+    def _on_shipper(self, lid, yes):
+        """The shipper's answer, relayed by the broker: a yes confirms the trip; a no releases the held truck."""
+        load = self._find(lid)
+        if not load or load["status"] not in ("booked", "recovered") or load.get("shipper"):
+            return
+        load["shipper"] = "yes" if yes else "no"
+        th = load["threads"].get(load["winner"]) or {}
+        if yes:
+            self._event(load, "Broker", "Shipper confirmed the quote.")
+            self._to_broker(load, f"👍 {load['id']} pakka. Gaadi aur driver ki details aate hi dispatch card bhejta hoon.")
+        else:
+            load["status"], load["closedAt"] = "lost", now()
+            th["status"] = "released"
+            self._event(load, "Broker", "Shipper declined; the held truck was released.")
+            self._to_owner(load, th, f"{load['id']}: shipper ne mana kar diya, load cancel 🙏 Gaadi free hai, agla load aate hi batata hoon.")
+            self._to_broker(load, f"{load['id']}: theek hai, owner ko gaadi chhodne ka bol diya. Koi charge nahi.")
+        self.save()
+
     def _on_broker_call(self, lid, yes):
         """The broker's answer to the strategist's question: book the cheapest owner at their ask, or hand over."""
         load = self._find(lid)
@@ -1506,8 +1524,9 @@ class Desk:
             secs = load["bookedAt"] - load["createdAt"]
             self._event(load, "Booking", f"{th['name']} confirmed the hold. Booking-ready in {int(secs // 60)}:{int(secs % 60):02d}.")
             self._to_owner(load, th, "Dhanyavaad ✅ Booking pakki.")
-            self._to_broker(load, f"✅ {load['id']} booking pakki: {th['name']} ne gaadi hold kar di. "
-                                  f"Shipper ko ₹{load['quote']['sell_total']:,} ka quote bhej dijiye. Gaadi number aate hi bhejta hoon.")
+            self._to_broker(load, f"✅ {load['id']}: {th['name']} ne gaadi hold kar di. Shipper ko ₹{load['quote']['sell_total']:,} "
+                                  "ka quote bhej dijiye; unka jawab aate hi neeche dabaiye. Gaadi number aate hi bhejta hoon.",
+                            [("ship_yes:" + load["id"], "✅ Shipper haan"), ("ship_no:" + load["id"], "❌ Shipper mana")])
             self._ask_dispatch(load, th)
             self.save()
         elif th["status"] == "hold_requested":

@@ -156,5 +156,15 @@ time.sleep(1)
 ok &= check("broker's yes turns it into a quote at the floor", S2["status"] == "needs_approval" and S2["quote"]["margin_pct"] >= E.MARGIN["floorPct"] - 0.1,
             f"{S2['status']} {S2.get('quote', {}) and S2['quote'].get('margin_pct')}")
 
+# 7. the shipper says no: the held truck is released and the owner told
+S3, _ = stuck("BH-9003", 1.0)
+S3.update(status="booked", winner="tg:8001", quote={"sell_total": 30000}, bookedAt=time.time())
+S3["threads"]["tg:8001"]["status"] = "held"
+D._on_shipper("BH-9003", False)
+ok &= check("shipper's no releases the truck", S3["status"] == "lost" and S3["threads"]["tg:8001"]["status"] == "released"
+            and "shipper ne mana" in last_to(8001), S3["status"])
+D._on_shipper("BH-9003", True)
+ok &= check("a second answer changes nothing", S3["status"] == "lost" and S3.get("shipper") == "no")
+
 print("\nALL PASS" if ok else "\nSOME FAILED")
 import sys; sys.stdout.flush(); os._exit(0 if ok else 1)

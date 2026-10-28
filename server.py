@@ -388,7 +388,7 @@ async def intake(request: Request):
 
 @app.post("/api/loads/{lid}/{action}", dependencies=[Depends(console_auth)])
 def load_action(lid: str, action: str, request: Request):
-    if action not in ("approve", "reject", "backout", "call_yes", "call_no"):
+    if action not in ("approve", "reject", "backout", "call_yes", "call_no", "ship_yes", "ship_no"):
         raise HTTPException(404)
     if judge_mode(request):
         load = desk._find(lid)
@@ -397,6 +397,8 @@ def load_action(lid: str, action: str, request: Request):
         ip_limit(request, "action", 60)
     if action.startswith("call_"):
         desk.post("broker_call", lid=lid, yes=action == "call_yes")
+    elif action.startswith("ship_"):
+        desk.post("shipper", lid=lid, yes=action == "ship_yes")
     else:
         desk.post(action, lid=lid)
     return {"ok": True}
@@ -910,6 +912,11 @@ def on_button(wa, bid):
         return send(wa, ("Owner list se hata diya. " if is_owner else "") + "Aap broker hain 👍 Load text ya voice note mein bhejiye.\n"
                         "e.g. _Kal subah Bhiwandi se Surat, 18 ton kapda, 32 MXL_")
     load = desk._find(lid) if lid else None
+    if action in ("ship_yes", "ship_no") and load and load.get("brokerPhone") == wa:
+        if load["status"] not in ("booked", "recovered") or load.get("shipper"):
+            return send(wa, "Ye pehle hi note ho chuka hai. *status* likh ke haal dekhiye.")
+        desk.post("shipper", lid=lid, yes=action == "ship_yes")
+        return None
     if action in ("call_yes", "call_no") and load and load.get("brokerPhone") == wa:
         if load["status"] != "needs_call":
             return send(wa, "Ye sawaal ab khula nahi hai. *status* likh ke haal dekhiye.")
