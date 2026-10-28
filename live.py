@@ -506,7 +506,7 @@ class Desk:
                 "else not in the facts: the broker will tell them. Don't guess.\n"
                 "- If they seem to cancel a booked trip, ask them to write *cancel* to confirm.\n"
                 "- Reply in Hinglish: Hindi words in Roman script, like \"Aapka rate ₹33/km tay hua hai, broker ka approval "
-                "aate hi bata denge.\" Never write plain English sentences.\n"
+                "aate hi bata denge.\" If they write in Marathi, Gujarati, Punjabi, Bengali, Tamil, Telugu or Kannada, reply in that language in Roman script. Never write plain English sentences.\n"
                 'Return ONLY JSON {"intent":"checkin|ask_load|reply","reply":""}')
         except Exception as e:
             print("owner chat failed, using rules:", repr(e))
@@ -998,8 +998,9 @@ class Desk:
         offer = round(min(offer, cap), 1)
         if offer >= ask:
             return done(ask)
-        lines = [f"Aapke liye ₹{offer}/km tak badha diya, isse zyada mushkil hai." if rnd >= last - 1 else
-                 f"₹{offer}/km de sakte hain." if rnd == 1 else f"Aapke liye ₹{offer}/km tak badha diya."]
+        lump = f"₹{round(offer * km / 500) * 500:,} total (₹{offer}/km)"     # owners think in lump sums: "27 hazaar"
+        lines = [f"Aapke liye {lump} tak badha diya, isse zyada mushkil hai." if rnd >= last - 1 else
+                 f"{lump} de sakte hain." if rnd == 1 else f"Aapke liye {lump} tak badha diya."]
         if rnd == 1:
             lines.append(self._rationale(load, th, km))
         if morning and morning < ask:

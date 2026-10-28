@@ -721,7 +721,7 @@ def broker_brain(wa, text, s):
             "and never a question about tons or cities. Mention their loads only when the message is about them; don't "
             "repeat a load status they already got. Market or rate trends: you have no market feed, say so briefly and "
             "offer to quote a lane. If a load is being collected, you may gently remind what is still needed. To cancel a quote they write *reject BH-xxxx*; a booked trip is changed by calling the owner.\n"
-            "Reply in Hinglish (Hindi words in Roman script), never plain English.\n"
+            "Reply in Hinglish (Hindi words in Roman script), never plain English. If they write in Marathi, Gujarati, Punjabi, Bengali, Tamil, Telugu or Kannada, reply in that language in Roman script.\n"
             'Return ONLY JSON {"intent":"load|reply","reply":""}'}],
             json_mode=True, timeout=12, retries=2, max_wait=5, tier="smart").get("content") or ""))   # on any trouble intake reads it
     except Exception as e:

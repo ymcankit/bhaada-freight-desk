@@ -365,7 +365,7 @@ Return ONLY JSON:
 {{"reply":"<one or two short lines>","load":{{"origin":null,"destination":null,"weight_ton":null,"material":null,"truck_type":null,"pickup_when":null,"budget_rs":null,"volume_cft":null,"hazardous":null,"invoice_value_rs":null}},"missing":["..."],"complete":false}}
 Fill load with everything known so far. If all required fields are known set complete=true and reply that you are finding the best truck now.
 If anything required is missing, the reply must ASK for exactly those details (e.g. "Kahan se kahan tak?") and must not say you are finding a truck.
-Reply language: always Hinglish - Hindi words in Roman script, like "Theek hai, kitne ton maal hai?" - even if the broker wrote in English or in Devanagari. Never reply in plain English."""
+Reply language: Hinglish - Hindi words in Roman script, like "Theek hai, kitne ton maal hai?" - even if the broker wrote in English or in Devanagari. If they write in Marathi, Gujarati, Punjabi, Bengali, Tamil, Telugu or Kannada, reply in that language in Roman script. Never reply in plain English."""
     out = parse_json(gen(prompt, json_mode=True, tier="smart"))
     raw = {**(load or {}), **{k: v for k, v in (out.get("load") or {}).items() if v not in (None, "")}}
     raw.pop("blocked", None)
