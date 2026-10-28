@@ -174,7 +174,19 @@ server.CONSOLE_PW = "pw"
 ok &= check("console locked without the password", c.get("/api/state").json() == {"locked": True}
             and c.post("/api/mode", json={"mode": "live"}).status_code == 401 and c.get("/healthz").status_code == 200)
 ok &= check("console opens with the password", "kpis" in c.get("/api/state", headers={"X-Console-Key": "pw"}).json())
-server.CONSOLE_PW = ""
+server.PUBLIC_VIEW = True
+pub = c.get("/api/state").json()
+ok &= check("public view: anyone watches, only the password acts", pub.get("readOnly") is True and "kpis" in pub
+            and c.post("/api/loads/BH-1001/approve").status_code == 401
+            and c.get("/api/state", headers={"X-Console-Key": "pw"}).json()["readOnly"] is False)
+server.PUBLIC_VIEW, server.CONSOLE_PW, server.ON_HOST = False, "", True
+ok &= check("no password on a host: console is read-only", c.get("/api/state").json().get("readOnly") is True
+            and c.post("/api/mode", json={"mode": "live"}).status_code == 403
+            and c.post("/api/intake", json={"text": "x"}).status_code == 403
+            and c.post("/api/loads/BH-1001/approve").status_code == 403)
+server.CONSOLE_OPEN = True
+ok &= check("CONSOLE_OPEN opts back in to an open console", c.post("/api/mode", json={"mode": "live"}).status_code == 200)
+server.CONSOLE_OPEN, server.ON_HOST = False, False
 floor = server.desk.settings["floorPct"]
 ok &= check("bad margins refused and not kept", c.post("/api/settings", json={"floorPct": 60}).status_code == 400
             and server.desk.settings["floorPct"] == floor and c.post("/api/settings", json={"floorPct": "abc"}).status_code == 400)

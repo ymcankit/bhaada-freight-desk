@@ -7,7 +7,9 @@ Config (environment variables, or .streamlit/secrets.toml locally):
     WHATSAPP_TOKEN, WHATSAPP_PHONE_ID  Meta WhatsApp Cloud API (leave empty to run the console alone)
     WHATSAPP_VERIFY_TOKEN              any string; the same one goes into Meta's webhook settings
     WHATSAPP_APP_SECRET                Meta app secret; when set, webhook POSTs without a valid signature are refused
-    CONSOLE_PASSWORD                   when set, the console and its API ask for it (leave empty for an open demo)
+    CONSOLE_PASSWORD                   when set, the console and its API ask for it. Unset on a host (Render), the
+                                       console is view-only unless CONSOLE_OPEN=1; on a laptop it stays open
+    PUBLIC_VIEW                        1: with a password set, anyone may watch the desk; acting still needs the password
     TELEGRAM_BOT_TOKEN                 a bot from @BotFather: the same desk on Telegram, free and with no phone number
     PUBLIC_URL                         this server's address, for the Telegram webhook (Render sets RENDER_EXTERNAL_URL itself)
 """
@@ -43,6 +45,8 @@ def safe(e):
     """An error for the logs: requests puts the URL in its errors, and Telegram's URLs carry the bot token."""
     s = repr(e)
     return s.replace(TG_TOKEN, "<bot-token>") if TG_TOKEN else s
+
+MAX_TEXT = 1000                                         # a load fits in a few lines; longer text is cut, not sent to a model
 
 # ---------------- WhatsApp sending ----------------
 def wa_send(to, text, buttons=None):
@@ -147,17 +151,31 @@ if desk.settings["mode"] == "sandbox" or desk.settings.get("aiAgents"):
 app = FastAPI(title="Bhaada freight desk")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
-CONSOLE_PW = cfg("CONSOLE_PASSWORD").strip()        # empty: the console is open (sandbox demos)
-if not CONSOLE_PW and os.getenv("RENDER"):
-    print("WARNING: CONSOLE_PASSWORD is not set: anyone with the URL can read every chat and approve or change settings")
+CONSOLE_PW = cfg("CONSOLE_PASSWORD").strip()        # set: reading and acting need it (unless PUBLIC_VIEW)
+YES_WORDS = ("1", "true", "yes", "on")
+PUBLIC_VIEW = cfg("PUBLIC_VIEW").lower() in YES_WORDS     # with a password: anyone may watch, only the password acts
+CONSOLE_OPEN = cfg("CONSOLE_OPEN").lower() in YES_WORDS   # no password on a host: acting needs this explicit opt-in
+ON_HOST = bool(os.getenv("RENDER"))                        # on a laptop an open console is fine; on the internet it isn't
+if not CONSOLE_PW and ON_HOST:
+    print("WARNING: CONSOLE_PASSWORD is not set: anyone with the URL can read every chat"
+          + (" and approve or change settings (CONSOLE_OPEN)" if CONSOLE_OPEN else "; the console is read-only"))
 
 def console_ok(request: Request):
+    """May read the whole desk."""
     got = request.headers.get("x-console-key", "")
     return not CONSOLE_PW or hmac.compare_digest(got.encode(), CONSOLE_PW.encode())
 
+def console_can_act(request: Request):
+    """May approve, reject, change settings, add owners or spend model calls on intake."""
+    if CONSOLE_PW:
+        return console_ok(request)
+    return CONSOLE_OPEN or not ON_HOST
+
 def console_auth(request: Request):
-    if not console_ok(request):
-        raise HTTPException(401, "Console password needed")
+    if not console_can_act(request):
+        if CONSOLE_PW:
+            raise HTTPException(401, "Console password needed")
+        raise HTTPException(403, "This public console is read-only. Set CONSOLE_PASSWORD on the server to act from it.")
 
 @app.get("/")
 def console():
@@ -183,9 +201,10 @@ def shutdown():
 
 @app.get("/api/state")
 def state(request: Request):
-    if not console_ok(request):
+    if not console_ok(request) and not PUBLIC_VIEW:
         return {"locked": True}                    # 200, so a health check on this path keeps passing
     v = desk.view()
+    v["readOnly"] = not console_can_act(request)
     v["whatsapp"] = WA_READY
     v["telegram"] = TG_BOT["username"] if TG_READY else None
     v["build"] = (os.getenv("RENDER_GIT_COMMIT") or "local")[:7]
@@ -197,8 +216,11 @@ def state(request: Request):
 @app.post("/api/intake", dependencies=[Depends(console_auth)])
 async def intake(request: Request):
     body = await request.json()
-    hist = [m for m in body.get("chat", []) if m.get("role") in ("user", "bot")][-12:]
-    text = (body.get("text") or "").strip()
+    hist = [{"role": m["role"], "text": str(m.get("text") or "")[:MAX_TEXT]} for m in (body.get("chat") or [])[-12:]
+            if isinstance(m, dict) and m.get("role") in ("user", "bot")]
+    text = str(body.get("text") or "").strip()[:MAX_TEXT]       # every character is model tokens someone pays for
+    if not isinstance(body.get("load") or {}, dict):
+        raise HTTPException(400, "load must be an object")
     if not text:
         raise HTTPException(400, "empty message")
     if not E.llm_ready():
@@ -207,8 +229,9 @@ async def intake(request: Request):
     try:
         # a model call (and geocoding) off the event loop, or every webhook and poll waits for it
         merged, reply, miss = await run_in_threadpool(E.intake_turn, hist, body.get("load") or {}, text)
-    except Exception as e:
-        return {"reply": f"I couldn't read that ({str(e)[:80]}). Try again.", "missing": ["all"], "load": body.get("load") or {}}
+    except Exception as e:                       # the provider's error text stays in the log, not on the page
+        print("console intake failed:", safe(e)[:200])
+        return {"reply": "I couldn't read that just now. Try again in a minute.", "missing": ["all"], "load": body.get("load") or {}}
     clean = {k: v for k, v in merged.items() if v not in (None, "")}
     out = {"reply": reply, "missing": miss, "load": clean}
     if not miss:
@@ -271,7 +294,9 @@ async def add_owner(request: Request):
         phone = "91" + phone
     if len(phone) < 11 or not (b.get("name") or "").strip():
         raise HTTPException(400, "Name and a WhatsApp number with country code are needed")
-    o = await run_in_threadpool(desk.register_owner, phone, b["name"], b.get("city"))   # geocoding is a network call
+    if len(phone) > 15:
+        raise HTTPException(400, "That is not a phone number")
+    o = await run_in_threadpool(desk.register_owner, phone, str(b["name"])[:40], str(b.get("city") or "")[:60] or None)   # geocoding is a network call
     if WA_READY:
         desk_send(phone, f"Namaste {o['name']} 🙏 Aap Bhaada freight desk se jud gaye hain. Roz subah hum poochenge "
                        "ki gaadi khaali hai ya nahi; loads seedhe WhatsApp par aayenge.")
