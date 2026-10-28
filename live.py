@@ -142,6 +142,8 @@ class Desk:
         self.loads = s.get("loads", [])
         self.reliability = s.get("reliability", {})
         self.lane_rates = s.get("laneRates", {})
+        for o in self.owners.values():                 # names saved before the cleanup ("Rahul I am")
+            o["name"] = self.clean_name(o.get("name", ""))
         self.brokers = s.get("brokers", {})
         self.ai_due = s.get("aiDue", {})
         self._seq = s.get("seq", self._seq)
@@ -342,6 +344,12 @@ class Desk:
                           "ms": round((t - prev) * 1000), "sinceStartMs": round((t - load.get("createdAt", t)) * 1000)}), flush=True)
 
     # ---------------- owners ----------------
+    @staticmethod
+    def clean_name(name):
+        """'Rahul I am' / 'main Rahul hoon' / 'my name is Rahul': keep the name, not the sentence around it."""
+        return re.sub(r"^\s*(i am|i'm|im|main|mai|mera naam|my name is|naam)\s+|\s+(i am|hoon|hu|hun|here|bol raha hoon)\s*$", "",
+                      str(name), flags=re.I).strip() or str(name)
+
     def register_owner(self, phone, name, city=None):
         hit = geo.resolve_city(city) if city else None
         self.owners[phone] = {"key": phone, "phone": phone, "name": name.strip()[:40],
@@ -844,6 +852,11 @@ class Desk:
             for k, o in list(self.owners.items()):    # a snapshot: owners register from the server thread
                 if o.get("sandbox") or k in seen or k in {x["ownerKey"] for x in real}:
                     continue
+                if any(t["ownerKey"] == k and not self._stale(t) for t in self.pool):
+                    continue                            # they told us today what they have, and it doesn't fit this load
+                home = geo.resolve_city(o["baseCity"]) if o.get("baseCity") else None
+                if home and geo.road_km(home, origin, precise=False)["km"] > 3 * radius:
+                    continue                            # an owner based 800 km away won't run empty for this load
                 real.append({"ownerKey": k, "type": load["searchType"], "capacityTon": E.rates["capacityTonByType"][load["searchType"]],
                              "city": o.get("baseCity") or "", "available": "unknown", "ratePerKm": None,
                              "source": "on-demand", "deadheadKm": None})
@@ -1095,7 +1108,7 @@ class Desk:
         """The owner-facing reason behind a number: the lane's market rate and what this trip really costs them."""
         lane = load["lane"]
         c = E.lane_cost(lane, th["type"])
-        why = (f"Hisaab: is route pe {th['type']} ka market bhaada ~₹{round(c['market'] / km)}/km (shipper rate) chalta hai. "
+        why = (f"Hisaab: is route pe {th['type']} owners ko aam taur pe ~₹{round(c['owner_market'] / km)}/km milta hai. "
                f"Aapka kharcha: diesel ~₹{c['fuel']:,} (₹{E.rates['dieselPerLitre']:g}/L), toll ~₹{c['toll']:,}, driver+helper "
                f"~₹{c['driver']:,}, EMI/maintenance ~₹{c['fixed']:,} → lagbhag ₹{round(c['owner_cost'] / km)}/km.")
         if E.lane_memory(lane, th["type"]):
@@ -1780,5 +1793,6 @@ class Desk:
                 "aiOwners": len({t["ownerKey"] for t in self.pool if t.get("source") == "sandbox"})
                             if self.settings["mode"] == "live" and self.settings.get("aiAgents") else 0,
                 "loads": [{k: v for k, v in l.items() if k not in ("contacted", "prefer")} for l in reversed(self.loads[-60:])
-                          if "material_class" in (l.get("load") or {}) or l["status"] == "routing"],
+                          if ("material_class" in (l.get("load") or {}) or l["status"] == "routing")
+                          and now() - l["createdAt"] < 3 * 86400],   # the last three days: a judge arriving tomorrow still sees today's runs
                 "whatsapp": bool(self.send_wa)}

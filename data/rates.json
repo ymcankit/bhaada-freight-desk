@@ -101,52 +101,52 @@
    "basis": "FR8 19 ft open truck listings"
   },
   "22 ft": {
-   "fixedRs": 8000,
-   "perKm": 30,
-   "basis": "FR8 20/22/24 ft container listings"
+   "fixedRs": 5000,
+   "perKm": 28,
+   "basis": "FR8 20/22/24 ft container listings; short-haul fixed charge lowered after an operator review (28 Oct)"
   },
   "24 ft SXL": {
-   "fixedRs": 8000,
-   "perKm": 34,
-   "basis": "between FR8 22 ft and 32 ft SXL"
+   "fixedRs": 5000,
+   "perKm": 32,
+   "basis": "between FR8 22 ft and 32 ft SXL; short-haul fixed charge lowered after an operator review (28 Oct)"
   },
   "32 ft SXL": {
-   "fixedRs": 8000,
-   "perKm": 47,
-   "basis": "FR8 32 ft SXL listings"
+   "fixedRs": 5000,
+   "perKm": 42,
+   "basis": "FR8 32 ft SXL listings; short-haul fixed charge lowered after an operator review (28 Oct)"
   },
   "32 ft MXL": {
-   "fixedRs": 12000,
+   "fixedRs": 8000,
    "perKm": 55,
-   "basis": "FR8 32 ft MXL listings"
+   "basis": "FR8 32 ft MXL listings; short-haul fixed charge lowered after an operator review (28 Oct)"
   },
   "Taurus (10-tyre)": {
-   "fixedRs": 12000,
-   "perKm": 60,
-   "basis": "estimate below FR8 12/14-wheel listings"
+   "fixedRs": 8000,
+   "perKm": 50,
+   "basis": "estimate below FR8 12/14-wheel listings; short-haul fixed charge lowered after an operator review (28 Oct)"
   },
   "20 ft container": {
-   "fixedRs": 8000,
-   "perKm": 30,
-   "basis": "FR8 20/22/24 ft container listings"
+   "fixedRs": 5000,
+   "perKm": 28,
+   "basis": "FR8 20/22/24 ft container listings; short-haul fixed charge lowered after an operator review (28 Oct)"
   },
   "12-wheeler": {
-   "fixedRs": 14000,
-   "perKm": 72,
-   "basis": "FR8 12-wheel open truck listings"
+   "fixedRs": 10000,
+   "perKm": 66,
+   "basis": "FR8 12-wheel open truck listings; short-haul fixed charge lowered after an operator review (28 Oct)"
   },
   "14-wheeler": {
-   "fixedRs": 16000,
-   "perKm": 78,
-   "basis": "FR8 14-wheel open truck listings"
+   "fixedRs": 12000,
+   "perKm": 72,
+   "basis": "FR8 14-wheel open truck listings; short-haul fixed charge lowered after an operator review (28 Oct)"
   },
   "Trailer 40 ft": {
-   "fixedRs": 18000,
-   "perKm": 85,
-   "basis": "estimate above FR8 14-wheel listings"
+   "fixedRs": 14000,
+   "perKm": 80,
+   "basis": "estimate above FR8 14-wheel listings; short-haul fixed charge lowered after an operator review (28 Oct)"
   }
  },
- "_marketComment": "Market full-truck price = fixedRs + perKm x distance, fitted to FR8 published lane rates (fr8.in, Mumbai to Vapi/Ankleshwar/Ahmedabad/Bhopal/Hyderabad/Bangalore/Chennai/Coimbatore, Oct 2026). Short trips cost more per km. Agreed rates on a lane (lane memory) are blended in as they come.",
+ "_marketComment": "Market full-truck price = fixedRs + perKm x distance, fitted to FR8 published lane rates (fr8.in, Mumbai to Vapi/Ankleshwar/Ahmedabad/Bhopal/Hyderabad/Bangalore/Chennai/Coimbatore, Oct 2026). Short trips cost more per km. Agreed rates on a lane (lane memory) are blended in as they come. Short-haul fixed charges lowered 28 Oct after an operator review found Bhiwandi-Surat MXL ~15-30% high; check against evidence/lane_quotes.csv once filled.",
  "volumeCftByType": {
   "14 ft": 560,
   "17 ft": 800,

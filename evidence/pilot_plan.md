@@ -10,7 +10,7 @@ negotiates inside the agency's margin band, and the broker approves every quote.
 holds honoured, back-outs recovered without a phone call, ₹ margin per load.
 
 **Week 3, decision.** Proprietor review: keep, change or stop. Convert to paid (₹2,999/month including 50 loads,
-then ₹60–100 per placed load) if: shadow accuracy ≥ 60% within ±3%, booking-ready time down ≥ 30%, owner reply rate
+then ₹75 per placed load) if: shadow accuracy ≥ 60% within ±3%, booking-ready time down ≥ 30%, owner reply rate
 ≥ 40%, and the coordinator uses it daily.
 
 Kill criteria: owner reply rate under 30% after week 2, or the broker overrides more than half of the quotes.

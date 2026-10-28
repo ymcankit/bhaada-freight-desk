@@ -433,17 +433,26 @@ def intake_rules(hist):
     text = " ".join(m["text"] for m in hist if m["role"] == "user")
     low = text.lower()
     out = {}
-    pair = re.search(r"([a-z\u0900-\u097f][\w\u0900-\u097f ]{1,30}?)\s+(?:se|from)\s+([a-z\u0900-\u097f][\w\u0900-\u097f]{1,30})", low)
-    if pair:
+    word = r"([a-z\u0900-\u097f][\w\u0900-\u097f]{1,30})"
+    to = re.search(word + r"\s+(?:ke liye|tak|ko jaana|ko jana)\b", low)      # "Surat ke liye Bhiwandi se": destination first
+    frm = re.search(word + r"\s+(?:se|से|from)\b", low)
+    pair = re.search(r"([a-z\u0900-\u097f][\w\u0900-\u097f ]{1,30}?)\s+(?:se|से|from)\s+([a-z\u0900-\u097f][\w\u0900-\u097f]{1,30})", low)
+    if to and frm and to.group(1) != frm.group(1):
+        out["origin"], out["destination"] = frm.group(1), to.group(1)
+    elif pair:
         out["origin"] = pair.group(1).split()[-1]
         out["destination"] = pair.group(2)
     else:
         found = sorted((low.find(c.lower()), c) for c in KNOWN_CITIES if re.search(r"\b" + re.escape(c.lower()) + r"\b", low))
         if len(found) >= 2:
             out["origin"], out["destination"] = found[0][1], found[1][1]
-    w = re.search(r"(\d+(?:\.\d+)?)\s*(?:ton|tonne|tan|t\b|mt\b|टन)", low)
+    w = re.search(r"\d+(?:\.\d+)?\s*(?:ton|tonne|tan|t\b|mt\b|टन|kg|kilo|quintal)", low)
     if w:
-        out["weight_ton"] = w.group(1)
+        out["weight_ton"] = norm_tons(w.group(0))
+    b = re.search(r"(?:budget|rate|bhaada|bhada|rs\.?|₹)\s*(?:₹|rs\.?)?\s*(\d[\d,.]*\s*(?:k|hazaa?r|lakh|lac|l\b)?(?:\s*(?:/|per)\s*km)?)", low)
+    pk = re.search(r"(\d+(?:\.\d+)?)\s*(?:rupaye|rupees|rs\.?|₹)?\s*(?:/|per|prati)\s*(?:km|kilometer|किलोमीटर)", low)
+    if b or pk:
+        out["budget_rs"] = (b.group(1) if b else pk.group(1))
     truck = re.search(r"\d{2}\s*(?:ft|feet|foot|fit)?\s*(?:mxl|sxl|container)|\d{2}\s*(?:ft|feet|foot|fit)\b|\d{1,2}\s*[- ]?(?:wheeler|"
                       r"tyre|tire|chakka)|taurus|trailer|\b407\b", low)
     if truck and norm_type(truck.group(0)):        # only a phrase that names a truck: "14 ton" is not a 14 ft
@@ -486,6 +495,8 @@ Reply language: Hinglish - Hindi words in Roman script, like "Theek hai, kitne t
     merged["material_class"] = material_class(merged.get("material"), said_all)
     if merged["material_class"] == "chemical" and merged.get("hazardous") is True:
         merged["material_class"] = "hazardous"
+    if not merged.get("truck_type") and re.search(r"32\s*(?:ft|feet|fit)?\s*container", said_all, re.I) and merged.get("weight_ton"):
+        merged["truck_type"] = "32 ft SXL" if merged["weight_ton"] <= rates["capacityTonByType"]["32 ft SXL"] else "32 ft MXL"
     if merged.get("material") is None and re.search(r"pata nahi|general|kuch bhi|mixed", user_msg, re.I):
         merged["material"] = "general"
     said = pickup_phrase([m["text"] for m in hist if m["role"] == "user"])
@@ -548,42 +559,61 @@ def _roman(text):
         t = t.replace(k, v)
     return t
 
-WEEKDAYS = {"somvar": 0, "monday": 0, "mangalvar": 1, "tuesday": 1, "budhvar": 2, "wednesday": 2, "guruvar": 3, "veervar": 3,
-            "thursday": 3, "shukravar": 4, "friday": 4, "shanivar": 5, "saturday": 5, "ravivar": 6, "itvaar": 6, "sunday": 6}
+WEEKDAY_RE = [(r"som(?:v|w)aa?r|monday", 0), (r"mangal(?:v|w)aa?r|tuesday", 1), (r"budh(?:v|w)aa?r|wednesday", 2),
+              (r"(?:guru|veer|vir)(?:v|w)aa?r|thursday", 3), (r"shukra?(?:v|w)aa?r|friday", 4), (r"shani(?:v|w)aa?r|saturday", 5),
+              (r"(?:ravi|it|ith)(?:v|w)aa?r|sunday", 6)]
 MONTHS = {m: i + 1 for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"])}
 
-def pickup_day(text):
-    """Days from today to pickup: aaj 0, kal 1, parso 2, a weekday, or a date ('30 tarikh', '28-Oct'). Defaults to tomorrow."""
+def _today():
+    from datetime import datetime, timezone, timedelta
+    return (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).date()   # India, whatever the server's clock
+
+def _day_mentions(text):
+    """Every pickup-day expression in the text as (position, days from today, the words used)."""
     from datetime import date
-    t = _roman(text)
-    if re.search(r"\bparso\b|day after|2 din", t):
-        return 2
-    if re.search(r"\baaj\b|\btoday\b|\babhi\b|\btonight\b", t):
-        return 0
-    today = date.today()
-    wd = next((d for w, d in WEEKDAYS.items() if re.search(r"\b" + w + r"\b", t)), None)
-    if wd is not None:
-        return (wd - today.weekday()) % 7 or 7
-    m = re.search(r"\b(\d{1,2})\s*(?:-|/|\s)?\s*(?:tarikh|tareekh|date|th|st|nd|rd)?\s*[-/ ]?\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)?", t)
-    if m and (m.group(2) or re.search(r"tarikh|tareekh|date", t)):
+    t, today, out = _roman(text), _today(), []
+    def add(m, days):
+        out.append((m.start(), max(0, min(30, days)), m.group(0)))
+    for m in re.finditer(r"\bparso\b|\bday after(?: tomorrow)?\b", t):
+        add(m, 2)
+    for m in re.finditer(r"\bkal(?: subah| shaam| raat)?\b|\btomorrow\b", t):
+        add(m, 1)
+    for m in re.finditer(r"\baaj(?: hi)?\b|\btoday\b|\btonight\b|\babhi\b(?! tak| batao| bolo| bata)", t):
+        add(m, 0)
+    for pat, wd in WEEKDAY_RE:
+        for m in re.finditer(r"\b(?:" + pat + r")\b", t):
+            add(m, (wd - today.weekday()) % 7 or 7)
+    for m in re.finditer(r"\b(\d{1,2})\s*din\s*(?:baad|mein|me)\b", t):
+        add(m, int(m.group(1)))
+    for m in re.finditer(r"\b(?:next week|agle hafte|agle week)\b", t):
+        add(m, 7)
+    for m in re.finditer(r"\b(\d{1,2})\s*(?:tarikh|tareekh|date|th|st|nd|rd)\b(?:\s*[-/ ]?\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*)?"
+                         r"|\b(\d{1,2})\s*[-/ ]\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*|\b(\d{1,2})/(\d{1,2})\b", t):
+        day = int(m.group(1) or m.group(3) or m.group(5))
+        month = MONTHS.get(m.group(2) or m.group(4) or "") or (int(m.group(6)) if m.group(6) else None)
         try:
-            month = MONTHS.get(m.group(2)) or today.month
-            d = date(today.year, month, int(m.group(1)))
-            if d < today:
-                d = date(today.year + (month <= today.month and not m.group(2) and 0 or 1), month, int(m.group(1))) \
-                    if m.group(2) else date(today.year + (today.month == 12), today.month % 12 + 1, int(m.group(1)))
-            return min(30, (d - today).days)
+            d = date(today.year, month or today.month, day)
+            if d < today:                                   # a past date means next month, or next year with a month named
+                d = date(today.year + 1, month, day) if month else \
+                    date(today.year + (today.month == 12), today.month % 12 + 1, day)
+            add(m, (d - today).days)
         except ValueError:
             pass
-    return 1
+    return sorted(out)
+
+def pickup_day(text):
+    """Days from today to pickup, from the last day the broker mentioned ('kal nahi, parso' is parso). Default: tomorrow."""
+    found = _day_mentions(text)
+    firm = [x for x in found if x[2] != "abhi"] or found       # "abhi" counts only if nothing else is said
+    return firm[-1][1] if firm else 1
 
 def pickup_phrase(texts):
     """The broker's own words for the pickup day, latest message first, so a date the LLM dropped isn't lost."""
     for t in reversed(texts):
-        m = re.search(r"\b(aaj hi|aaj|today|tonight|abhi|kal subah|kal shaam|kal|tomorrow|parso|day after tomorrow|day after)\b",
-                      _roman(t))
-        if m:
-            return m.group(1)
+        found = _day_mentions(t)
+        firm = [x for x in found if x[2] != "abhi"] or found
+        if firm:
+            return firm[-1][2]
     return None
 
 AVAIL_DAY = {"today": 0, "tomorrow": 1, "in 2 days": 2}
@@ -707,6 +737,11 @@ def truck_fit(load):
     options = sorted((t for t in KNOWN_TYPES if fits(t)), key=lambda t: market_rate(500, t))
     if asked:                                       # keep at least the size they asked for
         options = [t for t in options if caps[t] >= caps.get(asked, 0)] or options
+    if not options and (load.get("material_class") == "machinery" or re.search(r"\bodc\b|over.?dimension|transformer|boiler|crane",
+                                                                               str(load.get("material") or ""), re.I)):
+        return {"type": None, "material": m, "volume": vol,
+                "why": f"{w:g} T {m['hi']} ODC (over-dimensional) lagta hai: low-bed ya hydraulic trailer, route survey aur permit "
+                       "chahiye. Ye load aap khud dekh lijiye; hum abhi ODC ka rate nahi nikalte"}
     if not options:
         n = max(2, -(-int(w) // max(caps[t] for t in KNOWN_TYPES if body_ok(t, m["body"]) or m["body"] == "reefer")))
         why = (f"{w:g} T" + (f" aur ~{vol:,} cft" if vol else "") + f" ek {m['hi']} wali gaadi mein nahi aayega; "

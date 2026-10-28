@@ -69,6 +69,15 @@ def run_tests():
         ok &= check("'100 ton' stays 100 tons and is split, not priced as 0.1 T",
                     E.norm_tons("100 ton") == 100 and E.norm_tons("14 टन") == 14 and E.norm_tons("18000") == 18
                     and E.truck_fit({"weight_ton": 100, "material_class": "general"})["type"] is None)
+        ok &= check("pickup days: last mention wins, weekdays and dates in any spelling",
+                    E.pickup_day("kal nahi, parso") == 2 and E.pickup_day("Rate abhi batao, parso ka load hai") == 2
+                    and E.pickup_day("10 din baad") == 10 and E.pickup_day("next week") == 7 and E.pickup_day("abhi chahiye") == 0
+                    and E.pickup_day("somvaar") == E.pickup_day("monday") and E.pickup_phrase(["Delhi se Jaipur somvar ko"]) == "somvar")
+        ok &= check("rules intake: destination first, kg and budgets",
+                    E.intake_rules([{"role": "user", "text": "Surat ke liye Bhiwandi se 18 ton kapda"}])["origin"] == "bhiwandi"
+                    and E.intake_rules([{"role": "user", "text": "Bhiwandi se Surat 500 kg parcel"}])["weight_ton"] == 0.5
+                    and E.intake_rules([{"role": "user", "text": "Pune se Nagpur 10 ton steel budget 25k"}])["budget_rs"] == "25k")
+        ok &= check("ODC is not 'split it'", "ODC" in E.truck_fit({"weight_ton": 35, "material_class": "machinery", "material": "transformer"})["why"])
         ok &= check("volume and lengths are not weights", E.norm_tons("1500 cft") is None and E.norm_tons("800 carton 4 ton") == 4
                     and E.norm_tons("32 ft") is None and E.norm_tons("14 ton 1500 cft") == 14)
         fit = lambda w, words, asked=None: E.truck_fit({"weight_ton": w, "material_class": E.material_class(words), "truck_type": asked})

@@ -12,6 +12,6 @@ Ask permission to note answers; don't pitch until the last question.
 7. Coordinator chhod ke jaata hai to owners ke number bhi le jaata hai? Kya hua tha pichhli baar?
 8. Abhi kaun sa software use karte hain (Tally, bilty software, TMS)? Kitna kharcha?
 9. (Demo dikhakar) Is mein kya bekaar hai? Kya cheez ho to kal se use karenge?
-10. Agar ye har mahine ₹3,000–5,000 ka ho, ya ₹60–100 har booked load, to kya lenge? 3 hafte free pilot ke liye taiyaar?
+10. Agar ye ₹2,999 mahina ho (50 load shaamil), phir ₹75 har booked load, to kya lenge? 3 hafte free pilot ke liye taiyaar?
 
 After the call: 3 quotes in their own words, the numbers from Q2, Q4, Q5, and a yes/no on the pilot.

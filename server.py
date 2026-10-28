@@ -303,7 +303,8 @@ def admin_only(request: Request):
 IP_HITS = {}
 def ip_limit(request: Request, what, per_hour):
     """Per-visitor budget for actions that spend model calls or message people."""
-    ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "?")).split(",")[0].strip()
+    # the proxy appends the real client address last; earlier entries are whatever the client sent
+    ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "?")).split(",")[-1].strip()
     q = IP_HITS.setdefault((ip, what), collections.deque())
     t = time.time()
     while q and t - q[0] > 3600:
