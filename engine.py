@@ -192,6 +192,26 @@ def transcribe(audio_bytes, mime="audio/mpeg", timeout=60, retries=2, name=None)
     # on a silent or very quiet note Whisper returns "." or repeats the tail of the vocabulary prompt
     return "" if (len(words) == 0 or echo or silent) else text
 
+def read_image(data, mime="image/jpeg", timeout=40):
+    """A photo or screenshot of a load post -> the load as plain text ("" if it shows no load). OpenAI only: vision."""
+    if not LLM["openai_key"]:
+        raise RuntimeError("OPENAI_API_KEY is not set")
+    import base64
+    url = f"data:{mime or 'image/jpeg'};base64," + base64.b64encode(data).decode()
+    prompt = ("This is a photo or screenshot a freight broker in India forwarded (a WhatsApp group post, a load tender, "
+              "a note). Copy out the load request it shows: from city, to city, weight, goods, truck type, pickup day, "
+              "budget/rate if given, in short plain lines as written (Hinglish is fine). Leave out phone numbers and "
+              "people's names. If it shows no load request, return an empty string. "
+              'Return ONLY JSON {"text":""}')
+    body = {"model": LLM["openai_model"], "reasoning_effort": "low", "max_completion_tokens": 1500,
+            "response_format": {"type": "json_object"},
+            "messages": [{"role": "user", "content": [{"type": "text", "text": prompt},
+                                                      {"type": "image_url", "image_url": {"url": url}}]}]}
+    r = requests.post(OPENAI_CHAT, headers={"Authorization": f"Bearer {LLM['openai_key']}"}, json=body, timeout=timeout)
+    if not r.ok:
+        raise RuntimeError(f"openai vision {r.status_code}: {r.text[:200]}")
+    return str(parse_json(r.json()["choices"][0]["message"].get("content") or "{}").get("text") or "").strip()
+
 # =============================== normalising what the LLM extracted ===============================
 CITY_ALIASES = {"bombay": "Mumbai", "bangalore": "Bengaluru", "bengaluru": "Bengaluru",
                 "new delhi": "Delhi", "ncr": "Delhi", "calcutta": "Kolkata", "madras": "Chennai"}

@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 import requests
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Depends
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse
+from fastapi.responses import PlainTextResponse, FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 import engine as E
 import live
@@ -76,19 +76,44 @@ def fetch_capped(url, headers=None, cap=MAX_VOICE_BYTES):
         for chunk in r.iter_content(65536):
             out += chunk
             if len(out) > cap:
-                raise ValueError("voice note too large")
+                raise ValueError("file too large")
         return bytes(out)
 
-def wa_media(media_id):
-    """(bytes, mime), or None when the note is too big. The token only goes to Meta's own media hosts."""
+def wa_media(media_id, cap=MAX_VOICE_BYTES):
+    """(bytes, mime), or None when the file is too big. The token only goes to Meta's own media hosts."""
     h = {"Authorization": f"Bearer {WA_TOKEN}"}
     meta = requests.get(f"{GRAPH}/{media_id}", headers=h, timeout=20).json()
-    if int(meta.get("file_size") or 0) > MAX_VOICE_BYTES:
+    if int(meta.get("file_size") or 0) > cap:
         return None
     url = urlparse(meta["url"])
     if url.scheme != "https" or not (url.hostname or "").endswith(META_MEDIA_HOSTS):
         raise ValueError(f"unexpected media host {url.hostname}")
-    return fetch_capped(meta["url"], headers=h), meta.get("mime_type", "audio/ogg")
+    return fetch_capped(meta["url"], headers=h, cap=cap), meta.get("mime_type", "audio/ogg")
+
+# ---------------- PDF and photo intake: a forwarded load tender or a screenshot of a group post ----------------
+MAX_DOC_BYTES, MAX_PDF_PAGES = 4_000_000, 5
+
+def pdf_text(data):
+    import io
+    from pypdf import PdfReader
+    r = PdfReader(io.BytesIO(data))
+    if len(r.pages) > MAX_PDF_PAGES:
+        raise ValueError("too many pages")
+    return "\n".join((p.extract_text() or "") for p in r.pages)
+
+def doc_text(data, mime):
+    """The load in a PDF or image, as text ("" when nothing readable). Images need the OpenAI key (vision)."""
+    if mime == "application/pdf" or data[:5] == b"%PDF-":
+        text = pdf_text(data)
+    elif (mime or "").startswith("image/"):
+        text = E.read_image(data, mime) if E.LLM["openai_key"] else ""
+    else:
+        return ""
+    return re.sub(r"[ \t]+", " ", re.sub(r"\n\s*\n+", "\n", text)).strip()[:MAX_TEXT]
+
+def doc_summary(text):
+    s = " · ".join(l.strip() for l in text.splitlines() if l.strip())
+    return s[:160] + ("…" if len(s) > 160 else "")
 
 # ---------------- Telegram sending (chat ids are kept as "tg:<id>" so they never clash with phone numbers) ----------------
 def tg_send(to, text, buttons=None):
@@ -102,18 +127,33 @@ def tg_send(to, text, buttons=None):
     except Exception as e:
         print("Telegram send error:", safe(e))
 
+def tg_send_document(to, attachment, caption=""):
+    name, data = attachment
+    try:
+        r = requests.post(f"{TG_API}/sendDocument", data={"chat_id": to[3:], "caption": caption[:1000]},
+                          files={"document": (name, data, "application/pdf")}, timeout=30)
+        if not r.ok:
+            print("Telegram document failed:", r.status_code, r.text[:300])
+    except Exception as e:
+        print("Telegram document error:", safe(e))
+
 CONVO = {}                                            # address -> the last few lines both ways, so replies follow the chat
 
 def remember(who, role, text):
     log = CONVO.setdefault(who, collections.deque(maxlen=12))
     log.append(f"{role}: {str(text)[:300]}")
 
-def send(to, text, buttons=None):
-    """One sender for the desk: picks the channel from the address."""
+def send(to, text, buttons=None, attachment=None):
+    """One sender for the desk: picks the channel from the address. attachment: (file name, PDF bytes)."""
     remember(to, "Bhaada", text)
     if str(to).startswith("tg:"):
         text = re.sub(r"(?<!\w)_([^_\n]+)_(?!\w)", r"\1", text.replace("*", ""))   # WhatsApp *bold*/_italic_ shows literally on Telegram
-        return tg_send(to, text, buttons) if TG_READY else None
+        if not TG_READY:
+            return None
+        tg_send(to, text, buttons)
+        return tg_send_document(to, attachment, "📄 " + attachment[0]) if attachment else None
+    if attachment:                                     # TODO: a PDF on WhatsApp needs a /media upload first; the card alone for now
+        text = "\n".join(l for l in text.split("\n") if not l.startswith("📄 Bilty"))
     return wa_send(to, text, buttons) if WA_READY else None
 
 def tg_setup():
@@ -139,14 +179,14 @@ OUTBOX = queue.Queue()
 def outbox():
     """The desk's messages go out from here, in order, so a slow Telegram or Meta call never holds up its worker."""
     while True:
-        to, text, buttons = OUTBOX.get()
+        to, text, buttons, attachment = OUTBOX.get()
         try:
-            send(to, text, buttons)
+            send(to, text, buttons, attachment)
         except Exception as e:
             print("send failed:", safe(e))
 
-def desk_send(to, text, buttons=None):
-    OUTBOX.put((to, text, buttons))
+def desk_send(to, text, buttons=None, attachment=None):
+    OUTBOX.put((to, text, buttons, attachment))
 
 threading.Thread(target=outbox, daemon=True).start()
 desk = live.Desk(sender=desk_send if (WA_READY or TG_READY) else None)
@@ -346,6 +386,24 @@ def load_action(lid: str, action: str, request: Request):
         desk.post(action, lid=lid)
     return {"ok": True}
 
+@app.get("/api/loads/{lid}/lr.pdf")
+def lr_pdf(lid: str, request: Request):
+    """The bilty draft of a dispatched load; whoever may read the desk may download it (driver phone is masked)."""
+    if not console_ok(request) and not PUBLIC_VIEW:
+        raise HTTPException(401, "Console password needed")
+    load = desk._find(lid)
+    pdf = None
+    for _ in range(3):
+        try:
+            pdf = desk.lr_pdf(load) if load else None
+            break
+        except RuntimeError:                               # the worker changed the load mid-read
+            continue
+    if not pdf:
+        raise HTTPException(404, "No LR yet: it is made once the owner sends the vehicle number")
+    name = desk.lr_number(load) + ".pdf"
+    return Response(pdf, media_type="application/pdf", headers={"content-disposition": f'attachment; filename="{name}"'})
+
 @app.post("/api/mode", dependencies=[Depends(admin_only)])
 async def set_mode(request: Request):
     mode = (await request.json()).get("mode")
@@ -458,7 +516,10 @@ async def telegram(path: str, request: Request, bg: BackgroundTasks):
         bg.add_task(handle_telegram, u)
     return {"ok": True}
 
-ONLY_TEXT = "Abhi sirf text aur voice note samajh pata hoon 🙏 Type kijiye ya bol ke bhejiye."
+ONLY_TEXT = "Abhi text, voice note, PDF aur photo samajh pata hoon 🙏 Type kijiye ya bol ke bhejiye."
+DOC_TOO_BIG = "📄 File 4 MB se chhoti bhejiye (PDF 5 page tak) 🙏 Ya load type kar dijiye."
+DOC_UNREAD = "📄 Is file se load padh nahi paya 🙏 Load type kar dijiye, e.g. Kal Bhiwandi se Surat, 18 ton, 32 MXL"
+DOC_OWNERS = "📄 File sirf brokers ke load ke liye padhta hoon 🙏 Gaadi ki jaankari type kijiye."
 OOPS = "Maaf kijiye, mere taraf se kuch gadbad hui 🙏 Thodi der baad wahi message dobara bhejiye."
 TOO_LONG = "🎤 Voice note 2 minute se chhota bhejiye 🙏 Ya load type kar dijiye."
 SLOW_DOWN = "Bahut saare messages ek saath aa gaye 🙏 Thodi der ruk ke bhejiye."
@@ -536,12 +597,45 @@ def handle_telegram(u):
                 text = m["text"].strip()
                 if text.startswith("/start"):
                     text = "hi"
+            elif m.get("photo") or (m.get("document") or {}).get("mime_type", "").startswith(("image/", "application/pdf")):
+                doc = m.get("document") or m["photo"][-1]            # photo sizes come smallest first
+                if (doc.get("file_size") or 0) > MAX_DOC_BYTES:
+                    return send(key, DOC_TOO_BIG)
+                return read_doc(key, lambda: tg_fetch(doc["file_id"]), doc.get("mime_type") or "image/jpeg", m.get("caption") or "")
             else:
                 return send(key, ONLY_TEXT)
             on_text(key, text)
         except Exception as e:
             print("telegram message failed:", safe(e))
             send(key, OOPS)
+
+def read_doc(key, fetch, mime, caption=""):
+    """A broker's PDF or photo, read and passed on as if they had typed it. fetch() -> bytes, or None when too big."""
+    if key in desk.owners and not desk.owners[key].get("sandbox"):
+        return send(key, DOC_OWNERS)
+    try:
+        data = fetch()
+    except ValueError as e:                                # grew past the cap while downloading
+        print("document fetch refused:", safe(e)[:120])
+        data = None
+    if data is None:
+        return send(key, DOC_TOO_BIG)
+    try:
+        text = doc_text(data, mime)
+    except Exception as e:                                 # a broken or 6-page PDF, or the vision call failed
+        print("document read failed:", safe(e)[:200])
+        return send(key, DOC_TOO_BIG if "pages" in str(e) else DOC_UNREAD)
+    print(f"document {key[-4:]}: {mime} {len(data)} bytes -> {len(text)} chars")
+    if not text:
+        return send(key, DOC_UNREAD)
+    send(key, f"📄 Padha: {doc_summary(text)}")
+    on_text(key, (caption.strip() + "\n" + text).strip())
+
+def tg_fetch(file_id):
+    f = requests.get(f"{TG_API}/getFile", params={"file_id": file_id}, timeout=15).json()["result"]
+    if int(f.get("file_size") or 0) > MAX_DOC_BYTES:
+        return None
+    return fetch_capped(f"https://api.telegram.org/file/bot{TG_TOKEN}/{f['file_path']}", cap=MAX_DOC_BYTES)
 
 def handle_message(msg):
     wa = msg["from"]
@@ -565,6 +659,10 @@ def handle_message(msg):
                 send(wa, f"🎤 Suna: _{text}_")
             elif kind == "text":
                 text = msg["text"]["body"].strip()
+            elif kind == "image" or (kind == "document" and msg["document"].get("mime_type") == "application/pdf"):
+                m = msg[kind]
+                fetch = lambda: (wa_media(m["id"], MAX_DOC_BYTES) or (None,))[0]
+                return read_doc(wa, fetch, m.get("mime_type") or "image/jpeg", m.get("caption") or "")
             else:
                 return send(wa, ONLY_TEXT)
             on_text(wa, text)

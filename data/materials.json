@@ -18,7 +18,7 @@
   "textile": {"label": "cloth / textiles", "hi": "kapda", "body": "closed", "premiumPct": 0, "kgPerCft": 8,
               "words": ["kapda", "kapde", "kapra", "cloth", "fabric", "textile", "garment", "saree", "sari", "yarn", "dhaga", "cotton", "kapas", "roll", "than", "कपड़ा", "कपड़े", "कपास", "धागा"],
               "note": "Closed body (rain, theft); bulky, so volume can fill the truck before weight does."},
-  "packaged": {"label": "cartons / FMCG / furniture", "hi": "carton wala maal", "body": "closed", "premiumPct": 0, "kgPerCft": 6,
+  "packaged": {"label": "cartons / FMCG / furniture", "hi": "carton wala maal", "body": "closed", "premiumPct": 0, "kgPerCft": 8,
                "words": ["carton", "box", "peti", "fmcg", "biscuit", "soap", "detergent", "furniture", "sofa", "plastic", "packaging", "parcel", "कार्टन", "पेटी"],
                "note": "Closed body; light and bulky."},
   "steel_construction": {"label": "steel / construction material", "hi": "steel / construction ka maal", "body": "open", "premiumPct": 0, "kgPerCft": 60,
