@@ -10,6 +10,9 @@ approval, gets the owner to hold, and re-books on its own when an owner backs ou
     cp .streamlit/secrets.toml.example .streamlit/secrets.toml     # add your Groq key (and WhatsApp keys)
     uvicorn server:app --port 8000                                   # open http://localhost:8000
 
+**On a public host** set `CONSOLE_PASSWORD`: without it the console on Render is view-only (`CONSOLE_OPEN=1` opens
+it to anyone). `PUBLIC_VIEW=1` lets anyone watch while only the password approves or changes settings.
+
 **Live owners** works loads against real people on WhatsApp (setup in WHATSAPP.md) or Telegram: make a bot with @BotFather and set `TELEGRAM_BOT_TOKEN`; the server registers its own webhook.
 **Sandbox owners** uses persona owners from `data/owners.json` so anyone can try the desk; the console labels it.
 
