@@ -19,6 +19,7 @@ SENT = []
 server.tg_send = lambda to, text, buttons=None: SENT.append((to, text, buttons))
 server.desk.send_wa = server.send
 server.desk.settings["mode"] = "live"
+server.desk.settings["aiAgents"] = False                # AI owners and the AI broker have their own test (test_agents.py)
 server.desk.settings["replyTimeoutSec"]["live"] = 6
 E.intake_turn = lambda hist, load, msg: (E.normalise_load(dict(origin="Bhiwandi", destination="Surat", weight_ton=14,
                                                                truck_type="32 ft MXL", pickup_when="kal")), "ok", [])

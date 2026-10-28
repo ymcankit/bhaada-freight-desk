@@ -94,8 +94,19 @@ def tg_setup():
 desk = live.Desk(sender=send if (WA_READY or TG_READY) else None)
 if TG_READY:
     threading.Thread(target=tg_setup, daemon=True).start()
-if desk.settings["mode"] == "sandbox":
-    desk.sandbox_on()
+def keep_awake():
+    """Render's free plan sleeps after 15 idle minutes and the desk's timers stop with it: knock every 10 minutes."""
+    base = (cfg("PUBLIC_URL") or os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
+    while base:
+        threading.Event().wait(600)
+        try:
+            requests.get(f"{base}/healthz", timeout=20)
+        except Exception:
+            pass
+
+threading.Thread(target=keep_awake, daemon=True).start()
+if desk.settings["mode"] == "sandbox" or desk.settings.get("aiAgents"):
+    desk.sandbox_on()                                   # the persona owners: sandbox mode, and AI owners in live mode
 
 app = FastAPI(title="Bhaada freight desk")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
@@ -180,6 +191,8 @@ async def set_settings(request: Request):
                 s[k] = float(b[k])
     except (TypeError, ValueError):
         raise HTTPException(400, "Numbers only for diesel, margins and deadhead")
+    if "aiAgents" in b:
+        s["aiAgents"] = bool(b["aiAgents"])
     if "dieselSource" in b:
         s["dieselSource"] = str(b["dieselSource"])[:120]
     if "dieselAsOf" in b:
@@ -363,6 +376,9 @@ def on_text(wa, text):
         return
     if not E.llm_ready():
         return send(wa, "Desk abhi load padh nahi sakta (language model band hai) 🙏 Thodi der baad bhejiye.")
+    intent, said = broker_brain(wa, text, s)
+    if intent == "reply":
+        return send(wa, said)
     s["chat"].append({"role": "user", "text": text})
     try:
         merged, reply, miss = E.intake_turn(s["chat"], s["load"], text)
@@ -380,6 +396,43 @@ def on_text(wa, text):
     desk.brokers[wa] = {"chat": [], "load": {}}
     send(wa, f"🔍 {load['id']}: {merged['origin']} ke paas ke truck owners ko message kar raha hoon…\n"
                 f"({load['id']} is load ka number hai; isi se updates aayenge. Haal jaanna ho to *status* likhiye.)")
+
+def broker_facts(wa):
+    """The broker's recent loads as plain lines, newest last (read-only, safe on the server thread)."""
+    for _ in range(3):
+        try:
+            return [desk.broker_status(l)[0].replace("\n", " · ") for l in desk.broker_loads(wa)[-5:]]
+        except RuntimeError:                               # the worker changed a load mid-read
+            continue
+    return []
+
+def broker_brain(wa, text, s):
+    """What does the broker mean? ("load", None): load details or a truck request, for intake.
+    ("reply", text): thanks, small talk or a question, answered from their own loads. Falls back to intake."""
+    loads = broker_facts(wa)
+    asked = next((m["text"] for m in reversed(s["chat"]) if m["role"] == "bot"), None)
+    try:
+        out = E.parse_json(E.gen(
+            "You are Bhaada, an AI freight desk chatting with a BROKER (they send loads; you find trucks and quote).\n"
+            "Their recent loads (newest last):\n" + ("\n".join("- " + x for x in loads) or "- none") + "\n"
+            + (f"A new load is being collected: known so far {json.dumps(s['load'], ensure_ascii=False)}; "
+               f"your last question was: \"{asked}\"\n" if s["chat"] else "")
+            + f'Broker\'s message: "{text}"\n'
+            "Decide:\n"
+            "- intent=\"load\" if the message gives or changes load details (cities, weight, truck, pickup day, budget), asks "
+            "for a truck, or answers your last question. Leave reply empty.\n"
+            "- intent=\"reply\" for everything else: thanks, greetings, ok, small talk, questions about their loads, owners, "
+            "prices or how the desk works. Answer in 1-3 short lines using ONLY the facts above; never invent a load, "
+            "truck, owner or price. Thanks/ok gets a short warm reply (e.g. \"Shukriya ji 🙏 Aur koi load ho to bhejiye.\") "
+            "and never a question about tons or cities. If a load is being collected, you may gently remind what is "
+            "still needed. To cancel a quote they write *reject BH-xxxx*; a booked trip is changed by calling the owner.\n"
+            "Reply in Hinglish (Hindi words in Roman script), never plain English.\n"
+            'Return ONLY JSON {"intent":"load|reply","reply":""}', json_mode=True))
+    except Exception as e:
+        print("broker brain failed, reading it as a load:", repr(e))
+        return "load", None
+    reply = (out.get("reply") or "").strip()
+    return ("reply", reply[:700]) if out.get("intent") == "reply" and reply else ("load", None)
 
 def broker_command(wa, text):
     """A reply to a quote typed instead of tapped, or a question about loads already sent. True if handled."""

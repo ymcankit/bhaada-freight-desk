@@ -55,6 +55,9 @@ DEFAULT_SETTINGS = {
     "tollNote": "Estimated per km by axle class (NHAI plaza rates vary by stretch).",
     "floorPct": E.MARGIN["floorPct"], "targetPct": E.MARGIN["targetPct"], "ceilingPct": E.MARGIN["ceilingPct"],
     "replyTimeoutSec": {"live": 300, "sandbox": 30},
+    "holdTimeoutSec": {"live": 1800, "sandbox": 30},        # an owner on a slow phone gets 30 min to say HAAN
+    "approvalExpireSec": {"live": 3600, "sandbox": 900},    # a quote nobody approves stops holding the owner's truck
+    "aiAgents": True,                                       # AI owners bid beside real ones; an AI broker posts demo loads
     "maxRounds": 3,
     "maxDeadheadKm": 80,
     "defaultReturnLoadProb": 0.5,
@@ -237,7 +240,27 @@ class Desk:
         return round(max(1.0, o.get("reliability", 4.5) + self.reliability.get(key, 0)), 1)
 
     # ---------------- inbound ----------------
-    def _on_owner_message(self, key, text):
+    def _on_owner_message(self, key, text, lid=None):
+        live_states = ("sent", "countered", "hold_requested", "reconfirm")
+        open_now = [l for l in self.loads if (l["threads"].get(key) or {}).get("status") in live_states]
+        named = re.search(r"\bBH[-\s]?(\d{4,})\b", text, re.I)
+        pick = lid or (f"BH-{named.group(1)}" if named else None)
+        ids = {l["id"] for l in open_now}
+        if lid and lid not in ids:
+            return                                      # a persona answering a round that has already closed
+        if pick in ids or len(open_now) > 1:
+            load = next((l for l in open_now if l["id"] == pick), None)
+            if not load:                                # two negotiations at once and the message doesn't say which
+                o = self.owners.get(key) or {}
+                if not o.get("sandbox"):
+                    self._wa(o, "Aapke paas do load khule hain, kaunse ke liye likh rahe hain? 🙏\n" + "\n".join(
+                        f"{l['id']}: {l['lane']['origin']} → {l['lane']['destination']}" for l in open_now)
+                        + "\nLoad number ke saath likhiye, e.g. *" + open_now[-1]["id"] + " 38/km*")
+                return
+            th = load["threads"][key]
+            th["messages"].append({"dir": "in", "text": text, "t": now()})
+            text = re.sub(r"\bBH[-\s]?\d{4,}\b", " ", text, flags=re.I)      # the load number is not a rate
+            return self._owner_reply(load, th, text)
         th, load = self._open_thread(key)
         if th and th["status"] == "held":
             # a booked owner writes about many things (payment, timing, tomorrow's truck); only a clear cancel un-books
@@ -296,8 +319,12 @@ class Desk:
                 "Gaadi free ho to aise bhejiye: *32 ft MXL, Surat, aaj, ₹38/km*")
 
     def _owner_chat(self, o, text):
-        """An owner message outside a live negotiation: a truck report, or a question to answer from the facts."""
+        """An owner message outside a live negotiation: a truck report, a question or small talk. The model call runs
+        off the worker so one slow reply never holds up other loads; the facts are read here, on the worker."""
         rows, trucks = self._owner_story(o["key"])
+        threading.Thread(target=self._owner_chat_bg, args=(dict(o), text, rows, trucks), daemon=True).start()
+
+    def _owner_chat_bg(self, o, text, rows, trucks):
         try:
             out = self._llm_json(
                 "You are Bhaada, a freight desk talking to a TRUCK OWNER on chat. Decide what their message is and answer.\n"
@@ -307,6 +334,9 @@ class Desk:
                 f'Owner\'s message: "{text}"\n'
                 "Rules:\n"
                 "- If the message reports a free/empty truck, its type, location or rate, set intent=\"checkin\" and leave reply empty.\n"
+                "- If they ask whether there is a load/kaam for them, intent=\"ask_load\" with a short reply from the facts.\n"
+                "- Thanks, greetings, ok/theek hai and small talk: intent=\"reply\" with a short, warm, natural answer "
+                "(e.g. \"Shukriya ji 🙏 Koi load aaya to turant bataunga.\"). Never ask for truck details in reply to a thank-you.\n"
                 "- Otherwise intent=\"reply\": answer their actual question in 1-3 short lines using ONLY the facts above. "
                 "Quote agreed or countered prices exactly as given. Never invent a load, a price or a promise. If a deal is "
                 "waiting for the broker's approval, say so and that they'll be told. If you don't know, say the desk will update them. "
@@ -317,15 +347,25 @@ class Desk:
                 "- If they seem to cancel a booked trip, ask them to write *cancel* to confirm.\n"
                 "- Reply in Hinglish: Hindi words in Roman script, like \"Aapka rate ₹33/km tay hua hai, broker ka approval "
                 "aate hi bata denge.\" Never write plain English sentences.\n"
-                'Return ONLY JSON {"intent":"checkin|reply","reply":""}')
+                'Return ONLY JSON {"intent":"checkin|ask_load|reply","reply":""}')
         except Exception as e:
             print("owner chat failed, using rules:", repr(e))
             if E.norm_type(text) or (NO.search(text) and len(text.split()) <= 4 and "?" not in text):
-                return self._parse_checkin(o, text)
-            return self._wa(o, self._owner_status_line(o["key"]))
-        if out.get("intent") == "reply" and (out.get("reply") or "").strip():
-            return self._wa(o, out["reply"].strip()[:600])
-        self._parse_checkin(o, text)
+                return self.post("checkin_apply", key=o["key"], text=text, trucks=self._extract_trucks(o, text))
+            return self._wa(o, self._owner_status_line_safe(o["key"]))
+        intent, reply = out.get("intent"), (out.get("reply") or "").strip()
+        if intent in ("reply", "ask_load") and reply:
+            self._wa(o, reply[:600])
+            if intent == "ask_load":
+                self.post("ai_broker", key=o["key"])
+            return
+        self.post("checkin_apply", key=o["key"], text=text, trucks=self._extract_trucks(o, text))
+
+    def _owner_status_line_safe(self, key):
+        try:
+            return self._owner_status_line(key)
+        except RuntimeError:                           # the worker changed a load mid-read: a plain answer is fine
+            return "Abhi koi naya update nahi hai. Load aate hi yahin message karenge 🙏"
 
     def _open_thread(self, key):
         """The negotiation this owner is answering, newest first; a booked trip only if nothing is being negotiated."""
@@ -354,9 +394,12 @@ class Desk:
         return len(live)
 
     def _parse_checkin(self, o, text):
+        self._on_checkin_apply(o["key"], text, self._extract_trucks(o, text))
+
+    def _extract_trucks(self, o, text):
+        """The trucks in an owner's message; safe off the worker (reads nothing that changes)."""
         if NO.search(text) and not re.search(r"\d", text):
-            self.pool = [t for t in self.pool if t["ownerKey"] != o["key"]]
-            return self._wa(o, "Theek hai, dhanyavaad. Kal phir poochenge 🙏")
+            return None                                # "nahi": nothing free today
         trucks = []
         try:
             out = self._llm_json(
@@ -367,8 +410,15 @@ class Desk:
             trucks = out.get("trucks") or []
         except Exception as e:
             print("check-in parse failed:", repr(e))
-        if not trucks:
-            trucks = self._checkin_rules(o, text)
+        return trucks or self._checkin_rules(o, text)
+
+    def _on_checkin_apply(self, key, text, trucks):
+        o = self.owners.get(key)
+        if not o:
+            return
+        if trucks is None:
+            self.pool = [t for t in self.pool if t["ownerKey"] != o["key"]]
+            return self._wa(o, "Theek hai, dhanyavaad. Kal phir poochenge 🙏")
         added = []
         for t in trucks:
             tt = E.norm_type(t.get("type"))
@@ -388,6 +438,8 @@ class Desk:
         lines = ", ".join(f"{t['type']}, {t['city']} ({day.get(t['available'], t['available'])})" for t in added)
         self._wa(o, f"Noted ✅ {lines}. Load aate hi message karenge.")
         self._on_retry_waiting()
+        if self.settings.get("aiAgents"):               # nothing real for them yet: a demo load in a few seconds
+            threading.Timer(20, lambda: self.post("ai_broker", key=o["key"])).start()
 
     def _checkin_rules(self, o, text):
         """Fallback when the model is unavailable: one truck per line, '32 ft MXL, Bhiwandi, aaj, ₹38/km'."""
@@ -469,31 +521,44 @@ class Desk:
         w = f["weight_ton"]
         seen, out = set(load["contacted"]), []
         mode_sandbox = load["mode"] == "sandbox"
+        ai_ok = mode_sandbox or (self.settings.get("aiAgents") and not load.get("aiBroker"))   # demo loads are for real owners
         rows = []
-        for t in self.pool:
+        for t in list(self.pool):
             o = self.owners.get(t["ownerKey"])
-            if not o or bool(o.get("sandbox")) != mode_sandbox or t["ownerKey"] in seen:
+            if not o or t["ownerKey"] in seen or (o.get("sandbox") and not ai_ok) or (mode_sandbox and not o.get("sandbox")):
                 continue
             if t["type"] != load["searchType"] or t["capacityTon"] < w or E.AVAIL_DAY.get(t["available"], 1) > day:
+                continue
+            if self._stale(t):
                 continue
             c = geo.resolve_city(t["city"])
             dh = geo.road_km(c, origin, precise=False)["km"] if c else 9999
             if dh > radius:
                 continue
-            rows.append((0 if t["ownerKey"] in load.get("prefer", {}) else 1, dh, -self.reliability_of(t["ownerKey"]), t, dh))
-        for _, _, _, t, dh in sorted(rows, key=lambda r: r[:3]):
-            if t["ownerKey"] in {x["ownerKey"] for x in out}:
+            ai = bool(self.owners[t["ownerKey"]].get("sandbox")) and not mode_sandbox
+            rows.append((ai, 0 if t["ownerKey"] in load.get("prefer", {}) else 1, dh, -self.reliability_of(t["ownerKey"]), t, dh))
+        real, bots = [], []
+        for ai, _, _, _, t, dh in sorted(rows, key=lambda r: r[:4]):
+            if t["ownerKey"] in {x["ownerKey"] for x in real + bots}:
                 continue
-            out.append({**t, "deadheadKm": dh})
-        if not mode_sandbox and len(out) < E.SRC["ownersPerBroadcast"]:
+            (bots if ai else real).append({**t, "deadheadKm": dh})
+        if not mode_sandbox:
             # broadcast on demand: registered owners who haven't answered today's check-in yet
             for k, o in list(self.owners.items()):    # a snapshot: owners register from the server thread
-                if o.get("sandbox") or k in seen or k in {x["ownerKey"] for x in out}:
+                if o.get("sandbox") or k in seen or k in {x["ownerKey"] for x in real}:
                     continue
-                out.append({"ownerKey": k, "type": load["searchType"], "capacityTon": E.rates["capacityTonByType"][load["searchType"]],
-                            "city": o.get("baseCity") or "", "available": "unknown", "ratePerKm": None,
-                            "source": "on-demand", "deadheadKm": None})
-        return out[:E.SRC["ownersPerBroadcast"]]
+                real.append({"ownerKey": k, "type": load["searchType"], "capacityTon": E.rates["capacityTonByType"][load["searchType"]],
+                             "city": o.get("baseCity") or "", "available": "unknown", "ratePerKm": None,
+                             "source": "on-demand", "deadheadKm": None})
+        n = E.SRC["ownersPerBroadcast"]
+        return real[:n] + bots[:max(0, n - len(real[:n]))] if mode_sandbox else real[:n] + bots[:max(2, n - len(real[:n]))]
+
+    def _stale(self, t):
+        """A check-in truck whose day has passed ("aaj" said yesterday) is no longer free."""
+        if t.get("source") != "checkin" or not t.get("at"):
+            return False
+        said = datetime.fromtimestamp(t["at"], IST).date()
+        return (datetime.now(IST).date() - said).days > E.AVAIL_DAY.get(t.get("available"), 0)
 
     def _broadcast(self, load):
         radius = self.settings["maxDeadheadKm"] * (1 if load["rounds"] == 0 else 2)
@@ -520,7 +585,8 @@ class Desk:
             load["contacted"].append(key)
             when = f.get("pickup_when") or "kal"
             hint = f" Aapne subah ₹{c['ratePerKm']}/km bataya tha." if c.get("ratePerKm") else ""
-            self._to_owner(load, th, f"🚚 Load: {lane['origin']} → {lane['destination']} ({lane['distanceKm']} km), {when}, "
+            demo = "🧪 Demo load (AI broker) · " if load.get("aiBroker") else ""
+            self._to_owner(load, th, f"🚚 {demo}{load['id']} Load: {lane['origin']} → {lane['destination']} ({lane['distanceKm']} km), {when}, "
                                      f"{f['weight_ton']:g} T, {c['type']}.{hint} Gaadi free hai? Rate batayiye (₹/km ya total).")
         self._event(load, "Sourcing", f"Messaged {len(cands)} owners near {lane['origin']} at once"
                                       + (f" (round {load['rounds']}, within {radius} km)" if load["rounds"] > 1 else "")
@@ -552,6 +618,38 @@ class Desk:
                 load["status"] = "sourcing"
                 self._event(load, "Sourcing", "A matching truck just checked in. Sourcing again.")
                 self._broadcast(load)
+
+    AI_DESTS = ["Mumbai", "Pune", "Surat", "Ahmedabad", "Vadodara", "Bhiwandi", "Nashik", "Vapi", "Indore", "Nagpur",
+                "Jaipur", "Delhi", "Hyderabad", "Bengaluru", "Chennai", "Lucknow", "Ludhiana", "Kolkata"]
+
+    def _on_ai_broker(self, key):
+        """The AI broker posts a demo load that fits a real owner's free truck, so an owner can try the desk alone."""
+        o = self.owners.get(key)
+        if not o or o.get("sandbox") or not self.settings.get("aiAgents") or self.settings["mode"] != "live":
+            return
+        busy = [l for l in self.loads if key in l["threads"] and l["status"] not in self.CLOSED]
+        last = max([l["createdAt"] for l in self.loads if l.get("aiBroker") and l.get("aiFor") == key] or [0])
+        trucks = [t for t in self.pool if t["ownerKey"] == key and not self._stale(t)]
+        if busy or not trucks or now() - last < 600:
+            return
+        t = trucks[0]
+        here = geo.resolve_city(t["city"])
+        if not here:
+            return
+        rnd = __import__("random").Random(f"{key}{int(now() // 600)}")
+        dests = []
+        for name in self.AI_DESTS:
+            d = geo.resolve_city(name)
+            if d and d["name"] != here["name"] and 150 <= geo.road_km(here, d, precise=False)["km"] <= 900:
+                dests.append(d["name"])
+        if not dests:
+            return
+        cap = E.rates["capacityTonByType"][t["type"]]
+        fields = E.normalise_load({"origin": here["name"], "destination": rnd.choice(dests), "truck_type": t["type"],
+                                   "weight_ton": max(1, round(cap * rnd.choice([0.6, 0.75, 0.9]))),
+                                   "pickup_when": {"today": "aaj", "tomorrow": "kal", "in 2 days": "parso"}.get(t["available"], "kal")})
+        load = self.start_load(fields, "ai-broker", raw="AI broker demo load")
+        load["aiBroker"], load["aiFor"] = True, key
 
     # ---------------- negotiation ----------------
     def _econ(self, load, th):
@@ -693,6 +791,21 @@ class Desk:
             elif load["status"] == "waiting_trucks" and t > load.get("watchUntil", t + 1):
                 load["status"] = "sourcing"                 # so _escalate's broker message reads as the end of the wait
                 self._escalate(load, f"{self.WAIT_HOURS} ghante mein koi {load['searchType']} nahi mila.")
+            elif load["status"] == "holding" and not load.get("holdNudged") and load.get("deadline", t) - t < \
+                    (load["deadline"] - load.get("approvedAt", t)) / 2 and load.get("approvedAt"):
+                load["holdNudged"] = True                   # halfway through the hold window: one reminder
+                th = load["threads"][load["winner"]]
+                mins = max(1, int((load["deadline"] - t) // 60))
+                self._to_owner(load, th, f"⏰ {load['id']}: gaadi hold karni hai? {mins} min mein *HAAN* likhiye, warna load kisi aur ko jayega.")
+            elif load["status"] == "needs_approval" and load.get("quoteAt"):
+                ttl = self.settings.get("approvalExpireSec", {}).get(load["mode"], 3600)
+                if t - load["quoteAt"] > ttl:
+                    self._expire_quote(load)
+                elif t - load["quoteAt"] > ttl / 4 and not load.get("quoteNudged"):
+                    load["quoteNudged"] = True
+                    self._to_broker(load, f"⏰ {load['id']} ka quote approval ka intezaar kar raha hai. Owner ki gaadi "
+                                          f"{int((ttl - (t - load['quoteAt'])) // 60)} min aur rukegi.\n" + self.quote_text(load),
+                                    [("approve:" + load["id"], "Approve ✅"), ("reject:" + load["id"], "Reject ❌")])
             elif load["status"] == "holding" and t > load.get("deadline", t + 1):
                 th = load["threads"][load["winner"]]
                 th["status"] = "backed_out"
@@ -744,6 +857,8 @@ class Desk:
                                   f"(floor {E.MARGIN['floorPct']:g}%). Shipper ka rate wahi ₹{q['sell_total']:,}. Aapko kuch nahi karna.")
         else:
             load["status"], load["quoteAt"] = "needs_approval", now()
+            if load.get("aiBroker"):                     # the AI broker approves its own demo load after a short think
+                threading.Timer(8, lambda: self.post("approve", lid=load["id"])).start()
             self._event(load, "Pricing", f"Buy ₹{q['buy_total']:,} → sell ₹{q['sell_total']:,}, margin {q['margin_pct']}% "
                                          f"(floor {E.MARGIN['floorPct']:g}%)." + (f" {q['note']}." if q.get("note") else ""))
             self._to_broker(load, self.quote_text(load), [("approve:" + load["id"], "Approve ✅"), ("reject:" + load["id"], "Reject ❌")])
@@ -763,13 +878,26 @@ class Desk:
             self._to_broker(load, f"❌ {load['id']}: abhi quote nahi ban paaya. {hi or reason}\nAap khud dekh lijiye, ya thodi der baad phir bhejiye.")
         self.save()
 
+    def _expire_quote(self, load):
+        load["status"], load["closedAt"], load["reason"] = "escalated", now(), "Quote expired without approval."
+        self._event(load, "Orchestrator", "Quote expired: nobody approved it in time, owners released.")
+        for th in load["threads"].values():
+            if th["status"] == "deal":
+                th["status"] = "released"
+                self._to_owner(load, th, f"{load['id']}: broker ne time pe confirm nahi kiya, ye load abhi cancel samjhiye. "
+                                         "Gaadi free hai to agla load bhejte hain 🙏")
+        self._to_broker(load, f"⌛ {load['id']} ka quote expire ho gaya (approve nahi hua), owners ko chhod diya. "
+                              "Abhi bhi chahiye to load dobara bhejiye.")
+        self.save()
+
     # ---------------- approval, hold, back-out ----------------
     def _on_approve(self, lid):
         load = self._find(lid)
         if not load or load["status"] != "needs_approval":
             return
         th = load["threads"][load["winner"]]
-        load["status"], load["approvedAt"], load["deadline"] = "holding", now(), now() + self.timeout()
+        hold = self.settings.get("holdTimeoutSec", {}).get(self.settings["mode"], self.timeout())
+        load["status"], load["approvedAt"], load["deadline"] = "holding", now(), now() + hold
         load["fixedSell"] = load["quote"]["sell_total"]
         self._event(load, "Broker", "Approved the quote.")
         th["status"] = "hold_requested"                  # before the message, so the reply is read as the hold answer
@@ -882,7 +1010,7 @@ class Desk:
             text = "Haan, chalega." if (seed % 100) / 100 < b["honoursHoldProb"] else "Sorry, gaadi nikal gayi."
         else:
             return
-        threading.Timer(delay, lambda: self.post("owner_message", key=th["ownerKey"], text=text)).start()
+        threading.Timer(delay, lambda: self.post("owner_message", key=th["ownerKey"], text=text, lid=load["id"])).start()
 
     # ---------------- broker-facing text and console view ----------------
     def quote_text(self, load):
@@ -893,7 +1021,7 @@ class Desk:
         if load["searchType"] != f["truck_type"]:
             lines.append(f"🔄 {f['truck_type']} mein {f['weight_ton']:g} T nahi aayega, isliye {load['searchType']} li hai")
         lines += [f"📲 {len(ths)} owners se poocha: {n('deal')} raazi, {n('declined')} mana, {n('silent')} ka jawab nahi",
-                  f"🚛 {th['name']} · {th['type']} · {th['reliability']}★",
+                  f"🚛 {th['name']}{' (AI owner)' if th.get('sandbox') and load['mode'] == 'live' else ''} · {th['type']} · {th['reliability']}★",
                   f"💰 Quote *₹{q['sell_total']:,}* (₹{q['rate_per_km']}/km) · owner ko ₹{q['buy_total']:,}",
                   f"📊 Margin *{q['margin_pct']}%* (floor {E.MARGIN['floorPct']:g}%)"]
         note = q.get("note") or ""
