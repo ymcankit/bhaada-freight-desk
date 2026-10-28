@@ -121,6 +121,8 @@ ok &= check("state API reports the day", state["kpis"]["received"] == 1 and stat
 ok &= check("owner phones masked in the API", all(o["phone"].startswith("••••") for o in state["owners"]))
 raw_state = c.get("/api/state").text
 ok &= check("no phone number anywhere in the API", not any(p in raw_state for p in [BROKER] + OWNERS))
+plain = {"o-" + hashlib.sha1(p.encode()).hexdigest()[:8] for p in OWNERS}     # what a guesser would compute
+ok &= check("owner ids can't be reversed by hashing guessed numbers", not any(a in raw_state for a in plain))
 # Upstash down at boot: the blank desk must not overwrite what Upstash holds, and merges it once it answers
 REMOTE = {"up": False, "sets": [], "state": {"owners": {"91999": {"key": "91999", "phone": "91999", "name": "Old Owner"}}, "seq": 1500}}
 def fake_redis(cmd):

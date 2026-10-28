@@ -10,7 +10,7 @@ the clock), so a load's state never races. What is real and what is not:
   - negotiation: an LLM agent reads each owner's reply and answers in Hinglish, inside a ceiling the code enforces;
   - price: only engine.price_quote, never the LLM.
 """
-import json, os, queue, re, threading, time, hashlib, traceback
+import json, os, queue, re, threading, time, hashlib, hmac, traceback
 import requests
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +25,7 @@ STATE_KEY = "bhaada:live_state"
 ARCHIVE_KEY = "bhaada:archive"                 # closed loads, one hash field each, written once and never re-sent
 ARCHIVE_FILE = Path(__file__).parent / "data" / "live_archive.jsonl"
 _SEC = E.local_secrets()
+ALIAS_SALT = os.urandom(16)                    # the console's owner ids: stable for this process, meaningless outside it
 
 def _store():
     """Upstash Redis (free, REST) when configured: free hosts wipe local files on every restart and deploy."""
@@ -1381,7 +1382,9 @@ class Desk:
                 time.sleep(0.02)
         else:
             v = json.loads(json.dumps(self._view(), ensure_ascii=False))
-        alias = lambda k: k if not k or str(k).startswith("sb:") else "o-" + hashlib.sha1(str(k).encode()).hexdigest()[:8]
+        # keyed with a secret salt: a plain hash of a phone number, next to its last 4 digits, is reversed in a second
+        alias = lambda k: k if not k or str(k).startswith("sb:") else \
+            "o-" + hmac.new(ALIAS_SALT, str(k).encode(), hashlib.sha256).hexdigest()[:10]
         for o in v["owners"]:
             o["key"] = alias(o["key"])
             for t in o["trucks"]:
