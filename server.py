@@ -541,6 +541,9 @@ REJECT = re.compile(r"^\s*(?:(reject(ed)?|nahi|nahin|nhi|no|mat|rehne do|cancel)
 STATUS_Q = re.compile(r"\b(status|update|kya hua|kya scene|kahan tak pahunch|progress)\b", re.I)
 LOAD_ID = re.compile(r"\bBH[-\s]?(\d{4,})\b", re.I)
 
+FORGET = re.compile(r"^\s*(delete my data|delete data|forget me|mera data (hatao|delete karo|mitao))\s*[.!]*\s*$", re.I)
+PRIVACY = ("🔒 Aapka naam, number aur gaadi ki jaankari sirf load dene ke liye rakhte hain. "
+           "Sab hatana ho to *delete my data* likhiye.")
 GREETING = re.compile(r"^\s*(hi+|hello|helo|hey|new|reset|namaste|namaskar|start|menu)\s*[!.]*\s*$", re.I)
 ROLE_BUTTONS = [("role:owner", "🚚 Truck owner"), ("role:broker", "📦 Broker")]
 
@@ -549,7 +552,7 @@ def role_menu(wa):
     now_as = f"Abhi aap *{o['name']}* (truck owner) ke roop mein jude hain.\n" if o and not o.get("sandbox") else ""
     send(wa, "Namaste 🙏 Bhaada freight desk.\n" + now_as + "Aap kaun hain? Neeche button dabaiye:\n"
              "🚚 *Truck owner*: gaadi khaali batao, load aur rate yahin milenge\n"
-             "📦 *Broker*: load bhejo (text ya voice), hum truck dhoondh ke quote denge", ROLE_BUTTONS)
+             "📦 *Broker*: load bhejo (text ya voice), hum truck dhoondh ke quote denge\n" + PRIVACY, ROLE_BUTTONS)
 
 def join_as_owner(wa, name, city):
     o = desk.register_owner(wa, name, city)
@@ -558,10 +561,15 @@ def join_as_owner(wa, name, city):
         desk.settings["mode"] = "live"
         desk.post("save")
     send(wa, f"Namaste {o['name']} 🙏 Aap fleet owner ke roop mein jud gaye" + (f" ({o['baseCity']})" if o.get("baseCity") else "")
-             + ".\nGaadi khaali ho to aise bhejiye: *32 ft MXL, Bhiwandi, aaj, ₹85/km*\n(Role badalna ho to *hi* likhiye.)")
+             + ".\nGaadi khaali ho to aise bhejiye: *32 ft MXL, Bhiwandi, aaj, ₹85/km*\n(Role badalna ho to *hi* likhiye.)\n"
+             + PRIVACY)
 
 def on_text(wa, text):
     text = text[:MAX_TEXT]
+    if FORGET.match(text):                                 # before remember(): nothing of theirs is kept
+        desk.post("forget", key=wa)
+        CONVO.pop(wa, None)
+        return send(wa, "🗑️ Aapka naam, number, gaadi aur chat desk se hata diye gaye. Dobara judna ho to *hi* likhiye.")
     remember(wa, "Them", text)
     if GREETING.match(text):
         return role_menu(wa)

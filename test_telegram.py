@@ -131,6 +131,17 @@ text(8804, "hi " + "x" * 5000)
 time.sleep(0.5)
 raw = [l["raw"] for l in server.desk.broker_loads("tg:8804")]
 ok &= check("long messages are cut before anything reads them", raw and len(raw[0]) <= server.MAX_TEXT, str([len(r) for r in raw]))
+ok &= check("the welcome says what is kept and how to delete it", "delete my data" in next(
+            (t for to, t, b in SENT if to == f"tg:{OWNERS[0]}" and "jud gaye" in t), ""))
+import json as _json
+held = lambda who: any(f"tg:{who}" in _json.dumps(x, ensure_ascii=False) for x in
+                       (server.desk.owners, server.desk.loads, server.desk.brokers, server.desk.pool))
+before = held(OWNERS[0]) and held(BROKER)
+text(OWNERS[0], "delete my data")
+text(BROKER, "Delete my data")
+time.sleep(1)
+ok &= check("'delete my data' removes the person from the desk", before and not held(OWNERS[0]) and not held(BROKER)
+            and "hata diye" in last_to(BROKER))
 ok &= check("bot token kept out of logged errors", server.TG_TOKEN not in server.safe(
             ConnectionError(f"Max retries exceeded with url: /bot{server.TG_TOKEN}/sendMessage")))
 print("\nALL PASS" if ok else "\nSOME FAILED")

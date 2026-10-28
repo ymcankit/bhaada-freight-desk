@@ -465,6 +465,25 @@ class Desk:
         self.post("save")
         return o
 
+    def _on_forget(self, key):
+        """'delete my data' (DPDP Act): drop the person's profile, trucks and chats; their loads keep only the numbers."""
+        gone = "deleted-" + hmac.new(ALIAS_SALT, str(key).encode(), hashlib.sha256).hexdigest()[:8]
+        self.owners.pop(key, None)
+        self.pool = [t for t in self.pool if t["ownerKey"] != key]
+        for d in (self.brokers, self.reliability, self.ai_due):
+            d.pop(key, None)
+        for l in self.loads:
+            if l.get("brokerPhone") == key:
+                l["brokerPhone"], l["raw"], l["brokerMessages"] = None, "", []
+            th = l["threads"].pop(key, None)
+            if th:
+                th.update(ownerKey=gone, name="(deleted)", messages=[])
+                l["threads"][gone] = th
+                l["contacted"] = [gone if k == key else k for k in l.get("contacted", [])]
+                if l.get("winner") == key:
+                    l["winner"] = gone
+        self.save()
+
     def send_checkin(self):
         live = [o for o in self.owners.values() if not o.get("sandbox")]
         for o in live:
