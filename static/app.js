@@ -91,7 +91,7 @@ poll();
 
 function render() {
   const d = S.data;
-  $("scope").textContent = (d.settings.mode === "live" ? "Freight desk · live owners" : "Freight desk · sandbox") + (d.readOnly ? " · view only" : "");
+  $("scope").textContent = (d.settings.mode === "live" ? "Freight desk · live owners" : "Freight desk · sandbox") + (d.readOnly ? " · view only" : d.publicView ? " · open demo" : "");
   $("dot-wa").classList.toggle("on", !!(d.whatsapp || d.telegram));
   $("conn-wa").textContent = [d.whatsapp ? "WhatsApp connected" : "WhatsApp not connected",
                               d.telegram ? `Telegram @${d.telegram}` : null].filter(Boolean).join(" · ");

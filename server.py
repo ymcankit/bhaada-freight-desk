@@ -233,6 +233,28 @@ def console_auth(request: Request):
             raise HTTPException(401, "Console password needed")
         raise HTTPException(403, "This public console is read-only. Set CONSOLE_PASSWORD on the server to act from it.")
 
+def judge_mode(request: Request):
+    """An open console on the internet (CONSOLE_OPEN, no password): judges try the desk, but can't touch real people."""
+    return ON_HOST and not CONSOLE_PW and CONSOLE_OPEN
+
+def admin_only(request: Request):
+    """Margins, diesel and messaging arbitrary numbers need the password even when the console is open."""
+    console_auth(request)
+    if judge_mode(request):
+        raise HTTPException(403, "In the open demo console, settings and adding owners need the console password.")
+
+HITS = {}
+def ip_limit(request: Request, what, per_hour):
+    """Per-visitor budget for actions that spend model calls or message people."""
+    ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "?")).split(",")[0].strip()
+    q = HITS.setdefault((ip, what), collections.deque())
+    t = time.time()
+    while q and t - q[0] > 3600:
+        q.popleft()
+    if len(q) >= per_hour:
+        raise HTTPException(429, "Demo limit reached for this hour. Try again later.")
+    q.append(t)
+
 @app.get("/")
 def console():
     return FileResponse(ROOT / "static" / "index.html")
@@ -263,6 +285,16 @@ def state(request: Request):
         return {"locked": True}                    # 200, so a health check on this path keeps passing
     v = desk.view()
     v["readOnly"] = not console_can_act(request)
+    if ON_HOST and not console_ok(request) or judge_mode(request):
+        # the public sees the workflow, not real people's words: chats from real brokers and owners are hidden
+        v["publicView"] = True
+        for l in v["loads"]:
+            if l.get("source") in ("telegram", "whatsapp"):
+                l["raw"] = ""
+                l["brokerMessages"] = [{**m, "text": "(hidden in the public view)"} for m in l.get("brokerMessages", [])]
+            for th in l["threads"].values():
+                if not th.get("sandbox"):
+                    th["messages"] = [{**m, "text": "(hidden in the public view)"} for m in th.get("messages", [])]
     v["whatsapp"] = WA_READY
     v["telegram"] = TG_BOT["username"] if TG_READY else None
     v["build"] = (os.getenv("RENDER_GIT_COMMIT") or "local")[:7]
@@ -273,6 +305,8 @@ def state(request: Request):
 # ---------------- console intake: a short chat that turns text into a load ----------------
 @app.post("/api/intake", dependencies=[Depends(console_auth)])
 async def intake(request: Request):
+    if judge_mode(request):
+        ip_limit(request, "intake", 30)               # each turn is a model call on a small prepaid credit
     body = await request.json()
     hist = [{"role": m["role"], "text": str(m.get("text") or "")[:MAX_TEXT]} for m in (body.get("chat") or [])[-12:]
             if isinstance(m, dict) and m.get("role") in ("user", "bot")]
@@ -298,16 +332,21 @@ async def intake(request: Request):
     return out
 
 @app.post("/api/loads/{lid}/{action}", dependencies=[Depends(console_auth)])
-def load_action(lid: str, action: str):
+def load_action(lid: str, action: str, request: Request):
     if action not in ("approve", "reject", "backout", "call_yes", "call_no"):
         raise HTTPException(404)
+    if judge_mode(request):
+        load = desk._find(lid)
+        if not load or load.get("source") != "console":
+            raise HTTPException(403, "In the open demo console you can act only on loads started from this console.")
+        ip_limit(request, "action", 60)
     if action.startswith("call_"):
         desk.post("broker_call", lid=lid, yes=action == "call_yes")
     else:
         desk.post(action, lid=lid)
     return {"ok": True}
 
-@app.post("/api/mode", dependencies=[Depends(console_auth)])
+@app.post("/api/mode", dependencies=[Depends(admin_only)])
 async def set_mode(request: Request):
     mode = (await request.json()).get("mode")
     if mode not in ("live", "sandbox"):
@@ -318,7 +357,7 @@ async def set_mode(request: Request):
     desk.post("save")
     return {"mode": mode}
 
-@app.post("/api/settings", dependencies=[Depends(console_auth)])
+@app.post("/api/settings", dependencies=[Depends(admin_only)])
 async def set_settings(request: Request):
     b = await request.json()
     s = dict(desk.settings)                        # checked as a whole before any of it goes live
@@ -344,7 +383,7 @@ async def set_settings(request: Request):
     desk.post("save")
     return s
 
-@app.post("/api/owners", dependencies=[Depends(console_auth)])
+@app.post("/api/owners", dependencies=[Depends(admin_only)])
 async def add_owner(request: Request):
     b = await request.json()
     phone = re.sub(r"\D", "", str(b.get("phone", "")))
@@ -360,7 +399,7 @@ async def add_owner(request: Request):
                        "ki gaadi khaali hai ya nahi; loads seedhe WhatsApp par aayenge.")
     return {"ok": True}
 
-@app.post("/api/checkin", dependencies=[Depends(console_auth)])
+@app.post("/api/checkin", dependencies=[Depends(admin_only)])
 def checkin():
     if desk.settings["mode"] == "sandbox":
         desk.sandbox_on()

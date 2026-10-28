@@ -190,7 +190,17 @@ ok &= check("no password on a host: console is read-only", c.get("/api/state").j
             and c.post("/api/intake", json={"text": "x"}).status_code == 403
             and c.post("/api/loads/BH-1001/approve").status_code == 403)
 server.CONSOLE_OPEN = True
-ok &= check("CONSOLE_OPEN opts back in to an open console", c.post("/api/mode", json={"mode": "live"}).status_code == 200)
+real = next(l["id"] for l in server.desk.loads if l.get("source") == "whatsapp")
+st = c.get("/api/state").json()
+ok &= check("open demo console: judges act only on console loads, never on real people's",
+            c.post(f"/api/loads/{real}/approve").status_code == 403 and c.post("/api/settings", json={"floorPct": 5}).status_code == 403
+            and c.post("/api/owners", json={"name": "x", "phone": "9800000099"}).status_code == 403
+            and c.post("/api/mode", json={"mode": "sandbox"}).status_code == 403 and st.get("publicView") is True)
+ok &= check("open demo console hides real chats", all(m["text"].startswith("(hidden") for l in st["loads"] if l.get("source") == "whatsapp"
+                                                      for m in l["brokerMessages"]))
+server.HITS.clear()
+codes = [c.post("/api/intake", json={"text": ""}).status_code for _ in range(31)]
+ok &= check("open demo console caps model spend per visitor", codes[-1] == 429 and 429 not in codes[:30], str(codes[-3:]))
 server.CONSOLE_OPEN, server.ON_HOST = False, False
 floor = server.desk.settings["floorPct"]
 ok &= check("bad margins refused and not kept", c.post("/api/settings", json={"floorPct": 60}).status_code == 400
