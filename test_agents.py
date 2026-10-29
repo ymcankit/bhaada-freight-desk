@@ -167,5 +167,12 @@ ok &= check("shipper's no releases the truck", S3["status"] == "lost" and S3["th
 D._on_shipper("BH-9003", True)
 ok &= check("a second answer changes nothing", S3["status"] == "lost" and S3.get("shipper") == "no")
 
+# 8. a judge on the open console tries a lane with no demo truck nearby: demo owners still bid, nothing waits 6 h
+J = D.start_load(E.normalise_load(dict(origin="Hyderabad", destination="Mumbai", weight_ton=5, truck_type="22 ft",
+                                       pickup_when="kal")), "console", demo_only=True)
+time.sleep(1.5)
+ok &= check("open-console load on an uncovered lane reaches demo owners", bool(J["threads"]) and J["status"] != "waiting_trucks"
+            and all(t["sandbox"] for t in J["threads"].values()), f"{J['status']} {len(J['threads'])}")
+
 print("\nALL PASS" if ok else "\nSOME FAILED")
 import sys; sys.stdout.flush(); os._exit(0 if ok else 1)

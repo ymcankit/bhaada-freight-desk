@@ -877,6 +877,13 @@ class Desk:
                              "city": o.get("baseCity") or "", "available": "unknown", "ratePerKm": None,
                              "source": "on-demand", "deadheadKm": None})
         n = E.SRC["ownersPerBroadcast"]
+        if load.get("demoOnly") and not bots and not load["threads"]:
+            # a judge on the open console may try any lane; demo owners bring a truck there instead of leaving it 6 h
+            cap = max(E.rates["capacityTonByType"].get(load["searchType"], w), w)
+            for k, o in sorted(list(self.owners.items()), key=lambda kv: -self.reliability_of(kv[0])):
+                if o.get("sandbox") and k not in seen and len(bots) < n:
+                    bots.append({"ownerKey": k, "type": load["searchType"], "capacityTon": cap, "city": lane["origin"],
+                                 "available": "today", "ratePerKm": None, "source": "sandbox", "deadheadKm": 10})
         return real[:n] + bots[:max(0, n - len(real[:n]))] if mode_sandbox else real[:n] + bots[:max(2, n - len(real[:n]))]
 
     def _stale(self, t):

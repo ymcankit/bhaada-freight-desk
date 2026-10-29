@@ -1,0 +1,13 @@
+# Render's free plan sleeps after 15 idle minutes and a judge's first visit then waits ~30 s.
+# A ping every 10 minutes keeps it awake (one always-on free service fits in Render's 750 free hours a month).
+# Remove this file after the Finale.
+name: keep-alive
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS -m 90 https://bhaada-freight-desk.onrender.com/healthz > /dev/null
