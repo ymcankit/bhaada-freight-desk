@@ -24,7 +24,11 @@ KNOWN_TYPES = list(rates["mileageKmPerLitre"].keys())
 MATERIALS = _load("materials.json")["classes"]
 TRUCKS_BY_ID = {t["truckId"]: t for t in trucks}
 OWNERS_BY_ID = {o["ownerId"]: o for o in owners}
-REQUIRED = ["origin", "destination", "weight_ton", "material"]     # the truck type is advised from these when not given
+# What a broker must tell us before owners are messaged. Owners we interviewed (Bhiwandi, Oct 2026) won't take a load
+# without pickup and delivery points, weight, truck type, loading time and payment terms: the truck type is advised from
+# the goods and weight, payment terms are the agency's own, and the shipper's price and the broker's margin are asked
+# once ("aap batao" lets the desk price from the market).
+REQUIRED = ["origin", "destination", "weight_ton", "material", "pickup_when"]
 
 # =============================== LLM: OpenAI (paid credit) first for what people read, then free Groq ===============================
 GROQ_CHAT = "https://api.groq.com/openai/v1/chat/completions"
@@ -412,15 +416,24 @@ def normalise_load(load):
     out["budget_rs"] = norm_money(out.get("budget_rs"))
     out["volume_cft"] = norm_money(out.get("volume_cft"))
     out["invoice_value_rs"] = norm_money(out.get("invoice_value_rs"))
+    pct = norm_money(out.get("margin_pct"))
+    out["margin_pct"] = pct if pct and 0.5 <= pct <= 40 else None
+    out["margin_rs"] = norm_money(out.get("margin_rs"))
     if out.get("material"):
         out["material"] = str(out["material"]).strip()[:60]
     return out
 
-def missing_fields(load):
-    miss = [k for k in REQUIRED if not load.get(k) and not (k == "material" and load.get("truck_type"))]
+def missing_fields(load, pricing=True):
+    """In the order we ask: the load itself, whether a chemical is dangerous, loading time, then the shipper's price
+    and the broker's margin (asked once; "aap batao" lets the desk price from the market)."""
+    miss = [k for k in REQUIRED if k != "pickup_when" and not load.get(k) and not (k == "material" and load.get("truck_type"))]
     # a broker who names the truck has already chosen the body; the goods are then asked only if they matter (chemicals)
     if not miss and MATERIALS.get(load.get("material_class"), {}).get("askHazard") and load.get("hazardous") is None:
         miss.append("hazard")
+    if not load.get("pickup_when"):
+        miss.append("pickup_when")
+    if pricing and not (load.get("budget_rs") or load.get("margin_pct") or load.get("margin_rs") or load.get("pricingSkip")):
+        miss.append("pricing")
     return miss
 
 # =============================== conversational intake (shared by the web desk and WhatsApp) ===============================
@@ -432,7 +445,36 @@ ASK = {"origin": "Kahan se load uthana hai?", "destination": "Kahan tak jaana ha
        "weight_ton": "Kitna ton hai?",
        "material": "Kya maal hai? (kapda, steel, chemical, dawai, carton, anaaj…) Isse sahi gaadi chunta hoon.",
        "hazard": "Ye chemical khatarnaak hai (acid, solvent, gas, jwalansheel) ya normal? Khatarnaak ho to alag permit wali gaadi lagti hai.",
-       "truck_type": "Kaunsi gaadi chahiye? (" + ", ".join(KNOWN_TYPES[:6]) + " …)"}
+       "truck_type": "Kaunsi gaadi chahiye? (" + ", ".join(KNOWN_TYPES[:6]) + " …)",
+       "pickup_when": "Loading kab aur kis time? (e.g. *kal subah 9 baje*)",
+       "pricing": "Shipper kitna de raha hai, aur aapko kitna margin chahiye? (e.g. *25 hazaar, 8% margin*) "
+                  "Pata na ho to *aap batao* likhiye, market rate se quote bana dunga."}
+
+# the broker's own cut, said in their words: "8% margin", "margin 10 percent", "2000 ka margin", "do hazaar bachna chahiye"
+MARGIN_PCT_RE = re.compile(r"(\d{1,2}(?:\.\d+)?)\s*(?:%|percent|pratishat|taka)\s*(?:ka\s*)?(?:margin|commission|munafa|profit|cut|bachat)"
+                           r"|(?:margin|commission|munafa|profit|cut)\s*(?:of|chahiye|rakho|rakhna|hai)?\s*(\d{1,2}(?:\.\d+)?)\s*(?:%|percent)", re.I)
+MARGIN_RS_RE = re.compile(r"(\d[\d,.]*\s*(?:k|hazaa?r|thousand)?)\s*(?:rs|₹|rupaye)?\s*(?:ka\s*)?(?:margin|commission|munafa|cut|bachna|bachne|bachat)"
+                          r"|(?:margin|commission|munafa)\s*(?:of|chahiye|rakho)?\s*(?:rs\.?|₹)\s*(\d[\d,.]*\s*(?:k|hazaa?r)?)", re.I)
+SHIPPER_RE = re.compile(r"(?:shipper|party|customer|client)\s*(?:ka\s*rate|ka\s*budget|se)?\s*(?:₹|rs\.?)?\s*(\d[\d,.]*\s*(?:k|hazaa?r|lakh|lac|l\b)?)"
+                        r"|(\d[\d,.]*\s*(?:k|hazaa?r|lakh|lac)?)\s*(?:₹|rs|rupaye)?\s*(?:de raha|de rahi|de rahe|dega|degi|milega|milenge|offer)", re.I)
+SKIP_PRICING_RE = re.compile(r"\b(aap batao|aap bataiye|aap hi batao|aap dekh lo|pata nahi|nahi pata|market rate|market se|skip|koi bhi)\b", re.I)
+
+def broker_terms(text):
+    """The shipper's price and the broker's margin, read from the broker's words; the model's reading is checked by this."""
+    out = {}
+    m = MARGIN_PCT_RE.search(text)
+    if m:
+        out["margin_pct"] = float(m.group(1) or m.group(2))
+    else:
+        r = MARGIN_RS_RE.search(text)
+        if r:
+            out["margin_rs"] = norm_money(r.group(1) or r.group(2))
+    sp = SHIPPER_RE.search(re.sub(r"\d{1,2}(?:\.\d+)?\s*%[^,.;]*", " ", text))   # "8% margin" is not the shipper's price
+    if sp:
+        v = norm_money(sp.group(1) or sp.group(2))
+        if v and v >= 300:
+            out["budget_rs"] = v
+    return out
 
 def intake_rules(hist):
     """A load read without a model: 'X se Y', tons, a truck name, the goods and the day, from the broker's own words."""
@@ -473,6 +515,9 @@ def intake_rules(hist):
     said = pickup_phrase([text])
     if said:
         out["pickup_when"] = said
+    out.update(broker_terms(text))
+    if SKIP_PRICING_RE.search(text):
+        out["pricingSkip"] = True
     return out
 
 def intake_turn(hist, load, user_msg):
@@ -488,9 +533,9 @@ Conversation so far:
 {_hist(hist)}
 Latest broker message: "{user_msg}"
 Merge new details into the load; keep existing values unless the broker corrects them.
-Required fields: origin, destination, weight_ton, material (what the goods are, in the broker's words, e.g. "kapda", "steel saria", "acid drums"; "pata nahi"/"general" is fine if they don't say). Optional: truck_type (only if the broker names one; never guess it - the desk advises the truck), pickup_when, budget_rs (shipper's budget in rupees, number), volume_cft (cubic feet if given), hazardous (true/false only if the broker said whether a chemical is dangerous), invoice_value_rs (value of the goods in rupees, if given: decides the e-way bill).
+Required fields: origin, destination, weight_ton, material (what the goods are, in the broker's words, e.g. "kapda", "steel saria", "acid drums"; "pata nahi"/"general" is fine if they don't say), pickup_when (loading day and time in the broker's words, e.g. "kal subah 9 baje"), and the pricing: budget_rs (the shipper's price or budget in rupees) and/or margin_pct (the broker's own margin in %) or margin_rs (their margin in rupees); if the broker says "aap batao"/"market rate" set pricing_skip=true. Never treat an advance % as a margin. Optional: truck_type (only if the broker names one; never guess it - the desk advises the truck), volume_cft (cubic feet if given), hazardous (true/false only if the broker said whether a chemical is dangerous), invoice_value_rs (value of the goods in rupees, if given: decides the e-way bill).
 Return ONLY JSON:
-{{"reply":"<one or two short lines>","load":{{"origin":null,"destination":null,"weight_ton":null,"material":null,"truck_type":null,"pickup_when":null,"budget_rs":null,"volume_cft":null,"hazardous":null,"invoice_value_rs":null}},"missing":["..."],"complete":false}}
+{{"reply":"<one or two short lines>","load":{{"origin":null,"destination":null,"weight_ton":null,"material":null,"truck_type":null,"pickup_when":null,"budget_rs":null,"margin_pct":null,"margin_rs":null,"pricing_skip":null,"volume_cft":null,"hazardous":null,"invoice_value_rs":null}},"missing":["..."],"complete":false}}
 Fill load with everything known so far. If all required fields are known set complete=true and reply that you are finding the best truck now.
 If anything required is missing, the reply must ASK for exactly those details (e.g. "Kahan se kahan tak?") and must not say you are finding a truck.
 Reply language: Hinglish - Hindi words in Roman script, like "Theek hai, kitne ton maal hai?" - even if the broker wrote in English or in Devanagari. If they write in Marathi, Gujarati, Punjabi, Bengali, Tamil, Telugu or Kannada, reply in that language in Roman script. Never reply in plain English."""
@@ -501,6 +546,17 @@ Reply language: Hinglish - Hindi words in Roman script, like "Theek hai, kitne t
         out = {"load": intake_rules(hist), "reply": ""}
     raw = {**(load or {}), **{k: v for k, v in (out.get("load") or {}).items() if v not in (None, "")}}
     raw.pop("blocked", None)
+    if raw.pop("pricing_skip", None) is True:
+        raw["pricingSkip"] = True
+    said_terms = broker_terms(user_msg)                 # numbers the broker clearly wrote beat the model's reading
+    for k, v in said_terms.items():
+        raw[k] = v
+    if (load or {}).get("pricingAsked") and not said_terms and SKIP_PRICING_RE.search(user_msg):
+        raw["pricingSkip"] = True
+    if (load or {}).get("pricingAsked") and not said_terms.get("margin_pct") and not re.search(r"advance", user_msg, re.I):
+        bare = re.search(r"(\d{1,2}(?:\.\d+)?)\s*%", user_msg)      # "25 hazaar, 8%" right after we asked
+        if bare:
+            raw["margin_pct"] = float(bare.group(1))
     merged = normalise_load(raw)                      # anything that doesn't match our lists becomes missing
     said_all = " ".join(m["text"] for m in hist if m["role"] == "user")
     merged["material_class"] = material_class(merged.get("material"), said_all)
@@ -524,8 +580,10 @@ Reply language: Hinglish - Hindi words in Roman script, like "Theek hai, kitne t
             return merged, (f"Ek baar confirm kar lijiye: *{merged['origin']} → {merged['destination']}*"
                             + (f" (~{km:,} km)" if km else "") + " sahi hai? 🙏 *Haan* likhiye, ya shehar ka sahi naam bhejiye."), ["confirm"]
     reply = out.get("reply", "")
-    if miss and (out.get("complete") or "?" not in reply or "hazard" in miss):   # a reply that doesn't ask can't move the load forward
+    if miss and (out.get("complete") or "?" not in reply or "hazard" in miss or miss == ["pricing"]):   # a reply that doesn't ask can't move the load forward
         reply = ("Ek cheez confirm karni hai — " if len(miss) == 1 else "") + " ".join(ASK[k] for k in miss[:2])
+    if "pricing" in miss and "pricing" in miss[:2]:
+        merged["pricingAsked"] = True
     if not miss:      # advise the truck, then read back what will be booked, from the validated fields
         fit = truck_fit(merged)
         m = fit["material"]
@@ -538,8 +596,11 @@ Reply language: Hinglish - Hindi words in Roman script, like "Theek hai, kitne t
             merged["truck_type_asked"], merged["truck_type"] = merged.get("truck_type"), fit["type"]
         reply = (f"Theek hai ✅ {merged['origin']} → {merged['destination']}, {merged['weight_ton']:g} T {m['hi']}, "
                  f"{merged['truck_type']}{advice}, {merged.get('pickup_when') or 'kal'}"
-                 + ((f", budget ₹{merged['budget_rs']:g}/km" if merged["budget_rs"] < 300 else f", budget ₹{merged['budget_rs']:,.0f}")
+                 + ((f", shipper ₹{merged['budget_rs']:g}/km" if merged["budget_rs"] < 300 else f", shipper ₹{merged['budget_rs']:,.0f}")
                     if merged.get("budget_rs") else "")
+                 + (f", aapka margin {merged['margin_pct']:g}%" if merged.get("margin_pct")
+                    else f", aapka margin ₹{merged['margin_rs']:,.0f}" if merged.get("margin_rs")
+                    else ", rate market se" if merged.get("pricingSkip") else "")
                  + (". ⚠️ Khatarnaak maal: sirf Hazchem permit aur trained driver wali gaadi" if m.get("hazmat") else "")
                  + ". Owners ko message kar raha hoon.")
     return merged, reply, miss
@@ -636,6 +697,18 @@ def market_rate(d, tt):
     m = rates["marketRateByType"][tt]
     return round(m["fixedRs"] + m["perKm"] * d)
 
+def band(lane_or_km):
+    """The broker's margin band for a lane: short-haul FTL is competitive (5/8/12%), longer lanes and special goods
+    (a goods premium: hazardous, perishable) keep the settings' band (7/11/14% by default)."""
+    if not isinstance(lane_or_km, (int, float)) and lane_or_km.get("brokerBand"):
+        return dict(lane_or_km["brokerBand"])          # the broker named the margin for this load
+    km = lane_or_km if isinstance(lane_or_km, (int, float)) else lane_or_km["distanceKm"]
+    special = not isinstance(lane_or_km, (int, float)) and (lane_or_km.get("premiumPct") or 0) > 0
+    sh = rates.get("shortHaulBand")
+    if sh and km < sh["maxKm"] and not special:
+        return {k: float(sh[k]) for k in ("floorPct", "targetPct", "ceilingPct")}
+    return dict(MARGIN)
+
 def fair_cost(d, tt, rp, memory=None):
     """Expected buy price of the loaded trip. Owners get the market's shipper price less a normal broker margin,
     and never less than what running the truck really costs them (fuel, toll, driver and helper,
@@ -643,14 +716,13 @@ def fair_cost(d, tt, rp, memory=None):
     the estimate halfway towards what owners really took. The sell price is built on this."""
     fuel = d / rates["mileageKmPerLitre"][tt] * rates["dieselPerLitre"]
     toll = d * rates["tollPerKmByAxle"][str(rates["axlesByType"][tt])]
-    days = max(1, math.ceil(d / rates["avgSpeedKmPerDay"]))
+    days = max(rates.get("minTripDays", 1), math.ceil(d / rates["avgSpeedKmPerDay"]))   # loading and unloading waits count
     driver = days * (rates["driverCostPerDay"] + rates["driverAllowancePerDay"] + rates["helperPerDay"])
     fixed = d * rates["fixedCostPerKmByType"][tt]
     run = fuel + toll + driver + fixed + rates["handlingMiscPerTrip"]
-    if rp >= 0.6:                                     # a likely return load lowers what the owner needs from this leg
-        run *= (1 - rates["returnLoadDiscountPct"] / 100)
+    # rp (the chance of a return load) is not used: we have no data on it yet, and a guessed number shouldn't move prices
     market = market_rate(d, tt)
-    owner_market = market * (1 - MARGIN["targetPct"] / 100)
+    owner_market = market * (1 - band(d)["targetPct"] / 100)
     if memory:
         owner_market = (owner_market + memory * d) / 2
     est = max(run, owner_market)
@@ -666,13 +738,16 @@ def deadhead_cost(km, tt):
 def lane_memory(lane, tt):
     return (lane.get("memory") or {}).get(tt)
 
-def season(day=None):
-    """The festival or peak window a pickup date falls in: (name, +%) or (None, 0)."""
+def season(day=None, destination=None):
+    """The festival or peak window a pickup date falls in: (name, +%) or (None, 0). A season can skip destinations whose
+    own market is shut then (Surat's textile trade over Diwali week)."""
     from datetime import date
     d = day or date.today()
     for s in rates.get("seasons", []):
         lo, hi = (x if len(x) == 10 else f"{d.year}-{x}" for x in (s["from"], s["to"]))
         if lo <= d.isoformat() <= hi:
+            if destination and any(x.lower() in str(destination).lower() for x in s.get("skipDestinations", [])):
+                return None, 0
             return s["name"], s["pct"]
     return None, 0
 
@@ -685,31 +760,38 @@ def lane_cost(lane, tt):
     return c
 
 def target_sell(lane, tt):
-    return lane_cost(lane, tt)["est_cost"] / (1 - MARGIN["targetPct"] / 100)
+    """What we ask the shipper: the expected buy at the target margin, but never more than a little above the lane's
+    market rate. When the trip costs more than the market pays, the margin shrinks and the strategist asks the broker,
+    rather than the desk quoting a price no shipper will accept."""
+    c = lane_cost(lane, tt)
+    return min(c["est_cost"] / (1 - band(lane)["targetPct"] / 100), c["market"] * (1 + rates.get("maxOverMarketPct", 3) / 100))
 
 def price_quote(lane, tt, buy, fixed_sell=None, budget=None):
     """Sell price = the lane's market-anchored price (expected buy at target margin), matched down to the shipper's
     budget only if the floor still holds. A cheaper buy is the broker's gain, not a discount for the shipper.
     After booking, the shipper price is fixed (re-plan)."""
     br = lane_cost(lane, tt)
+    mb = band(lane)
     note = ""
     if fixed_sell:
         sell = fixed_sell
         note = "shipper price fixed at booking"
     else:
-        sell = br["est_cost"] / (1 - MARGIN["targetPct"] / 100)
+        sell = target_sell(lane, tt)
+        if sell < br["est_cost"] / (1 - mb["targetPct"] / 100) - 1:
+            note = "capped at the lane's market rate"
         if buy < 0.6 * br["owner_cost"]:
             note = f"owner's price is far below the truck's running cost (₹{br['owner_cost']:,}): confirm with the owner"
         if budget and budget < sell:
-            if (budget - buy) / budget * 100 >= MARGIN["floorPct"]:
+            if (budget - buy) / budget * 100 >= mb["floorPct"]:
                 sell, note = budget, "matched shipper budget"
             else:
-                sell = max(budget, buy / (1 - MARGIN["floorPct"] / 100))
+                sell = max(budget, buy / (1 - mb["floorPct"] / 100))
                 note = f"shipper budget ₹{budget:,.0f} is below the floor; quoting the floor price"
     m = sell - buy
     return {**br, "buy_total": round(buy), "sell_total": round(sell), "margin_rs": round(m),
             "margin_pct": round(m / sell * 100, 1), "rate_per_km": round(sell / lane["distanceKm"], 1),
-            "above_floor": (m / sell * 100) >= MARGIN["floorPct"], "note": note}
+            "above_floor": (m / sell * 100) >= mb["floorPct"], "note": note, "band": mb}
 
 def type_check(load):
     """Can the requested truck type carry the weight? If not, suggest the next types that can."""
@@ -1151,7 +1233,8 @@ def modelled_timeline(sess, winner_id=None):
 # =============================== entry points used by the app ===============================
 def run_quote(load, pool, use_llm=True):
     load = normalise_load({"material": "general", **(load or {})})   # the earlier planner names the truck itself
-    miss = missing_fields(load) + ([] if load.get("truck_type") else ["truck_type"])
+    miss = [k for k in missing_fields(load, pricing=False) if k != "pickup_when"] + ([] if load.get("truck_type") else ["truck_type"])
+    # the tool-calling demo prices from the market and defaults the pickup to tomorrow
     if miss:
         return {"status": "need_info", "load": load, "missing": miss}
     lane = find_lane(load["origin"], load["destination"])

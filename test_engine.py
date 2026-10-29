@@ -96,7 +96,8 @@ def run_tests():
                     fit(9, "fruits")["type"] is None and "reefer" in fit(9, "fruits")["why"] and fit(45, "cement")["type"] is None
                     and fit(25, "cement")["type"] == "12-wheeler")
         ok &= check("chemical asks whether it is hazardous",
-                    E.missing_fields({"origin": "A", "destination": "B", "weight_ton": 5, "material": "chemical", "material_class": "chemical"}) == ["hazard"])
+                    E.missing_fields({"origin": "A", "destination": "B", "weight_ton": 5, "material": "chemical", "material_class": "chemical",
+                                     "pickup_when": "kal", "pricingSkip": True}) == ["hazard"])
         lane = {"distanceKm": 300, "returnLoadProb": 0.5}
         ok &= check("hazardous premium raises the price", E.target_sell({**lane, "premiumPct": 25}, "22 ft") > E.target_sell(lane, "22 ft") * 1.2)
 
@@ -217,6 +218,23 @@ def geo_tests():
         n = len(calls)
         geo.resolve_city("Qwxzplace")
         ok &= check("unknown place looked up once", len(calls) == n == 6)
+        # the review's market numbers (29 Oct)
+        from datetime import date
+        ok &= check("short-haul FTL uses the 5/8/12 band", E.band({"distanceKm": 250, "premiumPct": 0})["targetPct"] == 8
+                    and E.band({"distanceKm": 900, "premiumPct": 0})["targetPct"] == E.MARGIN["targetPct"]
+                    and E.band({"distanceKm": 250, "premiumPct": 15})["targetPct"] == E.MARGIN["targetPct"])
+        ok &= check("Diwali week is +15%, but not into Surat", E.season(date(2026, 11, 8), "Pune") == ("Diwali week", 15)
+                    and E.season(date(2026, 11, 8), "Surat") == (None, 0) and E.season(date(2026, 11, 2), "Surat")[1] == 8)
+        a = E.fair_cost(250, "32 ft MXL", 0.75)
+        b = E.fair_cost(250, "32 ft MXL", 0.4)
+        ok &= check("a guessed return-load chance doesn't move the price", a["owner_cost"] == b["owner_cost"],
+                    f"{a['owner_cost']} vs {b['owner_cost']}")
+        ok &= check("even a short trip pays two days of driver and helper", a["driver"] >= 2 * 1200)
+        long = {"distanceKm": 1043, "returnLoadProb": 0.5, "premiumPct": 0, "seasonPct": 8}
+        cl = E.lane_cost(long, "Taurus (10-tyre)")
+        ok &= check("the shipper is never quoted more than 3% above the lane's market rate",
+                    E.target_sell(long, "Taurus (10-tyre)") <= cl["market"] * 1.03 + 1, f"{E.target_sell(long, 'Taurus (10-tyre)'):.0f} vs {cl['market']}")
+
     finally:
         geo.requests.get, geo._save = real_get, real_save
     return ok

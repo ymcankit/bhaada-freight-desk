@@ -1,7 +1,7 @@
 {
  "_comment": "All quotes derive from these drivers + lane distance. Edit here, never hardcode a lane price.",
  "currency": "INR",
- "dieselPerLitre": 96.5,
+ "dieselPerLitre": 97.8,
  "mileageKmPerLitre": {
   "14 ft": 6.0,
   "17 ft": 5.5,
@@ -53,7 +53,6 @@
  "driverCostPerDay": 1200,
  "avgSpeedKmPerDay": 350,
  "handlingMiscPerTrip": 600,
- "returnLoadDiscountPct": 3.0,
  "marginBand": {
   "floorPct": 7,
   "targetPct": 11,
@@ -70,20 +69,20 @@
  "driverAllowancePerDay": 500,
  "helperPerDay": 600,
  "fixedCostPerKmByType": {
-  "14 ft": 5,
-  "17 ft": 6,
-  "19 ft": 7,
-  "22 ft": 8,
-  "24 ft SXL": 9,
-  "32 ft SXL": 11,
-  "32 ft MXL": 12,
-  "Taurus (10-tyre)": 13,
-  "20 ft container": 9,
-  "12-wheeler": 15,
-  "14-wheeler": 16,
-  "Trailer 40 ft": 17
+  "14 ft": 7,
+  "17 ft": 8,
+  "19 ft": 9,
+  "22 ft": 11,
+  "24 ft SXL": 12,
+  "32 ft SXL": 15,
+  "32 ft MXL": 16,
+  "Taurus (10-tyre)": 17,
+  "20 ft container": 12,
+  "12-wheeler": 20,
+  "14-wheeler": 21,
+  "Trailer 40 ft": 23
  },
- "_fixedCostComment": "EMI, maintenance and tyres, insurance and permit per km, at about 8,000 km a month. Our estimate, not a sourced figure; replace with the agency's own owner data in a pilot.",
+ "_fixedCostComment": "EMI, insurance, tyres, permit and maintenance per loaded km. A 32 ft MXL costing ₹40-45 lakh pays about ₹11/km in EMI alone at 8,000 km a month, so ₹16/km all-in; other types scaled the same way (review, 29 Oct).",
  "marketRateByType": {
   "14 ft": {
    "fixedRs": 5000,
@@ -179,14 +178,24 @@
  "_tollComment": "Per-km toll by axle class, from NHAI's base rates (2008 fee rules: 2-axle 2.20, 3-axle 2.40, 4-6 axle 3.45 per km) with the yearly revisions to 2026, about +90% with expressway stretches; expressways cost more. An estimate until per-plaza totals are summed.",
  "seasons": [
   {
-   "name": "Diwali",
+   "name": "Pre-Diwali",
    "from": "2026-10-29",
-   "to": "2026-11-12",
+   "to": "2026-11-05",
    "pct": 8
   },
   {
+   "name": "Diwali week",
+   "from": "2026-11-06",
+   "to": "2026-11-14",
+   "pct": 15,
+   "skipDestinations": [
+    "Surat"
+   ],
+   "_comment": "Drivers go home, so supply falls hardest this week. Surat's textile markets stay shut until Labh Pancham, so loads into Surat get no premium."
+  },
+  {
    "name": "Chhath",
-   "from": "2026-11-13",
+   "from": "2026-11-15",
    "to": "2026-11-18",
    "pct": 6
   },
@@ -203,5 +212,18 @@
    "pct": 4
   }
  ],
- "_seasonComment": "Drivers go home for festivals and dispatch peaks at year-end and harvest: spot rates rise. Working estimates to tune with lane memory."
+ "_seasonComment": "Drivers go home for festivals and dispatch peaks at year-end and harvest: spot rates rise. Working estimates to tune with lane memory.",
+ "_dieselComment": "Retail diesel, Mumbai, Oct 2026 (₹97.83). The console's diesel field overrides it; update it daily.",
+ "minTripDays": 2,
+ "_minTripDaysComment": "Loading and unloading waits make even a 250 km trip two calendar days of driver and helper pay.",
+ "shortHaulBand": {
+  "maxKm": 400,
+  "floorPct": 5,
+  "targetPct": 8,
+  "ceilingPct": 12,
+  "_comment": "Short-haul FTL under 400 km is competitive: brokers typically mark up 5-8% or take a flat ₹1-2k. Longer lanes and special goods (hazardous, perishable) keep marginBand."
+ },
+ "maxOverMarketPct": 3,
+ "_maxOverMarketComment": "The shipper is never quoted more than this % above the lane's market rate; above it the broker decides.",
+ "_returnLoadComment": "No return-load adjustment: the chance of a return load was a guess per lane, so it no longer moves prices. Add it back from real data (booked return loads per lane)."
 }

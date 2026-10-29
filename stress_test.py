@@ -208,6 +208,9 @@ server.RATE.update(perMin=10**6, perHour=10**6, allPerHour=10**7)   # the abuse 
 D = server.desk
 D.settings.update(mode="live", aiAgents=False, maxDeadheadKm=80)
 D.settings["replyTimeoutSec"]["live"] = 6
+D.settings["replyTimeoutLaterSec"] = {"live": 6, "sandbox": 30}
+D.settings["closeoutSec"] = {"live": 3, "sandbox": 3}
+D.settings["checkinAuto"] = False                 # its own test; must not fire mid-run
 D.settings["holdTimeoutSec"]["live"] = 8
 D.settings["approvalExpireSec"]["live"] = 30
 if not D.send_wa:
@@ -224,7 +227,7 @@ def intake_rules(hist, load, msg):
         if c not in cities:
             cities.append(c)
     w = re.search(r"(\d+(?:\.\d+)?)\s*(?:ton|t\b)", low)
-    raw = {**(load or {}), "material": "general", "pickup_when": "kal"}
+    raw = {**(load or {}), "material": "general", "pickup_when": "kal", "pricingSkip": True}   # the broker said "aap batao"
     if len(cities) >= 2:
         raw.update(origin=cities[0], destination=cities[1])
     if w:
@@ -840,7 +843,7 @@ def phase_faults():
     # owner replies after the round closed
     L = fresh_load(50904)
     wait_for(lambda: L["status"] not in ("routing", "sourcing"), 40)
-    late = next((k for k, th in L["threads"].items() if th["status"] in ("silent", "declined")), None)
+    late = next((k for k, th in L["threads"].items() if th["status"] in ("silent", "declined") and k.startswith("tg:")), None)
     if late:
         t0 = time.time()
         text(int(late[3:]), "35/km chalega", "owner")

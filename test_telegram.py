@@ -26,6 +26,9 @@ server.desk.send_wa = server.send
 server.desk.settings["mode"] = "live"
 server.desk.settings["aiAgents"] = False                # AI owners and the AI broker have their own test (test_agents.py)
 server.desk.settings["replyTimeoutSec"]["live"] = 6
+server.desk.settings["replyTimeoutLaterSec"] = {"live": 6, "sandbox": 30}
+server.desk.settings["closeoutSec"] = {"live": 3, "sandbox": 3}
+server.desk.settings["checkinAuto"] = False                 # its own test; must not fire mid-run
 E.intake_turn = lambda hist, load, msg: (E.normalise_load(dict(origin="Bhiwandi", destination="Surat", weight_ton=14,
                                                                truck_type="32 ft MXL", pickup_when="kal")), "ok", [])
 c = TestClient(server.app, headers={"X-Telegram-Bot-Api-Secret-Token": server.TG_SECRET})   # as Telegram sends it
@@ -91,6 +94,7 @@ n[0] += 1
 c.post(URL, json={"update_id": n[0], "callback_query": {"id": "q1", "data": btn[0][0], "message": {"chat": {"id": BROKER}}}})
 time.sleep(0.5)
 ok &= check("a second tap says the quote is no longer open", "ab khula nahi" in last_to(BROKER), last_to(BROKER)[:60])
+ok &= check("hold asks for vehicle, driver and reporting time with the HAAN", "pahunchne ka time" in last_to(int(w[3:])))
 text(int(w[3:]), "haan")
 end = time.time() + 8
 while time.time() < end and L["status"] != "booked":
@@ -218,5 +222,19 @@ ok &= check("'delete my data' removes the person from the desk", before and not 
             and "hata diye" in last_to(BROKER))
 ok &= check("bot token kept out of logged errors", server.TG_TOKEN not in server.safe(
             ConnectionError(f"Max retries exceeded with url: /bot{server.TG_TOKEN}/sendMessage")))
+# a new owner must give a city: it decides which loads reach them
+n[0] += 1
+c.post(URL, json={"update_id": n[0], "callback_query": {"id": "r1", "data": "role:owner", "message": {"chat": {"id": 7755}}}})
+time.sleep(0.4)
+text(7755, "Ramesh Roadlines")
+time.sleep(0.4)
+ok &= check("an owner who gives only a name is asked for the city", "kis shehar" in last_to(7755), last_to(7755)[:80])
+text(7755, "Surat")
+time.sleep(0.6)
+o = server.desk.owners.get("tg:7755") or {}
+ok &= check("then joins with that city and hears the morning question", o.get("baseCity") == "Surat"
+            and any("kab se free" in t for to, t, b in SENT if to == "tg:7755"),
+            f"{o.get('baseCity')} {last_to(7755)[:80]}")
+
 print("\nALL PASS" if ok else "\nSOME FAILED")
 import sys; sys.stdout.flush(); os._exit(0 if ok else 1)

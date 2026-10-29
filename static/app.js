@@ -309,7 +309,8 @@ function medianQuoteMin(d) {
   return mins.length ? Math.round(mins[Math.floor(mins.length / 2)] * 10) / 10 : null;
 }
 
-function rail(q, s) {
+function rail(q, settings) {
+  const s = q.band || settings;                     // the lane's own band: short hauls run 5/8/12%
   const max = Math.max(s.ceilingPct + 4, q.margin_pct + 2), w = 300, x = (p) => 8 + (Math.max(0, p) / max) * (w - 16);
   const svg = el("svg:svg", { viewBox: `0 0 ${w} 46`, role: "img", "aria-label": `Margin ${q.margin_pct}% against floor ${s.floorPct}%, target ${s.targetPct}%, ceiling ${s.ceilingPct}%` });
   svg.append(el("svg:rect", { x: 8, y: 14, width: w - 16, height: 8, rx: 4, fill: "#eef1ef" }));
@@ -332,7 +333,7 @@ function renderDetail(l) {
       el("div", { class: "big" }, rs(q.sell_total), el("small", { text: ` · ₹${q.rate_per_km}/km` })),
       el("div", { class: "muted", text: `Margin ${q.margin_pct}% · ${rs(q.margin_rs)}` }),
       rail(q, s),
-      el("div", { class: "muted", style: "font-size:12px;margin:-2px 0 10px", text: `Floor ${s.floorPct}% · target ${s.targetPct}% · ceiling ${s.ceilingPct}%` }),
+      el("div", { class: "muted", style: "font-size:12px;margin:-2px 0 10px", text: `Floor ${(q.band || s).floorPct}% · target ${(q.band || s).targetPct}% · ceiling ${(q.band || s).ceilingPct}%` }),
       el("dl", { class: "kv" },
         el("dt", { text: "Owner" }), el("dd", { text: w ? `${w.name} · ${w.reliability}/5` : "–" }),
         ...(q.market ? [el("dt", { text: `Market rate (shipper), ${l.lane.distanceKm} km` }), el("dd", { text: rs(q.market) })] : []),
@@ -384,8 +385,7 @@ function renderDetail(l) {
   if (l.lane) parts.push(el("div", { class: "qcard" }, el("h2", { text: "Lane" }), el("dl", { class: "kv" },
     el("dt", { text: "Road distance" }), el("dd", { text: `${l.lane.distanceKm} km` }),
     el("dt", { text: "Source" }), el("dd", { text: l.lane.distanceSrc }),
-    el("dt", { text: "Driving time" }), el("dd", { text: l.lane.hours ? `${l.lane.hours} h` : "–" }),
-    el("dt", { text: "Return-load chance" }), el("dd", { text: `${Math.round(l.lane.returnLoadProb * 100)}%` }))));
+    el("dt", { text: "Driving time" }), el("dd", { text: l.lane.hours ? `${l.lane.hours} h` : "–" }))));
   $("detail").replaceChildren(...parts);
 }
 

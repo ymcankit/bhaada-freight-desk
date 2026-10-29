@@ -23,6 +23,9 @@ server.wa_send = server.desk.send_wa
 server.desk.settings["mode"] = "live"
 server.desk.settings["aiAgents"] = False                # AI owners and the AI broker have their own test (test_agents.py)
 server.desk.settings["replyTimeoutSec"]["live"] = 6
+server.desk.settings["replyTimeoutLaterSec"] = {"live": 6, "sandbox": 30}
+server.desk.settings["closeoutSec"] = {"live": 3, "sandbox": 3}
+server.desk.settings["checkinAuto"] = False                 # its own test; must not fire mid-run
 E.intake_turn = lambda hist, load, msg: (E.normalise_load(dict(origin="Bhiwandi", destination="Surat", weight_ton=14,
                                                                truck_type="32 ft MXL", pickup_when="kal")), "Finding a truck", [])
 c = TestClient(server.app)

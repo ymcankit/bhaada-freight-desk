@@ -23,6 +23,9 @@ server.desk.send_wa = server.send
 D = server.desk
 D.settings.update(mode="live", aiAgents=True)
 D.settings["replyTimeoutSec"]["live"] = 6
+D.settings["replyTimeoutLaterSec"] = {"live": 6, "sandbox": 30}
+D.settings["closeoutSec"] = {"live": 3, "sandbox": 3}
+D.settings["checkinAuto"] = False                 # its own test; must not fire mid-run
 D.settings["holdTimeoutSec"]["live"] = 8
 D.sandbox_on()
 c = TestClient(server.app, headers={"X-Telegram-Bot-Api-Secret-Token": server.TG_SECRET})   # as Telegram sends it
@@ -83,6 +86,7 @@ ok &= check("no second demo load within 10 min", D.loads[-1]["id"] == A["id"])
 
 # 3. two open loads: an owner reply without a load number is asked which
 D.settings["replyTimeoutSec"]["live"] = 60
+D.settings["replyTimeoutLaterSec"]["live"] = 60
 E.intake_turn = lambda hist, load, msg: (E.normalise_load(dict(origin="Surat", destination="Pune", weight_ton=10,
                                                                truck_type="32 ft MXL", pickup_when="kal")), "ok", [])
 D.settings["aiAgents"] = False
@@ -129,7 +133,7 @@ ok &= check("health check reports the worker", h.status_code == 200 and h.json()
 def stuck(lid, ask_mult, phase="quote"):
     lane = {"laneId": "Bhiwandi-Surat", "origin": "Bhiwandi", "destination": "Surat", "distanceKm": 284, "returnLoadProb": 0.75}
     sell = E.target_sell(lane, "32 ft MXL")
-    ceil = round(sell * (1 - E.MARGIN["floorPct"] / 100) / 284, 1)
+    ceil = round(sell * (1 - E.band(lane)["floorPct"] / 100) / 284, 1)
     ask = round(ceil * ask_mult, 1)
     th = {"ownerKey": "tg:8001", "name": "Solo Transport", "type": "32 ft MXL", "status": "declined", "messages": [], "sell": sell,
           "rounds": 3, "ask": ask, "counter": ceil - 3, "agreedBuy": None, "round": 1, "deadheadKm": 5, "sandbox": False,
@@ -154,7 +158,7 @@ tap_id = next(b for to, t, b in reversed(SENT) if to == "tg:7009" and b)[0][0]
 n[0] += 1
 c.post(URL, json={"update_id": n[0], "callback_query": {"id": "qz", "data": tap_id, "message": {"chat": {"id": 7009}}}})
 time.sleep(1)
-ok &= check("broker's yes turns it into a quote at the floor", S2["status"] == "needs_approval" and S2["quote"]["margin_pct"] >= E.MARGIN["floorPct"] - 0.1,
+ok &= check("broker's yes turns it into a quote at the floor", S2["status"] == "needs_approval" and S2["quote"]["margin_pct"] >= E.band(S2["lane"])["floorPct"] - 0.1,
             f"{S2['status']} {S2.get('quote', {}) and S2['quote'].get('margin_pct')}")
 
 # 7. the shipper says no: the held truck is released and the owner told
@@ -173,6 +177,63 @@ J = D.start_load(E.normalise_load(dict(origin="Hyderabad", destination="Mumbai",
 time.sleep(1.5)
 ok &= check("open-console load on an uncovered lane reaches demo owners", bool(J["threads"]) and J["status"] != "waiting_trucks"
             and all(t["sandbox"] for t in J["threads"].values()), f"{J['status']} {len(J['threads'])}")
+
+# 8b. a firm hold: the vehicle, driver and reporting time come with the HAAN, so nobody asks again
+S4, _ = stuck("BH-9004", 1.0)
+S4.update(status="holding", winner="tg:8001", quote={"sell_total": 30000, "buy_total": 27000}, approvedAt=time.time(),
+          deadline=time.time() + 600, fixedSell=30000)
+S4["threads"]["tg:8001"].update(status="hold_requested", agreedBuy=27000)
+D._hold_reply(S4, S4["threads"]["tg:8001"], "HAAN MH04AB1234, 9812345678, subah 8 baje")
+T4 = S4["threads"]["tg:8001"]
+ok &= check("HAAN with the vehicle is a firm booking", S4["status"] == "booked" and T4.get("vehicle") == "MH04AB1234"
+            and T4.get("driverPhone") == "9812345678" and not T4.get("needDispatch") and "subah 8 baje" in (T4.get("reportAt") or "")
+            and "with the vehicle number" in next(e["text"] for e in S4["events"] if "confirmed the hold" in e["text"]),
+            f"{S4['status']} {T4.get('vehicle')} {T4.get('reportAt')}")
+
+# 8c. the broker names the shipper's price and their margin: that, not the desk's band, decides what we pay
+def routed(lid_fields, secs=6):
+    L = D.start_load(E.normalise_load(lid_fields), "console", demo_only=True)
+    end = time.time() + secs
+    while time.time() < end and not L.get("threads") and L["status"] in ("routing", "new"):
+        time.sleep(0.2)
+    time.sleep(0.5)
+    return L
+B1 = routed(dict(origin="Bhiwandi", destination="Surat", weight_ton=18, material="kapda", truck_type="32 ft MXL", pickup_when="kal",
+                 budget_rs=30000, margin_pct=8))
+km1 = B1["lane"]["distanceKm"]
+th1 = next(iter(B1["threads"].values()), {})
+ok &= check("broker's terms: their margin is the floor and the shipper price is the sell", B1["lane"].get("brokerBand", {}).get("floorPct") == 8
+            and B1.get("shipperPrice") == 30000 and th1.get("sell") == 30000
+            and abs(D._econ(B1, th1)["ceiling"] - round(30000 * 0.92 / km1, 1)) < 0.11, f"{B1['lane'].get('brokerBand')} {th1.get('sell')}")
+B2 = routed(dict(origin="Bhiwandi", destination="Surat", weight_ton=18, material="kapda", truck_type="32 ft MXL", pickup_when="kal",
+                 budget_rs=15000, margin_pct=10))
+ok &= check("a margin that leaves owners below running cost is flagged to the broker",
+            any("kharche" in m["text"] for m in B2.get("brokerMessages", [])) or any("running cost" in e["text"] for e in B2["events"]),
+            str([e["text"][:60] for e in B2["events"]][-3:]))
+
+# 8d. the morning check-in goes out by itself, once a day
+D.owners["tg:8701"] = {"key": "tg:8701", "phone": "tg:8701", "name": "Subah Transport", "baseCity": "Surat", "reliability": 4.5, "sandbox": False}
+D.checkin = {"sentAt": None, "asked": 0}
+D.settings.update(checkinAuto=True, checkinHourIST=0, checkinUntilHourIST=24)
+time.sleep(2.5)
+first = [t for to, t, b in SENT if to == "tg:8701" and "roz subah" in t]
+time.sleep(2.0)
+again = [t for to, t, b in SENT if to == "tg:8701" and "roz subah" in t]
+D.settings["checkinAuto"] = False
+ok &= check("the morning check-in goes out on its own and asks type, place and day", len(first) == 1 and "kahan khadi" in first[0]
+            and "kab se free" in first[0] and bool(D.checkin.get("sentAt")), str(first)[:120])
+ok &= check("and only once a day", len(again) == 1, len(again))
+
+# 9. lane memory: five deals before it counts; an owner who backed out is forgotten
+M = {"id": "BH-9100", "createdAt": time.time() - 5, "lane": {"laneId": "Pune-Nashik", "distanceKm": 210},
+     "threads": {f"o{i}": {"ownerKey": f"o{i}", "type": "22 ft", "agreedBuy": 210 * (60 + i)} for i in range(5)}}
+for i in range(4):
+    D._remember_rate(M, M["threads"][f"o{i}"])
+ok &= check("lane memory ignores fewer than five deals", "22 ft" not in D._lane_memory("Pune-Nashik"))
+D._remember_rate(M, M["threads"]["o4"])
+ok &= check("five deals make a lane rate", D._lane_memory("Pune-Nashik").get("22 ft") == 62.0, str(D._lane_memory("Pune-Nashik")))
+D._forget_rate(M, "o4")
+ok &= check("a backed-out owner's rate is forgotten", "22 ft" not in D._lane_memory("Pune-Nashik"))
 
 print("\nALL PASS" if ok else "\nSOME FAILED")
 import sys; sys.stdout.flush(); os._exit(0 if ok else 1)

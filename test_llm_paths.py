@@ -74,30 +74,30 @@ ok &= check("intake: a complete load is read and read back from validated fields
 ok &= check("intake goes to OpenAI first (tier smart)", CALLS and CALLS[0]["who"] == "openai", str([c["who"] for c in CALLS]))
 
 msg = "Bhiwandi se Surat kapda bhejna hai"
-script(intake_json("Theek hai, truck dhoondh raha hoon", True, origin="Bhiwandi", destination="Surat", material="kapda"))
+script(intake_json("Theek hai, truck dhoondh raha hoon", True, origin="Bhiwandi", destination="Surat", material="kapda", budget_rs=30000, pickup_when="kal subah"))
 m, reply, miss = E.intake_turn([{"role": "user", "text": msg}], {}, msg)
 ok &= check("intake: a model that says 'complete' with the weight missing still gets the weight asked",
             miss == ["weight_ton"] and E.ASK["weight_ton"] in reply and "dhoondh" not in reply, f"{miss} {reply}")
 
 msg = "Bhiwandi se Surat 14 ton chemical drums"
-script(intake_json("Done, finding a truck", True, origin="Bhiwandi", destination="Surat", weight_ton=14, material="chemical drums"))
+script(intake_json("Done, finding a truck", True, origin="Bhiwandi", destination="Surat", weight_ton=14, material="chemical drums", budget_rs=30000, pickup_when="kal subah"))
 m, reply, miss = E.intake_turn([{"role": "user", "text": msg}], {}, msg)
 ok &= check("intake: a chemical of unknown danger is asked about, not booked", "hazard" in miss and "khatarnaak" in reply.lower(),
             f"{miss} {reply}")
 msg2 = "haan khatarnaak hai, acid"
-script(intake_json("Theek hai", True, origin="Bhiwandi", destination="Surat", weight_ton=14, material="chemical drums", hazardous=True))
+script(intake_json("Theek hai", True, origin="Bhiwandi", destination="Surat", weight_ton=14, material="chemical drums", hazardous=True, budget_rs=30000, pickup_when="kal subah"))
 m, reply, miss = E.intake_turn([{"role": "user", "text": msg}, {"role": "bot", "text": reply}, {"role": "user", "text": msg2}], m, msg2)
 ok &= check("intake: a hazardous chemical gets the Hazchem read-back", not miss and m["material_class"] == "hazardous"
             and "Hazchem" in reply, f"{miss} {m.get('material_class')} {reply}")
 
 msg = "भिवंडी से सूरत, कल सुबह, 14 टन कपड़ा"
-script(intake_json("Theek hai", True, origin="Bhiwandi", destination="Surat", weight_ton=14, material="कपड़ा", pickup_when="tomorrow"))
+script(intake_json("Theek hai", True, origin="Bhiwandi", destination="Surat", weight_ton=14, material="कपड़ा", pickup_when="tomorrow", budget_rs=30000))
 m, reply, miss = E.intake_turn([{"role": "user", "text": msg}], {}, msg)
 ok &= check("intake: Devanagari message, the broker's own pickup words beat the model's", not miss
             and E.pickup_day(m["pickup_when"]) == E.pickup_day("kal subah") and m["origin"] == "Bhiwandi", f"{m.get('pickup_when')} {miss}")
 
 msg = "Mumbai se Delhi 10 ton steel"
-script(intake_json("ok", True, origin="Mumbai", destination="Delhi", weight_ton=10, material="steel", truck_type="Rocket truck 9000"))
+script(intake_json("ok", True, origin="Mumbai", destination="Delhi", weight_ton=10, material="steel", truck_type="Rocket truck 9000", budget_rs=30000, pickup_when="kal subah"))
 m, reply, miss = E.intake_turn([{"role": "user", "text": msg}], {}, msg)
 ok &= check("intake: a truck type the model made up is replaced by the desk's advice", m["truck_type"] in E.KNOWN_TYPES, m.get("truck_type"))
 
@@ -158,7 +158,7 @@ ok &= check("owner chat: prose instead of JSON falls back to the rules check-in 
 D.post = real_post
 
 # ---------------- negotiation reader (Desk._negotiate) ----------------
-LANE = {"laneId": "Bhiwandi-Surat", "origin": "Bhiwandi", "destination": "Surat", "distanceKm": 280, "returnLoadProb": 0.5, "memory": {}}
+LANE = {"laneId": "Bhiwandi-Surat", "origin": "Bhiwandi", "destination": "Surat", "distanceKm": 280, "returnLoadProb": 0.75, "memory": {}}
 TT = "32 ft MXL"
 
 def neg_load(**th_over):
@@ -195,6 +195,23 @@ ok &= check("negotiation: a question is answered and the rate asked", d["action"
 total = round((EC["target"] - 2) * 280)
 d, th, ec = owner_says(f"{total} total", read("quote", total=total))
 ok &= check("negotiation: a total in rupees becomes ₹/km", d["action"] == "accept" and abs(th["ask"] - total / 280) < 0.1, str(d))
+
+# required questions: loading time, then the shipper's price and the broker's margin (asked once)
+msg = "Bhiwandi se Surat 14 ton kapda"
+script(intake_json("Theek hai", True, origin="Bhiwandi", destination="Surat", weight_ton=14, material="kapda"))
+m1, reply, miss = E.intake_turn([{"role": "user", "text": msg}], {}, msg)
+ok &= check("required: loading time and pricing are asked before owners are messaged", miss == ["pickup_when", "pricing"]
+            and "Loading kab" in reply and "margin" in reply and m1.get("pricingAsked"), f"{miss} {reply[:120]}")
+msg2 = "kal subah 9 baje, shipper 25 hazaar de raha hai, 8% margin chahiye"
+script(intake_json("Theek hai", True, origin="Bhiwandi", destination="Surat", weight_ton=14, material="kapda", pickup_when="kal subah 9 baje"))
+m2, reply2, miss2 = E.intake_turn([{"role": "user", "text": msg}, {"role": "user", "text": msg2}], m1, msg2)
+ok &= check("the broker's shipper price and margin are read from their words", not miss2 and m2.get("budget_rs") == 25000
+            and m2.get("margin_pct") == 8 and "aapka margin 8%" in reply2, f"{miss2} {m2.get('budget_rs')} {m2.get('margin_pct')} {reply2[:140]}")
+msg3 = "kal subah, aap batao"
+script(intake_json("Theek hai", True, origin="Bhiwandi", destination="Surat", weight_ton=14, material="kapda", pickup_when="kal subah"))
+m3, reply3, miss3 = E.intake_turn([{"role": "user", "text": msg}, {"role": "user", "text": msg3}], m1, msg3)
+ok &= check("'aap batao' lets the desk price from the market", not miss3 and m3.get("pricingSkip") and "rate market se" in reply3, f"{miss3} {reply3[:120]}")
+ok &= check("an advance % is never read as the broker's margin", E.broker_terms("80% advance chahiye, 30000 milega") == {"budget_rs": 30000})
 
 # malicious or broken model output
 high = round(EC["ceiling"] * 1.6, 1)
@@ -235,6 +252,43 @@ load["threads"]["k2"] = {**th, "name": "Suresh", "ownerKey": "k2", "messages": l
 script("not json at all")
 D._owner_reply(load, th, f"{low}/km", read=D._model_read(th, f"{low}/km", load["lane"], load["load"]), pre=True)   # what the worker does when the background read lands
 ok &= check("event log: the same step read by the rules is marked Code", load["events"][-1]["by"] == "Code", str(load["events"][-1]))
+
+# ---------------- the review's rules (29 Oct): Indian-market negotiation ----------------
+below = round(EC["cost"] - 1, 1)
+d, th, ec = owner_says(f"{below} per km", read("quote", below))
+ok &= check("an ask below the truck's running cost is confirmed, not taken", d["action"] == "counter" and "Confirm" in d["reply"], str(d)[:120])
+c0 = round(EC["target"] + 1, 1)
+d, th, ec = owner_says("haan 95 mein", read("accept_offer"), counter=c0)
+ok &= check("'haan, 95 mein' is a new rate, not a yes", d["action"] != "accept" or abs(d["rate"] - c0) > 0.5, str(d)[:120])
+d, th, ec = owner_says("ok dekhte hain", read("accept_offer"), counter=c0)
+ok &= check("'ok dekhte hain' is not a booking", d["action"] != "accept", str(d)[:120])
+d, th, ec = owner_says("90% advance chahiye", read("other"))
+ok &= check("a bigger advance is traded for a lower total", th.get("advancePct") == 90 and th.get("tradeRs") == 500
+            and "90% advance de denge" in d["reply"] and ec["target"] > D._econ(neg_load()[0], th)["target"] - 0.01, d["reply"][:120])
+ok &= check("'90 advance' is not read as ₹90/km", D._owner_rate("90 advance chahiye", 280) is None)
+hi = round(EC["ceiling"] * 1.3, 1)
+d, th, ec = owner_says(f"{hi} per km", read("quote", hi))
+tot = round(d["rate"] * 280)
+ok &= check("a short-lane counter speaks in totals, rounded to ₹500", d["action"] == "counter" and "/km" not in d["reply"]
+            and tot % 500 == 0 and "total" in d["reply"], d["reply"][:140])
+ok &= check("round 1 cites the lane, not the owner's own diesel and EMI", "diesel ~" not in d["reply"] and "EMI" not in d["reply"], d["reply"][:140])
+edge = round(c0 + 0.4, 1)
+d, th, ec = owner_says(f"{edge} per km", read("quote", edge), counter=c0, ask=edge, rounds=2)
+ok &= check("edging: last counter + ₹0.4 without coming down is not auto-accepted", d["action"] != "accept", str(d)[:100])
+d, th, ec = owner_says(f"{edge} per km", read("quote", edge), counter=c0, ask=edge + 2, rounds=2)
+ok &= check("after they come down, a few paise apart is closed", d["action"] == "accept", str(d)[:100])
+finals, declines = [], 0
+for i in range(12):
+    d, th, ec = owner_says(f"{hi} per km", read("quote", hi), ownerKey=f"k{i}", rounds=3, counter=EC["target"], ask=hi + 1)
+    if d["action"] == "counter":
+        finals.append(d["rate"])
+    elif d["action"] == "decline":
+        declines += 1
+ok &= check("the aakhri offer is not always sent, and not always at the cap",
+            finals and declines and any(r < EC["ceiling"] - 0.3 for r in finals) and all(r <= EC["ceiling"] + 0.01 for r in finals),
+            f"{len(finals)} finals {sorted(finals)[:4]}, {declines} declines, ceiling {EC['ceiling']}")
+terms = D.terms_line()
+ok &= check("terms state toll, commission and deductions", "toll shaamil" in terms and "commission nahi" in terms and "POD par likhi" in terms, terms)
 
 # ---------------- strategist (Desk._strategize) ----------------
 MOVED = []

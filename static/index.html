@@ -22,7 +22,7 @@
       <button class="nav-item" data-view="owners">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 10.5h9v-5h-9zM10.5 7.5h2.5l1.5 2v1h-4"/><circle cx="4" cy="11.5" r="1.3"/><circle cx="12" cy="11.5" r="1.3"/></svg>Owners and pool</button>
       <button class="nav-item" data-view="costs">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5h10M3 6h10M6 2.5c3.5 0 3.5 7 0 7H4l6 4"/></svg>Costs and guardrails</button>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5h10M3 6h10M6 2.5c3.5 0 3.5 7 0 7H4l6 4"/></svg>Pricing defaults</button>
     </nav>
     <div class="side-foot">
       <div class="conn"><span class="dot" id="dot-wa"></span><span id="conn-wa">WhatsApp</span></div>
@@ -96,15 +96,16 @@
 
     <!-- COSTS -->
     <section class="view" id="view-costs" aria-labelledby="h-costs" hidden>
-      <div class="title-row"><div><h1 id="h-costs">Costs and guardrails</h1>
-        <p class="finding">Every quote is computed from these numbers and the road distance. The language model never sets a price.</p></div></div>
+      <div class="title-row"><div><h1 id="h-costs">Pricing defaults</h1>
+        <p class="finding">Used only when the broker doesn't name a margin. A broker's own price and margin override these for that load.</p>
+        <p class="muted">Every quote is computed from these numbers and the road distance. The language model never sets a price.</p></div></div>
       <form class="panel form wide" id="cost-form">
         <fieldset><legend>Diesel</legend>
           <label>Price per litre (₹)<input name="dieselPerLitre" type="number" step="0.01" min="50" max="200" required></label>
           <label>Source<input name="dieselSource"></label>
           <label>As of<input name="dieselAsOf" type="date"></label>
         </fieldset>
-        <fieldset><legend>Margin band</legend>
+        <fieldset><legend>Margin band <span class="muted" style="font-weight:400">(lanes over 400 km and special goods; shorter lanes use 5 / 8 / 12%)</span></legend>
           <label>Floor (%)<input name="floorPct" type="number" step="0.5" min="0" max="49" required></label>
           <label>Target (%)<input name="targetPct" type="number" step="0.5" min="0" max="49" required></label>
           <label>Ceiling (%)<input name="ceilingPct" type="number" step="0.5" min="0" max="49" required></label>
