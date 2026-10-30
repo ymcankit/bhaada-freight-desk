@@ -5,133 +5,140 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bhaada freight desk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/app.css">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f6b4f'/%3E%3Cpath d='M9 8h8.5a4.5 4.5 0 0 1 1.8 8.6A5 5 0 0 1 17.5 26H9z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231b6b45'/%3E%3Cpath d='M9 8h8.5a4.5 4.5 0 0 1 1.8 8.6A5 5 0 0 1 17.5 26H9z' fill='%23fff'/%3E%3C/svg%3E">
 </head>
 <body>
-<div class="frame">
-  <aside class="sidebar" id="sidebar">
-    <div class="brand">
-      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7"/><path d="M9 8h8.5a4.5 4.5 0 0 1 1.8 8.6A5 5 0 0 1 17.5 26H9z"/><circle cx="12.5" cy="26" r="2.6"/></svg>
-      <div><div class="brand-name">Bhaada</div><div class="brand-scope" id="scope">Freight desk</div></div>
-    </div>
-    <nav aria-label="Desk">
-      <button class="nav-item" data-view="desk" aria-current="page">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h8"/></svg>Live desk<span class="count" id="nav-waiting" hidden></span></button>
-      <button class="nav-item" data-view="owners">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 10.5h9v-5h-9zM10.5 7.5h2.5l1.5 2v1h-4"/><circle cx="4" cy="11.5" r="1.3"/><circle cx="12" cy="11.5" r="1.3"/></svg>Owners and pool</button>
-      <button class="nav-item" data-view="costs">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5h10M3 6h10M6 2.5c3.5 0 3.5 7 0 7H4l6 4"/></svg>Pricing defaults</button>
-    </nav>
-    <div class="side-foot">
-      <div class="conn"><span class="dot" id="dot-wa"></span><span id="conn-wa">WhatsApp</span></div>
-      <div class="conn"><span class="dot" id="dot-llm"></span><span id="conn-llm">Language model</span></div>
+<div class="app">
+  <aside class="side" id="sidebar">
+    <div class="side-in">
+      <div class="logo"><b>Bhaada</b><span>Agentic Freight Desk</span></div>
+      <button class="new" id="new-load"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New load</button>
+      <nav class="nav" aria-label="Desk">
+        <button class="nav-item" data-view="desk" aria-current="page">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h11v16H5V7z"/><path d="M9 10h6M9 14h6"/></svg>Live desk<span class="badge" id="nav-waiting" hidden></span></button>
+        <button class="nav-item" data-view="owners">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 16V7h11v9M13 10h4l3 3v3h-7"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>Owners and pool</button>
+        <button class="nav-item" data-view="costs">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12M6 9h12M10 4c5 0 5 10 0 10H7l8 6"/></svg>Pricing defaults</button>
+      </nav>
+      <div class="status">
+        <div><i class="dot" id="dot-wa"></i><span id="conn-wa">WhatsApp</span></div>
+        <div><i class="dot" id="dot-llm"></i><span id="conn-llm">Language model</span></div>
+        <div class="scope" id="scope">Freight desk</div>
+      </div>
     </div>
   </aside>
 
-  <header class="topbar">
-    <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12"/></svg></button>
-    <div class="crumb" id="crumb">Live desk</div>
-    <div class="mode" role="group" aria-label="Owners">
-      <button data-mode="live" id="mode-live">Live owners</button>
-      <button data-mode="sandbox" id="mode-sandbox">Sandbox owners</button>
-    </div>
-  </header>
-
-  <main class="sheet" id="sheet">
-    <!-- DESK -->
-    <section class="view" id="view-desk" aria-labelledby="h-desk">
-      <div class="title-row">
-        <div>
-          <h1 id="h-desk">Live desk</h1>
-          <p class="finding" id="finding">Loading the desk…</p>
-        </div>
-        <button class="btn primary" id="new-load">New load</button>
+  <div class="main">
+    <header class="top">
+      <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <div class="crumbs" id="crumb">Live desk</div>
+      <div class="mode" role="group" aria-label="Owners">
+        <button data-mode="live" id="mode-live">Live owners</button>
+        <button data-mode="sandbox" id="mode-sandbox">Sandbox owners</button>
       </div>
+      <span class="agents-on" id="agents-on" hidden><i></i>AI agents on</span>
+    </header>
+
+    <main class="page" id="sheet">
       <div class="banner" id="sandbox-banner" hidden>
-        Sandbox: owners here are personas from the demo data, not real people. Switch to <b>Live owners</b> to work loads against owners on WhatsApp.
+        Sandbox: owners here are personas from the demo data, not real people. Switch to <b>Live owners</b> to work loads against real owners.
       </div>
-      <dl class="kpis" id="kpis"></dl>
-      <div class="triage">
-        <div class="list-col">
-          <div class="list-head"><h2>Loads today</h2><span class="muted" id="list-count"></span></div>
-          <ul class="loads" id="loads" aria-label="Loads"></ul>
-        </div>
-        <div class="open-col" id="open-col">
-          <div class="empty" id="open-empty">Choose a load on the left, or start one with <b>New load</b>. Brokers can also send a load to the desk's WhatsApp number.</div>
-          <div id="open" hidden></div>
-        </div>
-        <aside class="detail-col" id="detail" aria-label="Quote"></aside>
-      </div>
-    </section>
 
-    <!-- OWNERS -->
-    <section class="view" id="view-owners" aria-labelledby="h-owners" hidden>
-      <div class="title-row">
-        <div><h1 id="h-owners">Owners and pool</h1><p class="finding" id="owners-finding"></p></div>
-        <button class="btn primary" id="send-checkin">Send morning check-in</button>
-      </div>
-      <div class="owners-grid">
-        <div class="panel">
-          <div class="panel-head"><h2>Today's pool</h2><span class="muted" id="pool-count"></span></div>
-          <table class="table" id="owners-table">
-            <thead><tr><th>Owner</th><th>Base</th><th>Trucks offered today</th><th class="num">Reliability</th></tr></thead>
-            <tbody></tbody>
-          </table>
+      <!-- DESK: today's loads -->
+      <section class="view" id="view-desk" aria-labelledby="h-desk">
+        <div class="head">
+          <div>
+            <h1 id="h-desk">Live desk</h1>
+            <p class="finding" id="finding">Loading the desk…</p>
+          </div>
         </div>
-        <form class="panel form" id="owner-form">
-          <h2>Add a fleet owner</h2>
-          <p class="muted">Or the owner sends <span class="mono">owner Sharma Transport, Bhiwandi</span> to the desk's WhatsApp number.</p>
-          <label>Name<input name="name" required autocomplete="off" placeholder="Sharma Transport"></label>
-          <label>WhatsApp number<input name="phone" required inputmode="tel" placeholder="98XXXXXXXX" aria-describedby="phone-hint"></label>
-          <span class="hint" id="phone-hint">Ten digits, or with 91 in front. On Meta's test number, add it to the allowed list too.</span>
-          <label>Base city<input name="city" placeholder="Bhiwandi"></label>
-          <button class="btn" type="submit">Add owner</button>
-          <p class="form-msg" id="owner-msg" role="status"></p>
+        <div class="tiles" id="kpis"></div>
+        <div class="card">
+          <div class="card-head"><h2>Loads today</h2><span class="muted" id="list-count"></span></div>
+          <div class="table-wrap">
+            <table class="loads-table">
+              <thead><tr><th>Load</th><th>Route</th><th>Goods and truck</th><th>Pickup</th><th class="r">Quote</th><th>Status</th><th class="r">Started</th></tr></thead>
+              <tbody id="loads"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ONE LOAD -->
+      <section class="view" id="view-load" aria-label="Load" hidden></section>
+
+      <!-- OWNERS -->
+      <section class="view" id="view-owners" aria-labelledby="h-owners" hidden>
+        <div class="head">
+          <div><h1 id="h-owners">Owners and pool</h1><p class="finding" id="owners-finding"></p></div>
+          <button class="btn go" id="send-checkin">Send morning check-in</button>
+        </div>
+        <div class="owners-grid">
+          <div class="card">
+            <div class="card-head"><h2>Today's pool</h2><span class="muted" id="pool-count"></span></div>
+            <div class="table-wrap">
+              <table class="table" id="owners-table">
+                <thead><tr><th>Owner</th><th>Base</th><th>Trucks offered today</th><th class="r">Rating</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <form class="card form" id="owner-form">
+            <h2>Add a fleet owner</h2>
+            <p class="muted">Or the owner sends <span class="cmd">owner Sharma Transport, Bhiwandi</span> to the desk's bot.</p>
+            <label>Name<input name="name" required autocomplete="off" placeholder="Sharma Transport"></label>
+            <label>WhatsApp number<input name="phone" required inputmode="tel" placeholder="98XXXXXXXX" aria-describedby="phone-hint"></label>
+            <span class="hint" id="phone-hint">Ten digits, or with 91 in front.</span>
+            <label>Base city<input name="city" placeholder="Bhiwandi"></label>
+            <button class="btn go" type="submit">Add owner</button>
+            <p class="form-msg" id="owner-msg" role="status"></p>
+          </form>
+        </div>
+      </section>
+
+      <!-- PRICING DEFAULTS -->
+      <section class="view" id="view-costs" aria-labelledby="h-costs" hidden>
+        <div class="head"><div><h1 id="h-costs">Pricing defaults</h1>
+          <p class="finding">Used only when the broker doesn't name a margin. A broker's own price and margin override these for that load.</p></div></div>
+        <form class="card form wide" id="cost-form">
+          <p class="muted">Every quote is computed from these numbers and the road distance. The language model never sets a price.</p>
+          <fieldset><legend>Diesel</legend>
+            <label>Price per litre (₹)<input name="dieselPerLitre" type="number" step="0.01" min="50" max="200" required></label>
+            <label>Source<input name="dieselSource"></label>
+            <label>As of<input name="dieselAsOf" type="date"></label>
+          </fieldset>
+          <fieldset><legend>Margin band <span class="muted" style="font-weight:500">(lanes over 400 km and special goods; shorter lanes use 5 / 8 / 12%)</span></legend>
+            <label>Floor (%)<input name="floorPct" type="number" step="0.5" min="0" max="49" required></label>
+            <label>Target (%)<input name="targetPct" type="number" step="0.5" min="0" max="49" required></label>
+            <label>Ceiling (%)<input name="ceilingPct" type="number" step="0.5" min="0" max="49" required></label>
+          </fieldset>
+          <fieldset><legend>Sourcing</legend>
+            <label>Furthest empty run to pickup (km)<input name="maxDeadheadKm" type="number" step="5" min="10" max="400" required></label>
+          </fieldset>
+          <fieldset><legend>AI agents</legend>
+            <label class="check"><input name="agentMode" id="agent-mode" type="checkbox"> Let the AI agents plan each load, choose whom to message and how to negotiate. Code still checks every amount against the broker's limits; the rules take over if the AI is unavailable.</label>
+          </fieldset>
+          <p class="muted" id="toll-note"></p>
+          <div class="form-actions"><button class="btn go" type="submit">Save</button><span class="form-msg" id="cost-msg" role="status"></span></div>
         </form>
-      </div>
-    </section>
-
-    <!-- COSTS -->
-    <section class="view" id="view-costs" aria-labelledby="h-costs" hidden>
-      <div class="title-row"><div><h1 id="h-costs">Pricing defaults</h1>
-        <p class="finding">Used only when the broker doesn't name a margin. A broker's own price and margin override these for that load.</p>
-        <p class="muted">Every quote is computed from these numbers and the road distance. The language model never sets a price.</p></div></div>
-      <form class="panel form wide" id="cost-form">
-        <fieldset><legend>Diesel</legend>
-          <label>Price per litre (₹)<input name="dieselPerLitre" type="number" step="0.01" min="50" max="200" required></label>
-          <label>Source<input name="dieselSource"></label>
-          <label>As of<input name="dieselAsOf" type="date"></label>
-        </fieldset>
-        <fieldset><legend>Margin band <span class="muted" style="font-weight:400">(lanes over 400 km and special goods; shorter lanes use 5 / 8 / 12%)</span></legend>
-          <label>Floor (%)<input name="floorPct" type="number" step="0.5" min="0" max="49" required></label>
-          <label>Target (%)<input name="targetPct" type="number" step="0.5" min="0" max="49" required></label>
-          <label>Ceiling (%)<input name="ceilingPct" type="number" step="0.5" min="0" max="49" required></label>
-        </fieldset>
-        <fieldset><legend>Sourcing</legend>
-          <label>Furthest empty run to pickup (km)<input name="maxDeadheadKm" type="number" step="5" min="10" max="400" required></label>
-        </fieldset>
-        <fieldset><legend>AI agents</legend>
-          <label class="check"><input name="agentMode" id="agent-mode" type="checkbox"> Let the AI agents choose whom to message and how to negotiate. Code still checks every amount against the broker's limits; the rules take over if the AI is unavailable.</label>
-        </fieldset>
-        <p class="muted" id="toll-note"></p>
-        <div class="form-actions"><button class="btn primary" type="submit">Save</button><span class="form-msg" id="cost-msg" role="status"></span></div>
-      </form>
-    </section>
-  </main>
+      </section>
+    </main>
+  </div>
 </div>
 
 <dialog id="composer" aria-labelledby="composer-title">
   <form method="dialog" class="composer-head"><h2 id="composer-title">New load</h2><button class="icon-btn" aria-label="Close">
-    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></form>
+    <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></form>
   <div class="chat" id="chat" aria-live="polite"></div>
   <div class="draft" id="draft"></div>
   <form class="composer-input" id="composer-form">
     <label class="sr-only" for="composer-text">Load request</label>
     <input id="composer-text" autocomplete="off" placeholder="Kal subah Bhiwandi se Surat, 18 ton kapda, 32 MXL">
-    <button class="btn primary" type="submit">Send</button>
+    <button class="btn go" type="submit">Send</button>
   </form>
 </dialog>
 
