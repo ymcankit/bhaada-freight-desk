@@ -439,6 +439,14 @@ d, th, ec = owner_says(f"{hi}/km", mv("quote", hi, action="accept"))
 ok &= check("agent can't accept an ask above the ceiling: the rules decide", d.get("by") != "agent" and d["action"] != "accept", str(d)[:120])
 d, th, ec = owner_says(f"{hi}/km", mv("quote", hi, action="counter", amount_total=round(EC["target"] * 280), reason="Market ₹90/km hai."))
 ok &= check("agent's reason with a number is dropped", d.get("by") == "agent" and "90/km" not in d["reply"], d["reply"][:120])
+d, th, ec = owner_says(f"{hi}/km", mv("quote", hi, action="counter", amount_total=round(EC["target"] * 280),
+                      reason="Payment jaldi milegi aur regular kaam bhi milta rahega."))
+ok &= check("agent's promise of fast payment or more work is dropped", d.get("by") == "agent"
+            and "ayment" not in d["reply"] and "regular" not in d["reply"], d["reply"][:120])
+from agents import _reason
+ok &= check("lane and cost reasons pass the promise filter",
+            bool(_reason({"reason": "Is lane pe market rate yahi chal raha hai, diesel bhi dekh liya hai."}))
+            and not _reason({"reason": "Agla load bhi aapko denge."}), "")
 d, th, ec = owner_says(f"{hi}/km", mv("quote", hi, action="decline", reason="Nahi ho payega."))
 ok &= check("agent can't walk away in round 1: the rules decide", d.get("by") != "agent", str(d)[:120])
 c0 = round(EC["target"], 1)

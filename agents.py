@@ -33,6 +33,17 @@ def _clean(text, allowed, limit=400):
     return text if _nums(text) <= ok else ""
 
 
+# Promises the broker never made (when payment comes, more loads later): the desk can't hold an owner to them
+PROMISE = re.compile(r"payment|paisa|paise|pay\b|advance|bhugtan|regular|aage bhi|agla load|agle load|future|"
+                     r"aur load|more loads|repeat|har hafte|roz ka|kaam milta|kaam milega|kaam dete|pehle denge", re.I)
+
+
+def _reason(mv):
+    """The agent's line to the owner: no numbers (the desk adds the amount) and no promises."""
+    r = _clean((mv or {}).get("reason"), set(), limit=220)
+    return "" if PROMISE.search(r) else r
+
+
 class AgentsMixin:
     # ---------------- switches ----------------
     def agent_mode(self):
@@ -143,8 +154,9 @@ class AgentsMixin:
             "- final_offer: only in the last round; one last amount, not above the most we may pay.\n"
             "- decline: their ask stays far above the most we may pay after 2 or more rounds.\n"
             "- ask: they haven't said a rate yet.\n"
-            "reason: one short, respectful Hinglish line the owner will read (the lane's going rate, the distance, "
-            "quick payment, regular loads). Put no numbers in it; the desk adds the amount.\n"
+            "reason: one short, respectful Hinglish line the owner will read, from the lane's going rate, the distance "
+            "or the truck's costs only. Promise nothing the broker hasn't said: not when payment comes, not more "
+            "loads later. Put no numbers in it; the desk adds the amount.\n"
             'Add to the JSON: "move":{"action":"accept|counter|final_offer|decline|ask","amount_total":null,"reason":""}')
 
     def _agent_move(self, load, th, ec, read):
@@ -190,7 +202,7 @@ class AgentsMixin:
                 total = self._lump(r, km, cap, floor=th["counter"] or 0)
             if ask and total / km >= ask:
                 return done(ask) if ask <= cap else None
-            reason = _clean(mv.get("reason"), set(), limit=220)
+            reason = _reason(mv)
             if act == "final_offer":
                 th["finalOffer"] = True
             held = bool(th["counter"]) and total / km <= th["counter"] + 0.01
@@ -202,12 +214,12 @@ class AgentsMixin:
             return {"action": "counter", "rate": total / km, "reply": text, "by": "agent", "reason": reason}
         if act == "decline":
             if ask and ask > cap and rnd >= 2:
-                reason = _clean(mv.get("reason"), set(), limit=220)
+                reason = _reason(mv)
                 return {"action": "decline", "rate": None, "by": "agent",
-                        "reply": (reason + " " if reason else "") + "Is baar nahi ho payega 🙏 Agla load aapko pehle denge."}
+                        "reply": (reason + " " if reason else "") + "Is baar nahi ho payega 🙏 Dhanyavaad."}
             return None
         if act == "ask" and not ask:
-            reason = _clean(mv.get("reason"), set(), limit=220)
+            reason = _reason(mv)
             return {"action": "ask", "rate": None, "by": "agent", "reply": (reason + " " if reason else "")
                     + "Is load ka aapka rate kya hoga? Total (ya ₹/km) bata dijiye."}
         return None
