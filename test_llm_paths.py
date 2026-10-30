@@ -552,5 +552,42 @@ script({"pick": 7})
 ok &= check("an out-of-range pick falls back to the rules", D._coordinator_pick(load, offers)[0] is None)
 D.settings["agentMode"] = False
 
+# owner trust: no "Done" before the broker approves, no margin talk, backups get a kept promise
+low = round(EC["target"] - 1, 1)
+d, th, ec = owner_says(f"{low}/km", read("quote", low))
+ok &= check("an owner's yes is noted, not promised", d["action"] == "accept" and "Done" not in d["reply"] and "pakka nahi" in d["reply"], d["reply"][:90])
+D.settings["agentMode"] = True
+d, th, ec = owner_says(f"{hi}/km", mv("quote", hi, action="counter", amount_total=round(EC["target"] * 280),
+                      reason="Thoda aur margin rakhen to gaadi lock kar lete hain."))
+ok &= check("the agent never tells an owner about our margin", d.get("by") == "agent" and "margin" not in d["reply"].lower(), d["reply"][:120])
+D.settings["agentMode"] = False
+load, _, _ = neg_load()
+load.update(searchType=TT, winner=None, quote=None, mode="live", id="BH-HEADROOM")
+load["load"].update(truck_type=TT, origin="Bhiwandi", destination="Surat")
+for k, nm, buy, rel in (("tb1", "Backup One", 21500, 4.0), ("tb2", "Winner Two", 21000, 4.0)):
+    D.owners[k] = {"key": k, "name": nm, "sandbox": False, "phone": "9800000" + k[-3:]}
+    load["threads"][k] = {"name": nm, "ownerKey": k, "type": TT, "status": "deal", "agreedBuy": buy, "reliability": rel, "sandbox": False,
+                          "sell": round(E.target_sell(LANE, TT)), "messages": [], "rounds": 1, "ask": buy / 280, "counter": None}
+del load["threads"]["k1"]
+D._decide(load)
+msg = load["threads"]["tb1"]["messages"][-1]["text"] if load["threads"]["tb1"]["messages"] else ""
+ok &= check("the backup hears the truth and a promise", load["winner"] == "tb2" and "backup" in msg and "agla load" in msg, msg[:120])
+ok &= check("the desk records the promise and will ask them first", D._first_call("tb1", LANE) and not D._first_call("tb2", LANE))
+# budget headroom: quote higher only inside the shipper's own budget
+q0 = load["quote"]["sell_total"]
+load["load"]["budget_rs"] = q0 + 6000
+load["status"] = "needs_approval"
+D.loads.append(load)
+h = D.headroom(load)
+ok &= check("headroom is the budget above our quote", h and h["gap"] == 6000 and q0 < h["ask"] <= q0 + 6000 and h["askMargin"] > load["quote"]["margin_pct"], str(h))
+D._on_requote(load["id"], q0 + 9000)
+ok &= check("never quote above the shipper's budget", load["quote"]["sell_total"] == q0)
+D._on_requote(load["id"], h["ask"])
+ok &= check("quote raised inside the budget: same owner, better margin", load["quote"]["sell_total"] == h["ask"] and load["winner"] == "tb2"
+            and load["quote"]["buy_total"] == 21000 and D.headroom(load) is None, str(load["quote"].get("sell_total")))
+D.loads.remove(load)
+for k in ("tb1", "tb2"):
+    D.owners.pop(k, None)
+
 print("\nALL PASS" if ok else "\nSOME FAILED")
 import sys; sys.stdout.flush(); os._exit(0 if ok else 1)

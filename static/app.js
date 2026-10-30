@@ -465,8 +465,7 @@ function marginBar(q) {
   return [el("div", { class: "mbar", role: "img", "aria-label": `Margin ${q.margin_pct}%: floor ${b.floorPct}%, target ${b.targetPct}%, ceiling ${b.ceilingPct}%` },
       el("div", { class: q.margin_pct >= b.floorPct ? "fill" : "fill low", style: `width:${x(q.margin_pct)}` }),
       el("span", { class: "t", style: `left:${x(b.floorPct)}` }), el("span", { class: "t", style: `left:${x(b.targetPct)}` })),
-    el("div", { class: "mlab" }, el("span", { style: `left:${x(b.floorPct)}`, text: `floor ${b.floorPct}%` }), el("span", { style: `left:${x(b.targetPct)}`, text: `target ${b.targetPct}%` }),
-      el("span", { style: `left:${x(b.ceilingPct)}`, text: `${b.ceilingPct}%` }))];
+    el("p", { class: "mcap", text: `Your floor ${b.floorPct}% · target ${b.targetPct}% · ceiling ${b.ceilingPct}%` })];
 }
 function railCards(l) {
   const s = S.data.settings, q = l.quote, cards = [];
@@ -482,7 +481,14 @@ function railCards(l) {
       el("div", { class: "qline", title: `Fuel at ₹${s.dieselPerLitre}/L, tolls, driver and helper, EMI and maintenance, handling` },
         el("span", { text: "Owner's running cost" }), el("b", { text: rs(q.owner_cost || (q.fuel + q.toll + q.driver + q.misc)) })),
       el("div", { class: "qline total" }, el("span", { text: "Sell to shipper" }), el("b", { text: rs(q.sell_total) })));
-    if (q.note) card.append(el("p", { class: "note", text: q.note }));
+    const h = l.headroom;
+    if (h) card.append(el("div", { class: "headroom" },
+      el("div", { class: "qline" }, el("span", { text: "Shipper's budget" }), el("b", { text: rs(h.budget) })),
+      el("p", {}, el("b", { text: `${rs(h.gap)} headroom. ` }), `The shipper said they'd pay up to ${rs(h.budget)}; our quote leaves ${rs(h.gap)} on the table.`),
+      l.status === "needs_approval" ? el("button", { class: "btn", onclick: () => act(l.id, "requote", h.ask),
+        text: `Quote ${rs(h.ask)} instead · margin ${h.askMargin}%` }) : null));
+    if (q.note === "the broker's shipper price") card.append(el("p", { class: "note", text: `You set the shipper price at ${rs(q.sell_total)}.` }));
+    else if (q.note) card.append(el("p", { class: "note", text: q.note }));
     if (l.status === "needs_approval") {
       card.append(el("button", { class: "btn go", onclick: () => act(l.id, "approve"), text: "Approve and hold the truck" }),
         el("button", { class: "btn", onclick: () => act(l.id, "reject"), text: "Reject" }),
@@ -514,7 +520,7 @@ function railCards(l) {
       el("p", { class: "note", text: l.status === "waiting_trucks"
         ? `No ${l.searchType} is free near ${l.lane.origin} yet. The load stays open till ${hm(l.watchUntil)}; any owner who checks in with one is asked at once.`
         : "The price appears when an owner agrees a rate that leaves your margin." }),
-      el("dl", { class: "kv" }, el("dt", { text: "Floor · target · ceiling" }), el("dd", { text: `${s.floorPct}% · ${s.targetPct}% · ${s.ceilingPct}%` }),
+      el("dl", { class: "kv" }, el("dt", { text: "Your margin: floor · target · ceiling" }), el("dd", { text: `${(l.band || s).floorPct}% · ${(l.band || s).targetPct}% · ${(l.band || s).ceilingPct}%` }),
         el("dt", { text: "Diesel" }), el("dd", { text: `₹${s.dieselPerLitre}/L` }))));
   }
   const learned = l.events.find((e) => e.actor === "Learning");
@@ -539,8 +545,8 @@ function medianQuoteMin(d) {
   return mins.length ? Math.round(mins[Math.floor(mins.length / 2)] * 10) / 10 : null;
 }
 
-async function act(id, action) {
-  try { await api(`/api/loads/${id}/${action}`, {}); S.lastKey = null; setTimeout(poll, 300); } catch (e) { alert(e.message); }
+async function act(id, action, rsAmount) {
+  try { await api(`/api/loads/${id}/${action}` + (rsAmount ? `?rs=${rsAmount}` : ""), {}); S.lastKey = null; setTimeout(poll, 300); } catch (e) { alert(e.message); }
 }
 
 // ---------------- owners ----------------

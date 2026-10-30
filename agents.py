@@ -54,12 +54,14 @@ def _med(xs):
 # Promises the broker never made (when payment comes, more loads later): the desk can't hold an owner to them
 PROMISE = re.compile(r"payment|paisa|paise|pay\b|advance|bhugtan|regular|aage bhi|agla load|agle load|future|"
                      r"aur load|more loads|repeat|har hafte|roz ka|kaam milta|kaam milega|kaam dete|pehle denge", re.I)
+# The broker's side of the deal is never told to an owner: margin, our limit, what the shipper pays
+INSIDE = re.compile(r"margin|munafa|munaafa|commission|ceiling|limit|shipper|broker ka|hamara fayda|profit", re.I)
 
 
 def _reason(mv):
     """The agent's line to the owner: no numbers (the desk adds the amount) and no promises."""
     r = _clean((mv or {}).get("reason"), set(), limit=220)
-    return "" if PROMISE.search(r) else r
+    return "" if PROMISE.search(r) or INSIDE.search(r) else r
 
 
 class AgentsMixin:
@@ -120,7 +122,8 @@ class AgentsMixin:
         except Exception as e:
             print("booking agent failed, using the fixed message:", repr(e)[:120])
             return ""
-        return _clean(out.get("reply"), allowed)
+        reply = _clean(out.get("reply"), allowed)
+        return "" if INSIDE.search(reply) else reply
 
     def _answer_then(self, load, th, text, after):
         """Answer off the worker (a model call can take seconds), then send the answer plus `after` on the worker."""
@@ -179,7 +182,8 @@ class AgentsMixin:
             + (f"The coordinator's stance for this load: {STANCES[ctx['stance']]}\n" if ctx.get("stance") in STANCES else "")
             + "reason: one short, respectful Hinglish line the owner will read, from the lane's going rate, the distance "
             "or the truck's costs only. Promise nothing the broker hasn't said: not when payment comes, not more "
-            "loads later. Put no numbers in it; the desk adds the amount.\n"
+            "loads later. Never mention our margin, our limit or what the shipper pays. Put no numbers in it; the "
+            "desk adds the amount.\n"
             'Add to the JSON: "move":{"action":"accept|counter|final_offer|decline|ask","amount_total":null,"reason":""}')
 
     def _agent_move(self, load, th, ec, read):
@@ -195,7 +199,7 @@ class AgentsMixin:
         cap = min(ec["ceiling"], rival) if rival else ec["ceiling"]
         moved = th.get("askDrop", 0) > 0
         done = lambda r: {"action": "accept", "rate": r, "by": "agent",
-                          "reply": f"Done ✅ {self._money(round(r * km), km)}. Broker se confirm karke turant batate hain."}
+                          "reply": f"{self._money(round(r * km), km)} note kar liya ✅ Abhi pakka nahi hai: broker se confirm karke turant batate hain."}
         if act == "accept":
             if not ask or ask > cap:
                 return None

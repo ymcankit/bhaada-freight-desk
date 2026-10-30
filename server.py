@@ -406,8 +406,8 @@ async def intake(request: Request):
     return out
 
 @app.post("/api/loads/{lid}/{action}", dependencies=[Depends(console_auth)])
-def load_action(lid: str, action: str, request: Request):
-    if action not in ("approve", "reject", "backout", "call_yes", "call_no", "ship_yes", "ship_no"):
+def load_action(lid: str, action: str, request: Request, rs: int = 0):
+    if action not in ("approve", "reject", "backout", "call_yes", "call_no", "ship_yes", "ship_no", "requote"):
         raise HTTPException(404)
     if judge_mode(request):
         load = desk._find(lid)
@@ -418,6 +418,8 @@ def load_action(lid: str, action: str, request: Request):
         desk.post("broker_call", lid=lid, yes=action == "call_yes")
     elif action.startswith("ship_"):
         desk.post("shipper", lid=lid, yes=action == "ship_yes")
+    elif action == "requote":
+        desk.post("requote", lid=lid, rs=rs)
     else:
         desk.post(action, lid=lid)
     return {"ok": True}

@@ -221,6 +221,7 @@ th.r, td.r { text-align: right; }
 .mbar .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; background: var(--brand); }
 .mbar .fill.low { background: #c4242a; }
 .mbar .t { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); opacity: .45; }
+.mcap { font-size: 13px; color: var(--muted); font-weight: 600; }
 .mlab { position: relative; height: 18px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
 .mlab span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
 .qline { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line-2); }
@@ -231,6 +232,11 @@ th.r, td.r { text-align: right; }
 .note { font-size: 14px; color: var(--muted); margin-top: 12px; }
 .flag { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--bad-bg); color: var(--bad-ink); font-size: 14px; }
 .ask-card .flag { background: var(--warn-bg); color: var(--warn-ink); }
+.headroom { margin-top: 12px; background: var(--warn-bg); border-radius: 12px; padding: 4px 14px 14px; }
+.headroom .qline { border-top: 0; }
+.headroom p { font-size: 14px; color: var(--warn-ink); }
+.headroom p b { font-weight: 800; }
+.headroom .btn { background: #fff; border-color: #e7c98a; color: var(--warn-ink); margin-top: 10px; }
 .learn h2 { font-size: 17px; display: flex; align-items: center; gap: 8px; }
 .learn h2 svg { color: var(--brand); }
 .learn p { margin-top: 8px; color: var(--ink-2); font-size: 14px; }
