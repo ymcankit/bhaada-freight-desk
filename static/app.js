@@ -112,6 +112,20 @@ function render() {
   if (S.view === "desk") load ? renderLoad(load) : renderDesk();
   if (S.view === "owners") renderOwners();
   if (S.view === "costs") renderCosts();
+  lockDemo(d);                                      // after the views, so their own enabling never unlocks a control
+}
+
+// The open demo console: judges start and approve their own loads; settings, owners and the mode are the broker's.
+function lockDemo(d) {
+  const locked = !!(d.publicView || d.readOnly);
+  document.body.classList.toggle("demo-locked", locked);
+  $("demo-note").hidden = !locked;
+  for (const m of ["live", "sandbox"]) $("mode-" + m).disabled = locked;
+  document.querySelector(".mode").title = locked ? "The broker switches this. Your loads always use demo owners, so you can try every step." : "";
+  $("send-checkin").disabled = $("send-checkin").disabled || locked;
+  if (locked) $("send-checkin").title = "The broker sends the morning check-in";
+  for (const id of ["owner-form", "cost-form"]) for (const n of $(id).elements) n.disabled = locked;
+  for (const id of ["owner-lock", "cost-lock"]) $(id).hidden = !locked;
 }
 
 function crumb(load) {

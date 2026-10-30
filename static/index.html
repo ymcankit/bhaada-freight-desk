@@ -44,6 +44,9 @@
     </header>
 
     <main class="page" id="sheet">
+      <div class="banner demo" id="demo-note" hidden>
+        Open demo: start a load with <b>New load</b> and approve it yourself. Your loads are answered by demo owners, so nothing reaches a real truck owner. Settings and owners are the broker's and stay locked.
+      </div>
       <div class="banner" id="sandbox-banner" hidden>
         Sandbox: owners here are personas from the demo data, not real people. Switch to <b>Live owners</b> to work loads against real owners.
       </div>
@@ -95,6 +98,7 @@
             <span class="hint" id="phone-hint">Ten digits, or with 91 in front.</span>
             <label>Base city<input name="city" placeholder="Bhiwandi"></label>
             <button class="btn go" type="submit">Add owner</button>
+            <p class="lock-note" id="owner-lock" hidden>Locked in the open demo: owners join through the Telegram bot, or the broker adds them.</p>
             <p class="form-msg" id="owner-msg" role="status"></p>
           </form>
         </div>
@@ -123,6 +127,7 @@
             <label class="check"><input name="agentMode" id="agent-mode" type="checkbox"> Let the AI agents plan each load, choose whom to message and how to negotiate. Code still checks every amount against the broker's limits; the rules take over if the AI is unavailable.</label>
           </fieldset>
           <p class="muted" id="toll-note"></p>
+          <p class="lock-note" id="cost-lock" hidden>Locked in the open demo: only the broker changes pricing defaults. You can read every number the quotes use.</p>
           <div class="form-actions"><button class="btn go" type="submit">Save</button><span class="form-msg" id="cost-msg" role="status"></span></div>
         </form>
       </section>
