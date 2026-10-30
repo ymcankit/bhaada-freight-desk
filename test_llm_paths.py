@@ -475,5 +475,82 @@ script("not json at all")
 got, why = D._agent_pick(sl, cands, 5)
 ok &= check("sourcing agent: unreadable output falls back to the ranked order", [c["ownerKey"] for c in got] == [f"s{i}" for i in range(5)])
 
+# lane learning: each quoted load leaves a record; the playbook appears once a lane has history
+D.lane_book = {}
+def learned_load(i, first, close=None, counter=None, out="deal", demo=False):
+    load, th, ec = neg_load(firstAsk=round(EC["target"] * first, 1), ask=round(EC["target"] * first, 1), rounds=2,
+                            firstCounter=round(EC["target"] * first * counter, 1) if counter else None,
+                            agreedBuy=round(EC["target"] * first * close * 280) if close else None,
+                            status="deal" if close else out)
+    load["id"], load["quoteAt"] = f"BH-L{i}", live.now()
+    if demo:
+        load["demoOnly"] = True
+    return load
+L1 = learned_load(1, 1.15, 0.92, 0.88)
+D._learn(L1, "quoted")
+D._learn(L1, "quoted")
+ok &= check("lane learning records a load once", len(D.lane_book.get("Bhiwandi-Surat", {}).get("loads", [])) == 1)
+ok &= check("one load is not a playbook yet", D._playbook(learned_load(9, 1.1)) == [])
+D._learn(learned_load(2, 1.12, 0.94, 0.95), "quoted")
+D._learn(learned_load(3, 1.30, None, 0.85, out="declined"), "escalated")
+pb = D._playbook(learned_load(9, 1.1), TT)
+ok &= check("after three negotiations the lane has a playbook", any("opening ask" in x for x in pb)
+            and any("closed a median" in x for x in pb) and any("no deal" in x for x in pb), str(pb)[:200])
+ok &= check("the playbook compares first counters that closed with ones that didn't",
+            any("first counters within 7%" in x for x in pb), str(pb)[:300])
+D._learn(learned_load(4, 1.5, 0.7, 0.7, demo=True), "quoted")
+ok &= check("demo loads teach demo loads only", "Bhiwandi-Surat|demo" in D.lane_book
+            and len(D.lane_book["Bhiwandi-Surat"]["negs"]) == 3, str(list(D.lane_book))[:120])
+
+D.settings["agentMode"] = True
+d, th, ec = owner_says(f"{hi}/km", mv("quote", hi, action="counter", amount_total=round(EC["target"] * 280)))
+ok &= check("the negotiation agent reads the lane's playbook", "learned on this lane" in CALLS[0]["prompt"], CALLS[0]["prompt"][-300:])
+
+# coordinator: plans the load from tools code offers; code applies the plan
+real_cands = D._candidates
+D._candidates = lambda load, radius, n=None: [{"ownerKey": f"c{i}", "type": TT, "city": "Bhiwandi", "deadheadKm": 5}
+                                              for i in range(3 if radius <= D.settings["maxDeadheadKm"] else 9)]
+def plan(model, **over):
+    load, _, _ = neg_load()
+    load.update(searchType=TT, widenLeft=1, contacted=[], **over)
+    load["threads"] = {}
+    script(model)
+    D._coordinator_plan(load)
+    return load
+pl = plan({"tool": "source_wide", "stance": "firm", "why": "Few trucks nearby on this lane."})
+ev = [e for e in pl["events"] if e["actor"] == "Coordinator"][-1]
+ok &= check("coordinator's wide search is applied: wider radius now, the later widen used up",
+            pl["plan"] == {"tool": "source_wide", "stance": "firm"} and pl["wideStart"] and pl["widenLeft"] == 0
+            and ev["by"] == "AI" and ev["chosen"] == "source_wide", str(pl.get("plan")))
+ok &= check("the coordinator is shown the lane's playbook", "opening ask" in CALLS[0]["prompt"], "")
+ok &= check("the playbook is logged on the load", any(e["actor"] == "Learning" for e in pl["events"]))
+pl = plan({"tool": "book_it_now", "stance": "reckless"})
+ok &= check("an unknown tool or stance falls back to source nearby, standard", pl["plan"] == {"tool": "source_nearby", "stance": "standard"})
+pl = plan({"tool": "regulars_first", "stance": "standard"})
+ok &= check("regulars first is offered only when the lane has regulars", pl["plan"]["tool"] == "source_nearby")
+D.lane_rates["Bhiwandi-Surat|" + TT] = [(80.0, live.now(), "c1"), (81.0, live.now(), "c1")]
+pl = plan({"tool": "regulars_first", "stance": "quick"})
+ok &= check("regulars first puts the lane's regulars at the front", pl["plan"]["tool"] == "regulars_first" and "c1" in pl["prefer"], str(pl.get("prefer")))
+del D.lane_rates["Bhiwandi-Surat|" + TT]
+D._candidates = real_cands
+script({"intent": "quote", "owner_rate_per_km": hi, "move": {"action": "counter", "amount_total": round(EC["target"] * 280)}})
+load, th, ec = neg_load()
+load["plan"] = {"tool": "source_nearby", "stance": "firm"}
+th["messages"].append({"dir": "in", "text": f"{hi}/km", "t": 1})
+D._negotiate(load, th, f"{hi}/km", ec)
+ok &= check("the negotiation agent is told the coordinator's stance", "bargain hard" in CALLS[0]["prompt"], "")
+
+# coordinator's winner: only among offers within 2 points of the best margin
+load, _, _ = neg_load()
+load["threads"] = {k: {"name": k.upper(), "ownerKey": k, "deadheadKm": 5, "status": "deal"} for k in ("a", "b", "c")}
+offers = [(14.0, 4.0, "a"), (12.5, 4.8, "b"), (10.0, 5.0, "c")]
+script({"pick": 1, "why": "B is rated higher and the margin gap is small."})
+got, why = D._coordinator_pick(load, offers)
+ok &= check("coordinator may pick a surer owner within 2 points of margin", got == offers[1] and bool(why), str(got))
+ok &= check("an offer 4 points worse is never shown to the coordinator", "C," not in CALLS[0]["prompt"], "")
+script({"pick": 7})
+ok &= check("an out-of-range pick falls back to the rules", D._coordinator_pick(load, offers)[0] is None)
+D.settings["agentMode"] = False
+
 print("\nALL PASS" if ok else "\nSOME FAILED")
 import sys; sys.stdout.flush(); os._exit(0 if ok else 1)

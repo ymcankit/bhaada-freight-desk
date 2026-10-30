@@ -120,6 +120,7 @@ class Desk(AgentsMixin):
         self.brokers = {}                    # WhatsApp number -> intake chat in progress
         self.reliability = {}                # learned penalties, ownerKey -> delta
         self.lane_rates = {}                 # "Origin-Destination|type" -> recent agreed buy ₹/km: lane memory
+        self.lane_book = {}                  # laneId -> how negotiations and loads went: the agents' lane playbook
         self.checkin = {"sentAt": None, "asked": 0}
         self._seq = 1000
         self._seq_lock = threading.Lock()
@@ -128,6 +129,8 @@ class Desk(AgentsMixin):
         self.store_error, self.beat, self.busy_since, self._tick_due = None, time.time(), None, False
         self._load()
         self._apply_settings()
+        if not self.lane_book:
+            self._backfill_book()
         for l in self.loads:                 # a restart between intake and routing: route it now, not escalate in 3 min
             if l["status"] == "routing":
                 self.post("route", lid=l["id"])
@@ -163,6 +166,7 @@ class Desk(AgentsMixin):
         self.loads = s.get("loads", [])
         self.reliability = s.get("reliability", {})
         self.lane_rates = s.get("laneRates", {})
+        self.lane_book = s.get("laneBook", {})
         for o in self.owners.values():                 # names saved before the cleanup ("Rahul I am")
             o["name"] = self.clean_name(o.get("name", ""))
         self.brokers = s.get("brokers", {})
@@ -240,7 +244,7 @@ class Desk(AgentsMixin):
         for attempt in range(5):                       # the server thread may add an owner or a broker chat meanwhile
             try:
                 live_owners = {k: v for k, v in list(self.owners.items()) if not v.get("sandbox")}
-                data = {"settings": self.settings, "owners": live_owners, "reliability": self.reliability, "seq": self._seq, "laneRates": self.lane_rates,
+                data = {"settings": self.settings, "owners": live_owners, "reliability": self.reliability, "seq": self._seq, "laneRates": self.lane_rates, "laneBook": self.lane_book,
                         "pool": [t for t in self.pool if t.get("source") == "checkin"], "loads": self.loads,
                         "brokers": self.brokers, "aiDue": self.ai_due, "checkin": self.checkin}
                 text = json.dumps(data, ensure_ascii=False)
@@ -890,7 +894,7 @@ class Desk(AgentsMixin):
                     + (f", +{m['premiumPct']}% rate" if m.get("premiumPct") else "")
                     + (f". Sourcing a {load['searchType']} ({fit['why']})." if load["searchType"] != f.get("truck_type") or f.get("truck_type_asked")
                        else f". Sourcing a {load['searchType']}."))
-        self._broadcast(load)
+        self._start_sourcing(load)
 
     def _broker_terms(self, load):
         """The broker named the shipper's price and/or their own margin: that, not the desk's default band, decides
@@ -989,7 +993,7 @@ class Desk(AgentsMixin):
         return (datetime.now(IST).date() - said).days > E.AVAIL_DAY.get(t.get("available"), 0)
 
     def _broadcast(self, load):
-        radius = self.settings["maxDeadheadKm"] * (1 if load["rounds"] == 0 else 2)
+        radius = self.settings["maxDeadheadKm"] * (1 if load["rounds"] == 0 and not load.get("wideStart") else 2)
         if self.agent_mode():                           # the sourcing agent picks from a longer ranked list
             n = E.SRC["ownersPerBroadcast"]
             pool = self._candidates(load, radius, n=2 * n)
@@ -1130,6 +1134,8 @@ class Desk(AgentsMixin):
             self._event(load, "Negotiation", f"{th['name']} agreed at ₹{d['rate']:.1f}/km (₹{th['agreedBuy']:,}).")
         elif d["action"] == "counter":
             th["status"], th["counter"] = "countered", d["rate"]
+            if not th.get("firstCounter"):
+                th["firstCounter"] = d["rate"]
             reply = d["reply"] or f"₹{d['rate']}/km ho jayega? Regular load denge 👍"
             self._event(load, "Negotiation", f"Countered {th['name']}: ₹{th['ask'] or '?'}/km → ₹{d['rate']:.1f}/km.")
         elif d["action"] == "decline":
@@ -1216,6 +1222,8 @@ class Desk(AgentsMixin):
         if read["ask"]:
             prev = th["ask"]
             th["ask"] = round(read["ask"], 1)
+            if not th.get("firstAsk"):
+                th["firstAsk"] = th["ask"]
             th["askDrop"] = round(prev - th["ask"], 1) if prev else 0
             if th["askDrop"] > 0:
                 th["drops"] = th.get("drops", 0) + 1
@@ -1223,6 +1231,7 @@ class Desk(AgentsMixin):
             or self._next_move(load, th, ec, read)
         if d.get("by") == "agent":
             th["readBy"] = "AI"
+            th["agentMoves"] = th.get("agentMoves", 0) + 1
             self._event(load, "Negotiation", f"Negotiation agent chose to {d['action']} with {th['name']}"
                         + (f": “{d['reason']}”" if d.get("reason") else "."), by="AI")
         if read["answer"] and d["action"] in ("counter", "ask"):
@@ -1511,11 +1520,17 @@ class Desk(AgentsMixin):
         for m, rel, key in offers[1:]:              # a clearly more reliable owner wins a near tie
             if best[0] - m < 2 and rel - best[1] >= 0.3:   # a no-show costs far more than 2% of margin
                 best = (m, rel, key)
-        key = best[2]
+        pick, pick_why = self._coordinator_pick(load, offers) if self.agent_mode() and len(offers) > 1 else (None, "")
+        key = (pick or best)[2]
         th = load["threads"][key]
         load["winner"], load["quote"] = key, th["quote"]
-        why = (f"Best margin above the floor from {len(offers)} offer(s)" if best == offers[0]
+        why = (f"Coordinator chose {th['name']}: {pick_why}" if pick and pick_why else
+               f"Best margin above the floor from {len(offers)} offer(s)" if (pick or best) == offers[0]
                else f"{th['name']} is rated {th['reliability']}/5, worth a margin gap under 2 points")
+        if pick:
+            self._event(load, "Coordinator", f"(AI) winner: {th['name']} at {pick[0]}% margin." + (f" Why: {pick_why}" if pick_why else ""),
+                        by="AI", moves={k: f"{load['threads'][k]['name']}: {m}% margin, rated {r}/5" for m, r, k in offers},
+                        chosen=key, why=pick_why)
         load["reason"] = why
         for k, other in load["threads"].items():
             if k != key and other["status"] == "deal":
@@ -1532,6 +1547,7 @@ class Desk(AgentsMixin):
             self._ask_dispatch(load, th)
         else:
             load["status"], load["quoteAt"] = "needs_approval", now()
+            self._learn(load, "quoted")
             if load.get("aiBroker"):                     # the AI broker approves its own demo load after a short think
                 load["autoApproveAt"] = now() + 8        # on the clock, so it survives a restart
             self._event(load, "Pricing", f"Buy ₹{q['buy_total']:,} → sell ₹{q['sell_total']:,}, margin {q['margin_pct']}% "
@@ -1595,6 +1611,7 @@ class Desk(AgentsMixin):
                           any(t["status"] == s for t in ths)) or "nobody asked yet"
         asks = sorted(t["ask"] for t in ths if t.get("ask"))
         choice, why, by = None, "", "rules"
+        book = self._playbook(load, load.get("searchType")) if self.agent_mode() else []
         if len(moves) > 1 and E.llm_ready():
             try:
                 f, lane = load["load"], load["lane"]
@@ -1605,6 +1622,7 @@ class Desk(AgentsMixin):
                     f"truck {load['searchType']}, pickup {f.get('pickup_when') or 'kal'}, phase "
                     f"{'RE-PLAN: an owner backed out and the shipper already has the price' if load['phase'] == 'replan' else 'first quote'}.\n"
                     f"Owners: {tally}. Their asks (₹/km): {asks or 'none'}. Moves tried so far: {load.get('tried', []) or 'none'}.\n"
+                    + (f"What this desk learned on this lane: {'; '.join(book)}.\n" if book else "") +
                     "Possible moves:\n" + "\n".join(f"- {k}: {opts[k]}" for k in moves) + "\n"
                     "Guidance: owners who stayed silent are a supply problem: widen or try a bigger truck before anything else. "
                     "An owner whose ask is within ~12% of the limit: final_offer. Asks far above the limit with nothing left to "
@@ -1622,8 +1640,8 @@ class Desk(AgentsMixin):
             choice = next(m for m in ("widen", "final_offer", "bigger_truck", "ask_broker", "escalate") if m in moves)
             why = "fixed order: widen, final offer, bigger truck, ask the broker, hand over"
         load.setdefault("tried", []).append(choice)
-        self._event(load, "Strategist", f"({by}) {choice.replace('_', ' ')}: {opts[choice]}." + (f" Why: {why}" if why else ""),
-                    moves={k: opts[k] for k in moves}, chosen=choice, why=why)   # for the console's decision panel
+        self._event(load, "Coordinator" if self.agent_mode() else "Strategist", f"({by}) {choice.replace('_', ' ')}: {opts[choice]}." + (f" Why: {why}" if why else ""),
+                    moves={k: opts[k] for k in moves}, chosen=choice, why=why, by="AI" if by == "AI" else "Code")   # for the console's decision panel
         getattr(self, "_move_" + choice)(load, opts)
 
     def _move_widen(self, load, opts):
@@ -1735,6 +1753,7 @@ class Desk(AgentsMixin):
         replan = load["phase"] == "replan"
         load["status"], load["reason"] = "escalated", reason
         load["closedAt"] = now()
+        self._learn(load, "escalated")
         self._event(load, "Orchestrator", f"Escalated to you: {reason}")
         if replan:                                     # the shipper already has this price: this one is urgent
             lane = load.get("lane") or {}

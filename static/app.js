@@ -269,7 +269,9 @@ function log(l) {
 }
 
 // The strategist's decisions: every move the code offered, the one chosen, and why.
-const MOVE = { widen: "Widen the search", bigger_truck: "Bigger truck", final_offer: "Final offer", ask_broker: "Ask the broker", escalate: "Hand over" };
+const MOVE = { widen: "Widen the search", bigger_truck: "Bigger truck", final_offer: "Final offer", ask_broker: "Ask the broker", escalate: "Hand over",
+  source_nearby: "Source nearby", source_wide: "Search wide from the start", regulars_first: "Lane regulars first" };
+const DECIDER = (e) => e.actor === "Strategist" || e.actor === "Coordinator";
 function stratOf(e) {
   if (e.chosen) return { chosen: e.chosen, moves: e.moves, why: e.why };
   const m = /^\((?:AI|rules)\) ([^:]+): (.*?)(?:\. Why: (.*))?$/.exec(e.text) || [];
@@ -277,16 +279,17 @@ function stratOf(e) {
   return { chosen, moves: chosen ? { [chosen]: m[2] } : null, why: m[3] || "" };
 }
 function strategist(l) {
-  const evs = l.events.filter((e) => e.actor === "Strategist");
+  const evs = l.events.filter(DECIDER);
   if (!evs.length) return null;
+  const coord = evs.some((e) => e.actor === "Coordinator");
   return el("div", { class: "strat" },
-    el("div", { class: "log-head" }, el("h3", { text: "Strategist" }), el("span", { class: "muted", text: `${evs.length} decision${evs.length === 1 ? "" : "s"}` })),
+    el("div", { class: "log-head" }, el("h3", { text: coord ? "Coordinator agent" : "Strategist" }), el("span", { class: "muted", text: `${evs.length} decision${evs.length === 1 ? "" : "s"}` })),
     el("ol", {}, ...evs.map((e) => {
       const s = stratOf(e);
       return el("li", {},
-        el("div", { class: "strat-head" }, el("time", { text: clock(e.t) }), el("b", { text: MOVE[s.chosen] || s.chosen || "Decision" }), badge(byOf(e))),
+        el("div", { class: "strat-head" }, el("time", { text: clock(e.t) }), el("b", { text: MOVE[s.chosen] || (s.moves && s.moves[s.chosen] ? s.moves[s.chosen].split(":")[0] : "") || "Decision" }), badge(byOf(e))),
         s.moves ? el("ul", { class: "moves", "aria-label": "Moves considered" }, ...Object.entries(s.moves).map(([k, v]) =>
-          el("li", { class: k === s.chosen ? "chosen" : null }, el("span", { class: "mv", text: (k === s.chosen ? "Chosen · " : "") + (MOVE[k] || k) }),
+          el("li", { class: k === s.chosen ? "chosen" : null }, el("span", { class: "mv", text: (k === s.chosen ? "Chosen · " : "") + (MOVE[k] || String(v).split(":")[0]) }),
             el("span", { text: v })))) : el("p", { class: "muted", text: e.text }),
         s.why ? el("p", { class: "why", text: `Why: ${s.why}` }) : null);
     })));
@@ -364,8 +367,8 @@ function renderDetail(l) {
     parts.push(card);
   } else if (l.status === "needs_call") {
     const c = l.brokerCall || {}, th = l.threads[c.owner] || {};
-    parts.push(el("div", { class: "qcard" }, el("h2", { text: "The strategist needs your call" }),
-      el("p", { class: "flag", text: (l.events.filter((e) => e.actor === "Strategist").pop() || {}).text || "" }),
+    parts.push(el("div", { class: "qcard" }, el("h2", { text: "The desk needs your call" }),
+      el("p", { class: "flag", text: (l.events.filter(DECIDER).pop() || {}).text || "" }),
       el("p", { class: "muted", text: `${th.name || "Owner"} asks ₹${c.ask}/km.` }),
       el("div", { class: "actions" },
         el("button", { class: "btn primary", onclick: () => act(l.id, "call_yes"), text: l.phase === "replan" ? "Book below floor" : "Quote at that rate" }),

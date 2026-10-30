@@ -9,11 +9,18 @@ it happens, and today's rules run whenever a model is down or proposes something
   down from our last offer, no step up unless the owner came down, ₹500 lumps, the round limit.
 - Sourcing agent (agentMode): picks which owners to message from a longer ranked list, using each owner's record
   with this desk (offers, replies, deals, back-outs). Code checks every pick is a real candidate.
+- Coordinator agent (agentMode): plans each load before the first message (search near or wide, the lane's regular
+  owners first, how hard to bargain), picks the recovery move when a load is stuck, and picks the winner among
+  offers that clear the floor. It only chooses among tools code offers, and code runs them.
+- Lane learning (always recorded, used in agentMode): every quoted or handed-over load leaves a record per lane of
+  how each negotiation went (opening ask, first counter, close, rounds) and what the desk tried. The agents read the
+  lane's playbook before they decide, so the next load on a lane starts from what worked last time.
 Pricing is not an agent: it is a calculator every agent uses, because money must be exact and explainable.
 """
 import re
 import threading
 import time
+from collections import Counter
 
 import engine as E
 
@@ -31,6 +38,17 @@ def _clean(text, allowed, limit=400):
         return ""
     ok = {a.replace(",", "") for a in allowed}
     return text if _nums(text) <= ok else ""
+
+
+# How hard the coordinator tells the negotiation agent to bargain on a load (the limits are the same for all three)
+STANCES = {"firm": "bargain hard: open low and concede slowly; owners on this lane usually come down a long way.",
+           "standard": "open near our target and meet owners part-way when they come down.",
+           "quick": "close fast: pickup is soon or trucks are scarce, so accept a fair ask inside the limit sooner."}
+
+
+def _med(xs):
+    xs = sorted(xs)
+    return xs[len(xs) // 2]
 
 
 # Promises the broker never made (when payment comes, more loads later): the desk can't hold an owner to them
@@ -136,7 +154,8 @@ class AgentsMixin:
                 "last": round(th["counter"] * km) if th.get("counter") else None,
                 "prev_ask": round(th["ask"] * km) if th.get("ask") else None,
                 "round": th["rounds"], "max_rounds": self.settings["maxRounds"],
-                "agreed_others": sum(1 for x in load["threads"].values() if x is not th and x["status"] == "deal")}
+                "agreed_others": sum(1 for x in load["threads"].values() if x is not th and x["status"] == "deal"),
+                "playbook": self._playbook(load, th.get("type")), "stance": (load.get("plan") or {}).get("stance")}
 
     @staticmethod
     def _agent_prompt(ctx):
@@ -154,7 +173,11 @@ class AgentsMixin:
             "- final_offer: only in the last round; one last amount, not above the most we may pay.\n"
             "- decline: their ask stays far above the most we may pay after 2 or more rounds.\n"
             "- ask: they haven't said a rate yet.\n"
-            "reason: one short, respectful Hinglish line the owner will read, from the lane's going rate, the distance "
+            + (f"What this desk learned on this lane from its own past deals: {'; '.join(ctx['playbook'])}. Pitch your "
+               "counters where owners here actually settle, not at the bottom of the range and not above it.\n"
+               if ctx.get("playbook") else "")
+            + (f"The coordinator's stance for this load: {STANCES[ctx['stance']]}\n" if ctx.get("stance") in STANCES else "")
+            + "reason: one short, respectful Hinglish line the owner will read, from the lane's going rate, the distance "
             "or the truck's costs only. Promise nothing the broker hasn't said: not when payment comes, not more "
             "loads later. Put no numbers in it; the desk adds the amount.\n"
             'Add to the JSON: "move":{"action":"accept|counter|final_offer|decline|ask","amount_total":null,"reason":""}')
@@ -246,14 +269,15 @@ class AgentsMixin:
         """The sourcing agent chooses whom to message from the ranked candidates; code keeps only real candidates."""
         if len(cands) <= n:
             return cands, ""
-        rows = []
+        rows, regs = [], self._regulars(load)
         for i, c in enumerate(cands):
             o = self.owners.get(c["ownerKey"]) or {}
             r = self._owner_record(c["ownerKey"])
             rows.append(f"{i}: {o.get('name')}, {c['type']} in {c.get('city')}, {c.get('deadheadKm', '?')} km from pickup, "
                         f"rated {self.reliability_of(c['ownerKey'])}/5, last 30 days: {r['offers']} offers, {r['replied']} "
                         f"replied, {r['deals']} deals, {r['backouts']} backed out"
-                        + (f", said ₹{c['ratePerKm']}/km this morning" if c.get("ratePerKm") else ""))
+                        + (f", said ₹{c['ratePerKm']}/km this morning" if c.get("ratePerKm") else "")
+                        + (f", ran this lane for us {regs[c['ownerKey']]} time(s)" if regs.get(c["ownerKey"]) else ""))
         lane, f = load["lane"], load["load"]
         try:
             out = self._llm_json(
@@ -262,7 +286,8 @@ class AgentsMixin:
                 f"{load['searchType']}, loading {f.get('pickup_when') or 'kal'}.\n"
                 "Candidates (index: details):\n" + "\n".join(rows) + "\n"
                 f"Pick up to {n}. Prefer owners who reply and complete trips, are close to the pickup, and gave a rate this "
-                "morning; skip owners who keep ignoring offers or backed out recently, unless there is no one better.\n"
+                "morning or already ran this lane for us; skip owners who keep ignoring offers or backed out recently, unless there is no one better.\n"
+                "In why, describe the owners you chose; don't mention index numbers.\n"
                 'Return ONLY JSON {"pick":[indices in order],"why":"one short sentence"}', tier="cheap")
             picks = []
             for x in out.get("pick") or []:
@@ -278,3 +303,192 @@ class AgentsMixin:
         except Exception as e:
             print("sourcing agent failed, using the ranked order:", repr(e)[:120])
         return cands[:n], ""
+
+    # ---------------- lane learning: what worked on this lane, from the desk's own deals ----------------
+    @staticmethod
+    def _book_key(load):
+        """Demo owners teach demo loads and real owners teach real loads: one never skews the other."""
+        demo = load.get("mode") == "sandbox" or load.get("demoOnly")
+        return load["lane"]["laneId"] + ("|demo" if demo else "")
+
+    def _first_ask(self, load, th):
+        if th.get("firstAsk"):
+            return th["firstAsk"]
+        for m in th.get("messages", []):                # loads from before firstAsk was kept
+            if m.get("dir") == "in":
+                r = self._owner_rate(m.get("text", ""), load["lane"]["distanceKm"])
+                if r:
+                    return r
+        return th.get("ask")
+
+    def _learn(self, load, outcome):
+        """Once per load, at its first quote or when it's handed over: how each negotiation went and what the desk
+        tried, kept per lane (the last 40 negotiations, 20 loads)."""
+        lane = load.get("lane") or {}
+        if load.get("learned") or not lane.get("laneId") or load.get("phase") == "replan":
+            return
+        load["learned"] = True
+        t = load.get("quoteAt") or load.get("closedAt") or load.get("createdAt") or time.time()
+        book = self.lane_book.setdefault(self._book_key(load), {"negs": [], "loads": []})
+        replied = 0
+        for th in load["threads"].values():
+            heard = any(m.get("dir") == "in" for m in th.get("messages", []))
+            replied += heard
+            first = self._first_ask(load, th)
+            if not first or not th.get("sell"):
+                continue
+            target = self._econ(load, th)["target"]
+            out = "deal" if th.get("agreedBuy") else "declined" if th["status"] == "declined" else "open"
+            book["negs"].append({"t": t, "type": th["type"], "out": out, "open": round(first / target, 3),
+                                 "close": round(th["agreedBuy"] / lane["distanceKm"] / first, 3) if th.get("agreedBuy") else None,
+                                 "c1": round(th["firstCounter"] / first, 3) if th.get("firstCounter") else None,
+                                 "rounds": th.get("rounds", 0), "by": "agent" if th.get("agentMoves") else "rules"})
+        book["loads"].append({"t": t, "outcome": outcome, "asked": len(load["threads"]), "replied": replied,
+                              "deals": sum(1 for x in load["threads"].values() if x.get("agreedBuy")),
+                              "wide": load.get("rounds", 1) > 1 or bool(load.get("wideStart")),
+                              "tried": list(load.get("tried", [])), "plan": dict(load.get("plan") or {})})
+        del book["negs"][:-40]
+        del book["loads"][:-20]
+
+    def _backfill_book(self):
+        """A desk that starts with past loads but no playbook learns from them once."""
+        for load in self.loads:
+            try:
+                if load.get("quote") or load.get("quoteAt"):
+                    self._learn(load, "quoted")
+                elif load["status"] == "escalated":
+                    self._learn(load, "escalated")
+            except Exception as e:
+                print("lane learning skipped a load:", load.get("id"), repr(e)[:80])
+
+    def _playbook(self, load, tt=None):
+        """What the desk learned on this lane in the last 60 days, as plain lines for the agents ([] if too little)."""
+        if not (load.get("lane") or {}).get("laneId"):
+            return []
+        book = self.lane_book.get(self._book_key(load)) or {}
+        since = time.time() - 60 * 86400
+        negs = [r for r in book.get("negs", []) if r["t"] >= since and (not tt or r["type"] == tt)]
+        loads = [r for r in book.get("loads", []) if r["t"] >= since]
+        pct = lambda x: round(abs(x) * 100)
+        lines = []
+        if len(negs) >= 3:
+            o = _med([r["open"] for r in negs]) - 1
+            lines.append(f"owners' opening ask was a median {pct(o)}% {'above' if o >= 0 else 'below'} our target "
+                         f"({len(negs)} owners)" + (", already close to it" if o <= 0.03 else ""))
+            deals = [r for r in negs if r["out"] == "deal" and r.get("close")]
+            if deals:
+                give = 1 - _med([r["close"] for r in deals])
+                lines.append(f"deals closed a median {pct(give)}% below the owner's opening ask, in a median "
+                             f"{_med([r['rounds'] for r in deals])} round(s) ({len(deals)} deals)"
+                             + (": owners here mostly settle at their first ask, so there is little room to bargain" if give < 0.03
+                                else ": owners here come down a long way when pushed" if give >= 0.08 else ""))
+            near = [r for r in negs if r.get("c1") and r["c1"] >= 0.93]
+            deep = [r for r in negs if r.get("c1") and r["c1"] < 0.93]
+            if near and deep:
+                rate = lambda rs: f"{sum(r['out'] == 'deal' for r in rs)} of {len(rs)}"
+                lines.append(f"first counters within 7% of the ask closed {rate(near)}; deeper first counters closed {rate(deep)}")
+            lines.append(f"{sum(r['out'] == 'declined' for r in negs)} of {len(negs)} negotiations ended with no deal")
+        if len(loads) >= 2:
+            asked = sum(r["asked"] for r in loads) or 1
+            lines.append(f"over the last {len(loads)} loads {pct(sum(r['replied'] for r in loads) / asked)}% of owners messaged "
+                         f"replied, {sum(r['wide'] for r in loads)} needed a wider search, "
+                         f"{sum(r['outcome'] == 'quoted' for r in loads)} reached a quote")
+            tried = Counter(m for r in loads for m in r["tried"])
+            worked = Counter(m for r in loads if r["outcome"] == "quoted" for m in r["tried"])
+            if tried:
+                lines.append("recovery moves: " + ", ".join(f"{m.replace('_', ' ')} led to a quote {worked[m]} of {n} times"
+                                                            for m, n in tried.most_common()))
+        return lines
+
+    def _regulars(self, load):
+        """Owners who already ran this lane for us, and how many times (from lane memory)."""
+        lid, out = load["lane"]["laneId"], {}
+        for k, rows in list(self.lane_rates.items()):
+            if k.partition("|")[0] == lid:
+                for r in rows:
+                    if len(r) > 2:
+                        out[r[2]] = out.get(r[2], 0) + 1
+        return out
+
+    # ---------------- coordinator agent ----------------
+    def _start_sourcing(self, load):
+        """The coordinator plans the load before the first message goes out; code checks the plan and runs it."""
+        if self.agent_mode():
+            try:
+                self._coordinator_plan(load)
+            except Exception as e:
+                print("coordinator plan failed, sourcing as usual:", repr(e)[:120])
+        self._broadcast(load)
+
+    def _coordinator_plan(self, load):
+        lane, f, tt = load["lane"], load["load"], load["searchType"]
+        n, radius = E.SRC["ownersPerBroadcast"], self.settings["maxDeadheadKm"]
+        near = self._candidates(load, radius, n=50)
+        tools = {"source_nearby": f"message the best {n} owners within {radius} km of {lane['origin']} ({len(near)} available)"}
+        if load.get("widenLeft", 0) > 0:
+            wide = self._candidates(load, radius * 2, n=50)
+            if len(wide) > len(near):
+                tools["source_wide"] = (f"start with a {radius * 2} km search ({len(wide)} owners) now instead of keeping "
+                                        "it for later")
+        regs = self._regulars(load)
+        known = [c for c in near if regs.get(c["ownerKey"])]
+        if known:
+            names = ", ".join((self.owners.get(c["ownerKey"]) or {}).get("name", "?") for c in known[:4])
+            tools["regulars_first"] = f"message first the {len(known)} nearby owner(s) who already ran this lane for us ({names})"
+        sell = self._sell(load, tt)
+        mb, c = E.band(lane), E.lane_cost(lane, tt)
+        cap, target = round(sell * (1 - mb["floorPct"] / 100)), round(sell * (1 - mb["targetPct"] / 100))
+        book = self._playbook(load, tt)
+        out = self._llm_json(
+            "You are Bhaada's COORDINATOR AGENT. Plan how the desk sources and negotiates this load before any owner is "
+            "messaged. Pick ONE tool and ONE stance.\n"
+            f"Load: {lane['origin']} → {lane['destination']}, {lane['distanceKm']} km, {f.get('weight_ton')} T, {tt}, "
+            f"loading {f.get('pickup_when') or 'kal'}. We aim to pay owners about ₹{target:,} and may pay at most ₹{cap:,}; "
+            f"the lane's usual owner rate is about ₹{round(c['owner_market'], -2):,.0f} and the truck costs about "
+            f"₹{c['owner_cost']:,} to run.\n"
+            "What this desk learned on this lane: " + ("; ".join(book) if book else "no history yet") + ".\n"
+            "Tools:\n" + "\n".join(f"- {k}: {v}" for k, v in tools.items()) + "\n"
+            "Stances (the price limits are the same for all):\n" + "\n".join(f"- {k}: {v}" for k, v in STANCES.items()) + "\n"
+            "Guidance: few owners nearby or a lane where many loads needed a wider search: source_wide. Regular owners "
+            "who closed here before are the likeliest to say yes: regulars_first. firm only when the history says owners "
+            "come down a long way; little room to bargain: standard; loading today or a thin lane: quick. With no "
+            "history, source_nearby and standard. Base your why only on the facts above.\n"
+            'Return ONLY JSON {"tool":"<tool>","stance":"firm|standard|quick","why":"one short sentence"}', tier="cheap")
+        tool = out.get("tool") if out.get("tool") in tools else "source_nearby"
+        stance = out.get("stance") if out.get("stance") in STANCES else "standard"
+        why = re.sub(r"\s+", " ", str(out.get("why") or "")).strip()[:200]
+        load["plan"] = {"tool": tool, "stance": stance}
+        if tool == "source_wide":
+            load["widenLeft"] -= 1
+            load["wideStart"] = True
+        elif tool == "regulars_first":
+            load["prefer"] = {c["ownerKey"]: None for c in known}
+        if book:
+            self._event(load, "Learning", f"Lane playbook for {lane['origin']} → {lane['destination']}: " + "; ".join(book) + ".")
+        self._event(load, "Coordinator", f"(AI) plan: {tool.replace('_', ' ')}, {stance} stance." + (f" Why: {why}" if why else ""),
+                    by="AI", moves=tools, chosen=tool, why=why)
+
+    def _coordinator_pick(self, load, offers):
+        """Among offers that clear the floor, the coordinator may prefer a surer owner over a slightly better margin.
+        offers: (margin %, rating, key), best margin first. Returns (offer, why) or (None, "")."""
+        best = offers[0][0]
+        ok = [o for o in offers if best - o[0] <= 2]    # never give up more than 2 points of margin
+        if len(ok) < 2:
+            return None, ""
+        regs, rows = self._regulars(load), []
+        for i, (m, rel, key) in enumerate(ok):
+            th, r = load["threads"][key], self._owner_record(key)
+            rows.append(f"{i}: {th['name']}, margin {m}%, rated {rel}/5, {th.get('deadheadKm', '?')} km from pickup, last 30 "
+                        f"days {r['deals']} deals and {r['backouts']} back-outs, ran this lane for us {regs.get(key, 0)} time(s)")
+        try:
+            out = self._llm_json(
+                "You are Bhaada's COORDINATOR AGENT. These owners all agreed a rate that clears the broker's margin. Choose "
+                "who gets the load; the others stay as backups. A no-show costs far more than a point of margin.\n"
+                + "\n".join(rows) + '\nReturn ONLY JSON {"pick":<index>,"why":"one short sentence"}', tier="cheap")
+            i = int(out.get("pick"))
+        except Exception as e:
+            print("coordinator pick failed, using the rules:", repr(e)[:120])
+            return None, ""
+        if not 0 <= i < len(ok):
+            return None, ""
+        return ok[i], re.sub(r"\s+", " ", str(out.get("why") or "")).strip()[:200]

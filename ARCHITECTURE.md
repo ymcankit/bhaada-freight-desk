@@ -20,7 +20,8 @@ console shows that trace.
 | Recovery | `Desk._strategize` | When nothing clears the floor, a model picks one move from the list code builds (widen, bigger truck, final offer, ask the broker, hand over); code checks and runs it; a fixed order is the fallback |
 | After the quote | `Desk._on_approve` … `_take_dispatch` | Broker approves; owner holds; broker relays the shipper's yes or no; owner sends vehicle and driver; dispatch card, LR (bilty) draft PDF, e-way bill and GST lines |
 | Back-outs | `Desk._replan` | Re-confirms earlier owners, then re-sources, at the shipper's fixed price |
-| Agents | `agents.py` `AgentsMixin` | Booking agent answers owners' questions mid-deal from the load's facts; with `agentMode` on, a Sourcing agent picks whom to message from a ranked list of twice the usual size, and a Negotiation agent proposes each move (ask, counter, final offer, accept, decline) in the same model call that reads the reply |
+| Agents | `agents.py` `AgentsMixin` | Booking agent answers owners' questions mid-deal from the load's facts; with `agentMode` on, a Sourcing agent picks whom to message from a ranked list of twice the usual size, and a Negotiation agent proposes each move (ask, counter, final offer, accept, decline) in the same model call that reads the reply; a Coordinator agent plans each load before the first message (search nearby, search wide from the start, or the lane's regular owners first; how hard to bargain), picks the recovery move when a load is stuck, and picks the winner among offers within 2 margin points of the best |
+| Lane learning | `agents.py` `_learn`, `_playbook` | Every quoted or handed-over load records, per lane, how each negotiation went (owner's opening ask against our target, first counter, close, rounds) and what the desk tried. The agents read the lane's playbook before deciding, so the next load on a lane starts from what worked. Demo loads learn only from demo loads |
 | Memory | `live.py` save/load | Upstash Redis (compressed blob, coalesced writes), local file fallback |
 
 ## What the models do, and what they can't do
@@ -28,7 +29,8 @@ console shows that trace.
 - **Read**: intake, broker questions, owner check-ins and chat, owner replies in a negotiation, PDFs and photos.
 - **Choose**: the strategist's recovery move, only from the moves code offers. With `agentMode` on (console
   checkbox on Pricing defaults, or env `AGENT_MODE=1`; off by default), also whom to message and the next negotiation
-  move. Pricing stays a code tool the agents call, never something they set.
+  move, the plan for each load and the winner. Pricing stays a code tool the agents call, never something they set.
+  The lane playbook is worked out by code from the desk's own deals; the agents read it, they don't write it.
 - **Checked**: `_agent_move` clamps every agent amount to the broker's ceiling, holds the offer when the owner didn't
   move, steps up by at most the owner's own drop, refuses a first-round accept above target or a first-round decline,
   and drops any reason that quotes a number. Anything it rejects goes to the rules (`_next_move`). The Booking agent's
