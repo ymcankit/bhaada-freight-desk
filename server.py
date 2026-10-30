@@ -159,8 +159,9 @@ def tg_send_document(to, attachment, caption=""):
 CONVO = {}                                            # address -> the last few lines both ways, so replies follow the chat
 
 def remember(who, role, text):
-    log = CONVO.setdefault(who, collections.deque(maxlen=12))
+    log = CONVO.pop(who, None) or collections.deque(maxlen=12)
     log.append(f"{role}: {str(text)[:300]}")
+    CONVO[who] = log                                   # most recent last: the saved state keeps the latest people
 
 def send(to, text, buttons=None, attachment=None):
     """One sender for the desk: picks the channel from the address. attachment: (file name, PDF bytes)."""
@@ -211,6 +212,8 @@ threading.Thread(target=outbox, daemon=True).start()
 desk = live.Desk(sender=desk_send if (WA_READY or TG_READY) else None)
 if cfg("AGENT_MODE").strip().lower() in ("1", "true", "yes", "on"):   # AI agents choose moves; code checks each one
     desk.settings["agentMode"] = True
+for _who, _lines in (getattr(desk, "saved_convo", None) or {}).items():   # a restart keeps the chat's thread
+    CONVO[_who] = collections.deque(_lines[-12:], maxlen=12)
 desk.convo = CONVO
 if TG_READY:
     threading.Thread(target=tg_setup, daemon=True).start()

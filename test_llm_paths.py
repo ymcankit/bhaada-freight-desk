@@ -589,5 +589,31 @@ D.loads.remove(load)
 for k in ("tb1", "tb2"):
     D.owners.pop(k, None)
 
+# memory: the owner's own past deal on this lane reaches the negotiator, and only that amount may be quoted
+past = {"id": "BH-PAST1", "createdAt": live.now() - 3600, "bookedAt": live.now() - 3000, "status": "booked", "winner": "k1",
+        "lane": dict(LANE), "load": {}, "events": [], "threads": {"k1": {"ownerKey": "k1", "agreedBuy": 21500, "status": "held"}}}
+D.loads.append(past)
+load, th, ec = neg_load()
+lines, amounts = D._owner_history(load, th)
+ok &= check("the desk remembers this owner's last trip on the lane", any("last trip" in x and "₹21,500" in x for x in lines) and "21500" in amounts, str(lines))
+D.settings["agentMode"] = True
+d, th, ec = owner_says(f"{hi}/km", mv("quote", hi, action="counter", amount_total=round(EC["target"] * 280),
+                      reason="Pichli baar aapne isi route pe ₹21,500 mein gaadi di thi."))
+ok &= check("the negotiator may remind an owner of their own past rate", "₹21,500 mein gaadi di thi" in d["reply"]
+            and "history with us" in CALLS[0]["prompt"], d["reply"][:140])
+d, th, ec = owner_says(f"{hi}/km", mv("quote", hi, action="counter", amount_total=round(EC["target"] * 280),
+                      reason="Pichli baar aapne ₹19,000 mein di thi."))
+ok &= check("an amount that isn't their own past deal is dropped", "19,000" not in d["reply"], d["reply"][:120])
+D.settings["agentMode"] = False
+d, th, ec = owner_says(f"{hi}/km", read("quote", hi))
+ok &= check("the rules' first counter also cites their own last rate", "Pichli baar aapne isi route pe ₹21,500" in d["reply"], d["reply"][:200])
+D.loads.remove(past)
+# chat memory is saved with the desk, newest people kept
+import collections as _c
+D.convo = {"tg:old": _c.deque(["Owner: hi"], maxlen=12), "tg:new": _c.deque(["Owner: 32 MXL free", "Bhaada: noted"], maxlen=12)}
+snap = D._convo_snapshot()
+ok &= check("recent chat lines are part of the saved state", snap.get("tg:new") == ["Owner: 32 MXL free", "Bhaada: noted"] and "tg:old" in snap)
+D.convo = server.CONVO
+
 print("\nALL PASS" if ok else "\nSOME FAILED")
 import sys; sys.stdout.flush(); os._exit(0 if ok else 1)

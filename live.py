@@ -173,6 +173,16 @@ class Desk(AgentsMixin):
         self.ai_due = s.get("aiDue", {})
         self._seq = s.get("seq", self._seq)
         self.checkin = s.get("checkin") or self.checkin     # so a restart doesn't ask owners twice in a day
+        self.saved_convo = s.get("convo") or {}             # the last few chat lines per person; server.py restores them
+
+    CONVO_KEEP = 300                                   # people whose recent chat is kept across restarts
+
+    def _convo_snapshot(self):
+        """The recent chat lines per person (server.CONVO), newest people last; a RuntimeError means a server thread
+        wrote meanwhile and save() tries again."""
+        convo = getattr(self, "convo", None) or {}
+        keys = list(convo.keys())[-self.CONVO_KEEP:]
+        return {k: list(convo[k]) for k in keys if k in convo}
 
     def _merge_remote(self, s):
         """Upstash was down at boot: fold what it holds into what this process learned since."""
@@ -246,7 +256,7 @@ class Desk(AgentsMixin):
                 live_owners = {k: v for k, v in list(self.owners.items()) if not v.get("sandbox")}
                 data = {"settings": self.settings, "owners": live_owners, "reliability": self.reliability, "seq": self._seq, "laneRates": self.lane_rates, "laneBook": self.lane_book,
                         "pool": [t for t in self.pool if t.get("source") == "checkin"], "loads": self.loads,
-                        "brokers": self.brokers, "aiDue": self.ai_due, "checkin": self.checkin}
+                        "brokers": self.brokers, "aiDue": self.ai_due, "checkin": self.checkin, "convo": self._convo_snapshot()}
                 text = json.dumps(data, ensure_ascii=False)
                 break
             except RuntimeError:
@@ -1313,6 +1323,9 @@ class Desk(AgentsMixin):
             why += f" Is lane pe haal mein owners ne ~₹{round(E.lane_memory(lane, th['type']) * km, -2):,.0f} liya hai."
         if th.get("deadheadKm"):
             why += f" Gaadi pickup se sirf {th['deadheadKm']} km door hai."
+        last = [x for x in self._owner_history(load, th)[0] if x.startswith("their last trip")]
+        if last:                                        # their own past rate on this route: a fact, not a promise
+            why += f" Pichli baar aapne isi route pe {last[0].split(' was ')[1].replace(' total', '')} mein gaadi di thi."
         return why
 
     def _best_rival(self, load, th):

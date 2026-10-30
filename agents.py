@@ -58,9 +58,9 @@ PROMISE = re.compile(r"payment|paisa|paise|pay\b|advance|bhugtan|regular|aage bh
 INSIDE = re.compile(r"margin|munafa|munaafa|commission|ceiling|limit|shipper|broker ka|hamara fayda|profit", re.I)
 
 
-def _reason(mv):
-    """The agent's line to the owner: no numbers (the desk adds the amount) and no promises."""
-    r = _clean((mv or {}).get("reason"), set(), limit=220)
+def _reason(mv, allowed=()):
+    """The agent's line to the owner: no numbers except this owner's own past amounts, and no promises."""
+    r = _clean((mv or {}).get("reason"), set(allowed), limit=220)
     return "" if PROMISE.search(r) or INSIDE.search(r) else r
 
 
@@ -158,7 +158,8 @@ class AgentsMixin:
                 "prev_ask": round(th["ask"] * km) if th.get("ask") else None,
                 "round": th["rounds"], "max_rounds": self.settings["maxRounds"],
                 "agreed_others": sum(1 for x in load["threads"].values() if x is not th and x["status"] == "deal"),
-                "playbook": self._playbook(load, th.get("type")), "stance": (load.get("plan") or {}).get("stance")}
+                "playbook": self._playbook(load, th.get("type")), "stance": (load.get("plan") or {}).get("stance"),
+                "history": self._owner_history(load, th)[0]}
 
     @staticmethod
     def _agent_prompt(ctx):
@@ -180,6 +181,9 @@ class AgentsMixin:
                "counters where owners here actually settle, not at the bottom of the range and not above it.\n"
                if ctx.get("playbook") else "")
             + (f"The coordinator's stance for this load: {STANCES[ctx['stance']]}\n" if ctx.get("stance") in STANCES else "")
+            + (f"This owner's own history with us on this lane: {'; '.join(ctx['history'])}. You may remind them of their "
+               "own past rate in the reason (e.g. \"Pichli baar aapne isi route pe ₹21,500 mein gaadi di thi\"), using only "
+               "these exact amounts and no dates.\n" if ctx.get("history") else "")
             + "reason: one short, respectful Hinglish line the owner will read, from the lane's going rate, the distance "
             "or the truck's costs only. Promise nothing the broker hasn't said: not when payment comes, not more "
             "loads later. Never mention our margin, our limit or what the shipper pays. Put no numbers in it; the "
@@ -198,6 +202,7 @@ class AgentsMixin:
         rival = self._best_rival(load, th)
         cap = min(ec["ceiling"], rival) if rival else ec["ceiling"]
         moved = th.get("askDrop", 0) > 0
+        mine = self._owner_history(load, th)[1]          # the only rupee amounts a reason may quote: this owner's own deals
         done = lambda r: {"action": "accept", "rate": r, "by": "agent",
                           "reply": f"{self._money(round(r * km), km)} note kar liya ✅ Abhi pakka nahi hai: broker se confirm karke turant batate hain."}
         if act == "accept":
@@ -229,7 +234,7 @@ class AgentsMixin:
                 total = self._lump(r, km, cap, floor=th["counter"] or 0)
             if ask and total / km >= ask:
                 return done(ask) if ask <= cap else None
-            reason = _reason(mv)
+            reason = _reason(mv, mine)
             if act == "final_offer":
                 th["finalOffer"] = True
             held = bool(th["counter"]) and total / km <= th["counter"] + 0.01
@@ -237,16 +242,19 @@ class AgentsMixin:
             body = (f"Aakhri offer {money}, isse upar sach mein nahi ho payega." if act == "final_offer"
                     else f"Hamara offer wahi hai: {money}. Aap thoda kam karein to baat ban sakti hai." if held
                     else f"Hum {money} de sakte hain.")
+            last = [x for x in self._owner_history(load, th)[0] if x.startswith("their last trip")]
+            if last and rnd <= 1 and "ichli baar" not in reason:   # their own past rate on this route, said once
+                body += f" Pichli baar aapne isi route pe {last[0].split(' was ')[1].replace(' total', '')} mein gaadi di thi."
             text = (reason + " " if reason else "") + body + " Theek lage to *haan* likhiye."
             return {"action": "counter", "rate": total / km, "reply": text, "by": "agent", "reason": reason}
         if act == "decline":
             if ask and ask > cap and rnd >= 2:
-                reason = _reason(mv)
+                reason = _reason(mv, mine)
                 return {"action": "decline", "rate": None, "by": "agent",
                         "reply": (reason + " " if reason else "") + "Is baar nahi ho payega 🙏 Dhanyavaad."}
             return None
         if act == "ask" and not ask:
-            reason = _reason(mv)
+            reason = _reason(mv, mine)
             return {"action": "ask", "rate": None, "by": "agent", "reply": (reason + " " if reason else "")
                     + "Is load ka aapka rate kya hoga? Total (ya ₹/km) bata dijiye."}
         return None
@@ -496,3 +504,36 @@ class AgentsMixin:
         if not 0 <= i < len(ok):
             return None, ""
         return ok[i], re.sub(r"\s+", " ", str(out.get("why") or "")).strip()[:200]
+
+    # ---------------- this owner's own history with the desk ----------------
+    def _owner_history(self, load, th):
+        """What this owner did with us on this lane: plain lines for the negotiator, and the exact amounts it may quote.
+        Only their own deals, so nothing about other owners or the broker's side leaks into a message."""
+        lane, key = load.get("lane") or {}, th.get("ownerKey")
+        lid = lane.get("laneId")
+        if not lid or not key:
+            return [], set()
+        trips = sum(1 for k, rows in list(self.lane_rates.items()) if k.partition("|")[0] == lid
+                    for r in rows if len(r) > 2 and r[2] == key)
+        booked, agreed = [], []
+        for l in self.loads[-300:]:
+            t = l["threads"].get(key)
+            if l is load or not t or not t.get("agreedBuy") or (l.get("lane") or {}).get("laneId") != lid:
+                continue
+            when = l.get("bookedAt") or l.get("quoteAt") or l["createdAt"]
+            if l.get("winner") == key and l["status"] in ("booked", "recovered", "holding"):
+                booked.append((when, t["agreedBuy"]))
+            elif l.get("winner") and l.get("winner") != key:
+                agreed.append((when, t["agreedBuy"]))
+        lines, amounts = [], set()
+        if trips:
+            lines.append(f"ran this lane for us {trips} time(s)")
+        if booked:
+            amt = max(booked)[1]
+            lines.append(f"their last trip with us on this lane was ₹{amt:,} total")
+            amounts.add(str(amt))
+        if agreed:
+            amt = max(agreed)[1]
+            lines.append(f"last time they agreed ₹{amt:,} total, but another owner was chosen and they were the backup")
+            amounts.add(str(amt))
+        return lines, amounts
