@@ -55,7 +55,7 @@ function statusOf(l) {
   return STATUS[l.status] || [l.status, "neutral"];
 }
 const THREAD = { sent: "Waiting", countered: "Countered", deal: "Agreed", declined: "Declined", silent: "No reply",
-  hold_requested: "Asked to hold", held: "Holding", reconfirm: "Re-confirming", backed_out: "Backed out" };
+  hold_requested: "Asked to hold", held: "Holding", reconfirm: "Re-confirming", backed_out: "Backed out", released: "Released" };
 
 // ---------------- polling ----------------
 // Redraw only when the desk changed, so focus, hover and clicks survive; countdowns tick in place.
@@ -416,7 +416,7 @@ function ownersTable(l, threads) {
   const km = (l.lane || {}).distanceKm || 1;
   const rank = (t) => (t.ownerKey === l.winner ? 0 : t.agreedBuy ? 1 : t.ask ? 2 : 3);
   const rows = threads.slice().sort((a, b) => rank(a) - rank(b) || (a.agreedBuy || a.ask * km || 1e9) - (b.agreedBuy || b.ask * km || 1e9));
-  const pick = (l.reason || "").replace(/^Coordinator chose [^:]+: /, "");
+  const pick = /^(Coordinator chose|Best margin|.* is rated )/.test(l.reason || "") ? l.reason.replace(/^Coordinator chose [^:]+: /, "") : "";
   const open = l.status === "sourcing" ? el("span", { class: "muted" }, `Round ${l.rounds} · `, cd(l.deadline), " left") :
     el("span", { class: "muted", text: `${threads.length} messaged` });
   return el("div", { class: "card owners-card" },
@@ -431,7 +431,7 @@ function ownersTable(l, threads) {
         const chosen = t.ownerKey === l.winner;
         const where = [t.city, t.deadheadKm ? `${t.deadheadKm} km from pickup` : t.deadheadKm === 0 ? "at pickup" : null].filter(Boolean).join(", ");
         const st = THREAD[t.status] || t.status;
-        const stCls = t.agreedBuy || t.status === "held" ? "ok" : ["declined", "backed_out"].includes(t.status) ? "bad" : ["sent", "silent"].includes(t.status) ? "neutral" : "wait";
+        const stCls = t.status === "released" ? "neutral" : t.agreedBuy || t.status === "held" ? "ok" : ["declined", "backed_out"].includes(t.status) ? "bad" : ["sent", "silent"].includes(t.status) ? "neutral" : "wait";
         return el("tr", { class: chosen ? "chosen" : null },
           el("td", {}, el("div", { class: "owner" }, el("span", { class: `av av-${i % 6}`, text: initials(t.name) }),
             el("div", {}, el("b", {}, t.name, t.sandbox ? el("span", { class: "demo", title: "A simulated demo owner (rule-based, not AI)", text: "demo" }) : null),
