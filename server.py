@@ -207,6 +207,8 @@ def desk_send(to, text, buttons=None, attachment=None):
 
 threading.Thread(target=outbox, daemon=True).start()
 desk = live.Desk(sender=desk_send if (WA_READY or TG_READY) else None)
+if cfg("AGENT_MODE").strip().lower() in ("1", "true", "yes", "on"):   # AI agents choose moves; code checks each one
+    desk.settings["agentMode"] = True
 desk.convo = CONVO
 if TG_READY:
     threading.Thread(target=tg_setup, daemon=True).start()
@@ -454,6 +456,8 @@ async def set_settings(request: Request):
         raise HTTPException(400, "Numbers only for diesel, margins and deadhead")
     if "aiAgents" in b:
         s["aiAgents"] = bool(b["aiAgents"])
+    if "agentMode" in b:
+        s["agentMode"] = bool(b["agentMode"])
     if "dieselSource" in b:
         s["dieselSource"] = str(b["dieselSource"])[:120]
     if "dieselAsOf" in b:

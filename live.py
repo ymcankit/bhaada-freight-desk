@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 import engine as E
+from agents import AgentsMixin
 import geo
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -105,9 +106,10 @@ DEFAULT_SETTINGS = {
     "checkinAuto": True,                                    # ask every registered owner each morning what is free
     "checkinHourIST": 7,
     "checkinUntilHourIST": 20,                              # a desk that wakes up late still asks, but not at night
+    "agentMode": False,                                     # AI agents choose negotiation and sourcing moves (code checks each)
 }
 
-class Desk:
+class Desk(AgentsMixin):
     def __init__(self, sender=None):
         self.send_wa = sender                # callable(to, text, buttons=None) or None
         self.q = queue.Queue()
@@ -607,6 +609,12 @@ class Desk:
                      "booked": "booked", "recovered": "re-booked", "rejected": "broker rejected", "escalated": "closed",
                      "sourcing": "collecting rates", "waiting_trucks": "waiting for trucks"}.get(load["status"], load["status"])
             won = "this owner was chosen" if load.get("winner") == key else ("another owner was chosen" if load.get("winner") else "")
+            if load.get("winner") and load["winner"] != key and th.get("agreedBuy"):
+                w = load["threads"].get(load["winner"]) or {}
+                why = ("at a lower rate (₹%s total)" % f"{w['agreedBuy']:,}" if w.get("agreedBuy") and w["agreedBuy"] < th["agreedBuy"]
+                       else "with a stronger record of completing trips" if w.get("reliability", 0) > th.get("reliability", 0) else "")
+                won = (f"another owner was chosen {why}".strip() + "; this owner is the BACKUP and is asked first if the chosen "
+                       "owner doesn't send the truck")
             rows.append(f"- {load['id']}: {lane.get('origin')} → {lane.get('destination')}, {lane.get('distanceKm')} km, "
                         f"{f.get('weight_ton')} T, {th['type']}, pickup {f.get('pickup_when') or 'kal'}. Load stage: {stage}. "
                         f"Owner's thread: {th['status']}" + (f", owner asked ₹{th['ask']}/km" if th.get("ask") else "")
@@ -627,7 +635,9 @@ class Desk:
             rate = f" ₹{th['agreedBuy'] / lane['distanceKm']:.1f}/km" if th.get("agreedBuy") and lane.get("distanceKm") else ""
             stage = ("booking pakki hai" + rate if load.get("winner") == key and load["status"] in ("booked", "recovered")
                      else f"rate{rate} tay hua, broker ke approval ka intezaar hai" if th["status"] == "deal" and load["status"] == "needs_approval"
-                     else "ye load abhi kisi aur ko gaya" if load.get("winner") and load["winner"] != key
+                     else ("doosre owner ka rate kam tha, isliye woh chuna gaya. Aap backup ho: woh gaadi na bheje to sabse "
+                           "pehle aapse poochenge" if th.get("agreedBuy") and th["status"] == "deal" else "ye load abhi kisi aur ko gaya")
+                     if load.get("winner") and load["winner"] != key
                      else "abhi koi deal pakki nahi hui")
             return (f"{load['id']} ({lane.get('origin')} → {lane.get('destination')}): {stage}. "
                     "Payment, advance aur loading time broker batayenge 🙏")
@@ -920,7 +930,7 @@ class Desk:
         return load["fixedSell"] or load.get("shipperPrice") or E.target_sell(load["lane"], tt)
 
     # ---------------- sourcing ----------------
-    def _candidates(self, load, radius):
+    def _candidates(self, load, radius, n=None):
         f, lane = load["load"], load["lane"]
         origin = geo.resolve_city(lane["origin"])
         day = E.pickup_day(f.get("pickup_when"))
@@ -961,7 +971,7 @@ class Desk:
                 real.append({"ownerKey": k, "type": load["searchType"], "capacityTon": E.rates["capacityTonByType"][load["searchType"]],
                              "city": o.get("baseCity") or "", "available": "unknown", "ratePerKm": None,
                              "source": "on-demand", "deadheadKm": None})
-        n = E.SRC["ownersPerBroadcast"]
+        n = n or E.SRC["ownersPerBroadcast"]
         if load.get("demoOnly") and not bots and not load["threads"]:
             # a judge on the open console may try any lane; demo owners bring a truck there instead of leaving it 6 h
             cap = max(E.rates["capacityTonByType"].get(load["searchType"], w), w)
@@ -980,7 +990,15 @@ class Desk:
 
     def _broadcast(self, load):
         radius = self.settings["maxDeadheadKm"] * (1 if load["rounds"] == 0 else 2)
-        cands = self._candidates(load, radius)
+        if self.agent_mode():                           # the sourcing agent picks from a longer ranked list
+            n = E.SRC["ownersPerBroadcast"]
+            pool = self._candidates(load, radius, n=2 * n)
+            cands, why = self._agent_pick(load, pool, n)
+            if len(pool) > n and cands:
+                self._event(load, "Sourcing", f"Sourcing agent picked {len(cands)} of {len(pool)} owners"
+                                              + (f": {why}" if why else "."), by="AI")
+        else:
+            cands = self._candidates(load, radius)
         if not cands:
             if load["threads"]:
                 return self._decide(load, final=True)
@@ -1095,7 +1113,11 @@ class Desk:
             # goes on with other loads and applies the reading when it comes back, if this round is still open
             th["readSeq"] = th.get("readSeq", 0) + 1
             snap = {**th, "messages": list(th["messages"][-6:])}
-            args = (load["id"], th["ownerKey"], text, snap, dict(load["lane"]), dict(load["load"]), th["readSeq"])
+            ctx = None
+            if self.agent_mode():
+                ctx = self._agent_ctx(load, th, self._econ(load, th))
+                ctx["round"] += 1                       # the reply being read starts the next round
+            args = (load["id"], th["ownerKey"], text, snap, dict(load["lane"]), dict(load["load"]), th["readSeq"], ctx)
             return threading.Thread(target=self._read_bg, args=args, daemon=True).start()
         ec = self._econ(load, th)
         th["rounds"] += 1
@@ -1120,8 +1142,8 @@ class Desk:
         if self._all_answered(load):
             self._decide(load)
 
-    def _read_bg(self, lid, key, text, th, lane, f, seq):
-        self.post("owner_read", lid=lid, key=key, text=text, read=self._model_read(th, text, lane, f), seq=seq)
+    def _read_bg(self, lid, key, text, th, lane, f, seq, ctx=None):
+        self.post("owner_read", lid=lid, key=key, text=text, read=self._model_read(th, text, lane, f, agent=ctx), seq=seq)
 
     def _on_owner_read(self, lid, key, text, read, seq):
         load = self._find(lid)
@@ -1130,7 +1152,7 @@ class Desk:
             return                                      # a newer message, or the round closed while the model read
         self._owner_reply(load, th, text, read=read, pre=True)
 
-    def _model_read(self, th, text, lane, f):
+    def _model_read(self, th, text, lane, f, agent=None):
         """The model's reading of an owner's reply (intent, rate, an answer from the terms), or None. Touches no
         desk state, so it can run on any thread; the code's guardrails apply where it is used."""
         km = lane["distanceKm"]
@@ -1149,7 +1171,7 @@ class Desk:
                     "If they ask something, put a 1-line answer from the terms above in answer, in Hinglish (Hindi words in "
                     "Roman script, e.g. \"Rate mein diesel aur toll dono shaamil hain.\"), never English. Else empty.\n"
                     'Return ONLY JSON {"intent":"quote|accept_offer|refuse|question|other","owner_rate_per_km":null,'
-                    '"owner_total_rs":null,"answer":""}')
+                    '"owner_total_rs":null,"answer":""}' + (self._agent_prompt(agent) if agent else ""))
                 pos = lambda x: None if str(x).strip().startswith("-") else E.norm_weight(x)
                 rate, total = pos(out.get("owner_rate_per_km")), pos(out.get("owner_total_rs"))
                 ask = rate or (total / km if total and total > 300 else None)
@@ -1158,9 +1180,11 @@ class Desk:
                     ask = said
                 answer = (out.get("answer") or "").strip()
                 nums = lambda s: re.findall(r"\d+(?:[,.]\d+)*", s)
-                if any(n not in nums(self.terms_line()) for n in nums(answer)):
+                facts = f"{self.terms_line()} {km} {f.get('weight_ton')} {f.get('pickup_when') or ''} {th.get('type') or ''}"
+                if any(n not in nums(facts) for n in nums(answer)):
                     answer = ""                         # guardrail: only the code's terms carry numbers; a model never names a rate
-                return {"intent": out.get("intent"), "ask": ask, "answer": answer}
+                return {"intent": out.get("intent"), "ask": ask, "answer": answer,
+                        "move": out.get("move") if agent and isinstance(out.get("move"), dict) else None}
             except Exception as e:
                 print("negotiation LLM failed, using rules:", repr(e))
         return None
@@ -1170,7 +1194,8 @@ class Desk:
         and explains it with the trip's real costs, so every counter comes with a reason the owner can check."""
         km = ec["km"]
         if not pre:
-            read = self._model_read(th, text, load["lane"], load["load"])
+            read = self._model_read(th, text, load["lane"], load["load"],
+                                    agent=self._agent_ctx(load, th, ec) if self.agent_mode() else None)
         th["readBy"] = "AI" if read and read["intent"] in ("quote", "accept_offer", "refuse", "question", "other") else "Code"
         if not read or read["intent"] not in ("quote", "accept_offer", "refuse", "question", "other"):
             ask = self._owner_rate(text, km)
@@ -1194,7 +1219,12 @@ class Desk:
             th["askDrop"] = round(prev - th["ask"], 1) if prev else 0
             if th["askDrop"] > 0:
                 th["drops"] = th.get("drops", 0) + 1
-        d = self._next_move(load, th, ec, read)
+        d = (self._agent_move(load, th, ec, read) if self.agent_mode() and read.get("move") else None) \
+            or self._next_move(load, th, ec, read)
+        if d.get("by") == "agent":
+            th["readBy"] = "AI"
+            self._event(load, "Negotiation", f"Negotiation agent chose to {d['action']} with {th['name']}"
+                        + (f": “{d['reason']}”" if d.get("reason") else "."), by="AI")
         if read["answer"] and d["action"] in ("counter", "ask"):
             d["reply"] = read["answer"] + "\n" + d["reply"]
         if note and d["action"] != "decline":
@@ -1772,7 +1802,7 @@ class Desk:
         said = yes_no(text)
         if th["status"] == "reconfirm":
             if said is None:
-                return self._to_owner(load, th, f"{load['id']}: purane rate pe gaadi milegi? *HAAN* ya *NAHI* likhiye 🙏")
+                return self._answer_then(load, th, text, f"{load['id']}: purane rate pe gaadi milegi? *HAAN* ya *NAHI* likhiye 🙏")
             if said == "yes":
                 th["status"] = "deal"
                 self._event(load, "Sourcing", f"{th['name']} confirmed the earlier rate still holds.")
@@ -1816,7 +1846,8 @@ class Desk:
                     self._ask_dispatch(load, th)
             self.save()
         elif th["status"] == "hold_requested":
-            self._to_owner(load, th, "Gaadi hold karni hai? *HAAN* ya *NAHI* likhiye 🙏")
+            self._answer_then(load, th, text, "Gaadi hold karne ke liye *HAAN* likhiye (saath mein gaadi number, driver ka "
+                                              "mobile aur pahunchne ka time) 🙏")
 
     def _on_backout(self, lid, note="Owner called to cancel"):
         """Recorded by the coordinator when an owner cancels by phone (or in sandbox, to rehearse it)."""

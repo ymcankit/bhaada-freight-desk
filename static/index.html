@@ -113,6 +113,9 @@
         <fieldset><legend>Sourcing</legend>
           <label>Furthest empty run to pickup (km)<input name="maxDeadheadKm" type="number" step="5" min="10" max="400" required></label>
         </fieldset>
+        <fieldset><legend>AI agents</legend>
+          <label class="check"><input name="agentMode" id="agent-mode" type="checkbox"> Let the AI agents choose whom to message and how to negotiate. Code still checks every amount against the broker's limits; the rules take over if the AI is unavailable.</label>
+        </fieldset>
         <p class="muted" id="toll-note"></p>
         <div class="form-actions"><button class="btn primary" type="submit">Save</button><span class="form-msg" id="cost-msg" role="status"></span></div>
       </form>

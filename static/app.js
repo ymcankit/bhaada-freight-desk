@@ -438,12 +438,15 @@ function renderCosts() {
   $("toll-note").textContent = s.tollNote;
   if (S.costsFilled || f.contains(document.activeElement)) return;
   for (const k of ["dieselPerLitre", "dieselSource", "dieselAsOf", "floorPct", "targetPct", "ceilingPct", "maxDeadheadKm"]) f.elements[k].value = s[k];
+  f.elements.agentMode.checked = !!s.agentMode;
   S.costsFilled = true;
 }
 $("cost-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const msg = $("cost-msg");
-  try { await api("/api/settings", Object.fromEntries(new FormData(e.target))); msg.className = "form-msg"; msg.textContent = "Saved. New quotes use these numbers."; S.costsFilled = false; poll(); }
+  const body = Object.fromEntries(new FormData(e.target));
+  body.agentMode = e.target.elements.agentMode.checked;      // an unticked box sends nothing, so say it explicitly
+  try { await api("/api/settings", body); msg.className = "form-msg"; msg.textContent = "Saved. New quotes use these numbers."; S.costsFilled = false; poll(); }
   catch (err) { msg.className = "form-msg err"; msg.textContent = err.message; }
 });
 

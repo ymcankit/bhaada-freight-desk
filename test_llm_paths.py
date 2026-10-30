@@ -399,5 +399,73 @@ before = (th["status"], th.get("ask"))
 D._on_owner_read(load["id"] if D._find(load["id"]) else "missing", th["ownerKey"], "50/km", {"intent": "quote", "ask": 50, "answer": ""}, 1)
 ok &= check("a stale background reading changes nothing", (th["status"], th.get("ask")) == before)
 
+# ---------------- agents (agents.py): each stage decides, code checks every action ----------------
+# booking agent: a question mid-hold gets an answer from the load's facts; a made-up number drops the answer
+load, th, ec = neg_load(status="hold_requested", agreedBuy=24000)
+script({"reply": "Advance 80% loading pe milega, baaki POD milne ke 7 din mein."})
+ans = D._stage_answer(load, th, "payment kab milega?")
+ok &= check("booking agent answers a hold-stage question from the facts", "80%" in ans and "7 din" in ans, ans)
+script({"reply": "Kal ₹500 extra mil jayega, pakka."})
+ok &= check("booking agent: an answer with a number not in the facts is dropped", D._stage_answer(load, th, "kuch extra?") == "")
+D.loads.append(load)
+before = len(th["messages"])
+D._on_owner_answer(load["id"], th["ownerKey"], "Advance 80% loading pe milega.", "Gaadi hold karne ke liye *HAAN* likhiye", "hold_requested")
+out = th["messages"][-1]["text"] if len(th["messages"]) > before else ""
+ok &= check("the answer goes out with the HAAN reminder after it", "Advance 80%" in out and out.index("Advance") < out.index("*HAAN*"), out[:80])
+D._on_owner_answer(load["id"], th["ownerKey"], "late answer", "x", "sent")
+ok &= check("an answer that arrives after the deal moved on is not sent", th["messages"][-1]["text"] == out)
+
+# backup owners are told why, and that they're first in line
+bk, bth, _ = neg_load(status="deal", agreedBuy=26000, ownerKey="k1")
+bk["threads"]["w1"] = {"name": "Gupta", "ownerKey": "w1", "type": TT, "status": "held", "agreedBuy": 24000, "reliability": 4.6,
+                        "messages": [], "counter": None, "ask": None, "rounds": 1}
+bk["winner"] = "w1"
+lines, allowed = D._stage_facts(bk, bth)
+facts = " ".join(lines)
+ok &= check("a backup owner's facts say why and that they're asked first", "backup" in facts and "lower rate" in facts, facts[-160:])
+bk["id"] = "BH-T9"; D.loads.append(bk)
+rows, _ = D._owner_story("k1")
+ok &= check("the owner chat knows this owner is the backup and why", any("BACKUP" in r and "lower rate" in r for r in rows), str(rows)[:200])
+
+# negotiation agent (agentMode): the model proposes, code holds the line
+D.settings["agentMode"] = True
+def mv(intent, rate=None, **move):
+    return {"intent": intent, "owner_rate_per_km": rate, "owner_total_rs": None, "answer": "", "move": move}
+hi = round(EC["ceiling"] * 1.3, 1)
+d, th, ec = owner_says(f"{hi}/km", mv("quote", hi, action="counter", amount_total=round(EC["ceiling"] * 280 * 2), reason="Is route pe yahi chal raha hai."))
+ok &= check("agent counter above the ceiling is held to the ceiling, in a ₹500 lump", d.get("by") == "agent" and d["action"] == "counter"
+            and d["rate"] <= EC["ceiling"] + 0.01 and round(d["rate"] * 280) % 500 == 0, str(d)[:140])
+d, th, ec = owner_says(f"{hi}/km", mv("quote", hi, action="accept"))
+ok &= check("agent can't accept an ask above the ceiling: the rules decide", d.get("by") != "agent" and d["action"] != "accept", str(d)[:120])
+d, th, ec = owner_says(f"{hi}/km", mv("quote", hi, action="counter", amount_total=round(EC["target"] * 280), reason="Market ₹90/km hai."))
+ok &= check("agent's reason with a number is dropped", d.get("by") == "agent" and "90/km" not in d["reply"], d["reply"][:120])
+d, th, ec = owner_says(f"{hi}/km", mv("quote", hi, action="decline", reason="Nahi ho payega."))
+ok &= check("agent can't walk away in round 1: the rules decide", d.get("by") != "agent", str(d)[:120])
+c0 = round(EC["target"], 1)
+d, th, ec = owner_says(f"{hi}/km", mv("quote", hi, action="counter", amount_total=round(EC["ceiling"] * 280)), counter=c0, ask=hi, rounds=2)
+ok &= check("agent can't step up when the owner didn't come down", d.get("by") == "agent" and abs(d["rate"] - c0) < 0.01, str(d)[:140])
+mid = round((EC["target"] + EC["ceiling"]) / 2, 1)
+d, th, ec = owner_says(f"{mid}/km", mv("quote", mid, action="accept"))
+ok &= check("agent can't pay above target on the first reply (the rules decide)", d.get("by") != "agent", str(d)[:120])
+d, th, ec = owner_says(f"{mid}/km", mv("quote", mid, action="accept"), counter=EC["target"], ask=mid + 1, rounds=2)
+ok &= check("from round 2 the agent may accept within the broker's limit", d["action"] == "accept" and abs(d["rate"] - mid) < 0.01, str(d)[:120])
+low = round(EC["target"] - 1, 1)
+d, th, ec = owner_says(f"{low}/km", mv("quote", low, action="accept"))
+ok &= check("agent accepts a fair ask", d["action"] == "accept" and abs(d["rate"] - low) < 0.01, str(d)[:120])
+D.settings["agentMode"] = False
+d, th, ec = owner_says(f"{hi}/km", mv("quote", hi, action="counter", amount_total=round(EC["ceiling"] * 280)))
+ok &= check("agentMode off: a model's move is ignored", d.get("by") != "agent", str(d)[:120])
+
+# sourcing agent: picks from the ranked list; bad picks are skipped, nonsense falls back to the ranked order
+cands = [{"ownerKey": f"s{i}", "type": TT, "city": "Bhiwandi", "deadheadKm": 5 + i, "ratePerKm": None} for i in range(8)]
+sl, _, _ = neg_load()
+sl["searchType"] = TT
+script({"pick": [3, 1, 99, "x", 3], "why": "Fast repliers first."})
+got, why = D._agent_pick(sl, cands, 5)
+ok &= check("sourcing agent's picks are kept only if they're real candidates", [c["ownerKey"] for c in got] == ["s3", "s1"] and bool(why), str([c["ownerKey"] for c in got]))
+script("not json at all")
+got, why = D._agent_pick(sl, cands, 5)
+ok &= check("sourcing agent: unreadable output falls back to the ranked order", [c["ownerKey"] for c in got] == [f"s{i}" for i in range(5)])
+
 print("\nALL PASS" if ok else "\nSOME FAILED")
 import sys; sys.stdout.flush(); os._exit(0 if ok else 1)

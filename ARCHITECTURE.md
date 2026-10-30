@@ -20,12 +20,19 @@ console shows that trace.
 | Recovery | `Desk._strategize` | When nothing clears the floor, a model picks one move from the list code builds (widen, bigger truck, final offer, ask the broker, hand over); code checks and runs it; a fixed order is the fallback |
 | After the quote | `Desk._on_approve` … `_take_dispatch` | Broker approves; owner holds; broker relays the shipper's yes or no; owner sends vehicle and driver; dispatch card, LR (bilty) draft PDF, e-way bill and GST lines |
 | Back-outs | `Desk._replan` | Re-confirms earlier owners, then re-sources, at the shipper's fixed price |
+| Agents | `agents.py` `AgentsMixin` | Booking agent answers owners' questions mid-deal from the load's facts; with `agentMode` on, a Sourcing agent picks whom to message from a ranked list of twice the usual size, and a Negotiation agent proposes each move (ask, counter, final offer, accept, decline) in the same model call that reads the reply |
 | Memory | `live.py` save/load | Upstash Redis (compressed blob, coalesced writes), local file fallback |
 
 ## What the models do, and what they can't do
 
 - **Read**: intake, broker questions, owner check-ins and chat, owner replies in a negotiation, PDFs and photos.
-- **Choose**: the strategist's recovery move, only from the moves code offers.
+- **Choose**: the strategist's recovery move, only from the moves code offers. With `agentMode` on (console
+  checkbox on Pricing defaults, or env `AGENT_MODE=1`; off by default), also whom to message and the next negotiation
+  move. Pricing stays a code tool the agents call, never something they set.
+- **Checked**: `_agent_move` clamps every agent amount to the broker's ceiling, holds the offer when the owner didn't
+  move, steps up by at most the owner's own drop, refuses a first-round accept above target or a first-round decline,
+  and drops any reason that quotes a number. Anything it rejects goes to the rules (`_next_move`). The Booking agent's
+  answer is dropped if it names a number that isn't in the load's facts, and is not sent if the deal moved meanwhile.
 - **Never**: set a price, accept a rate nobody said, book or approve anything, see another person's loads. Guardrails in
   code (`_next_move`, `_model_read`, `_options`) override any model output that tries; `test_llm_paths.py` feeds
   hostile model outputs to check this.
