@@ -600,6 +600,8 @@ $("cost-form").addEventListener("submit", async (e) => {
   catch (err) { msg.className = "form-msg err"; msg.textContent = err.message; }
 });
 
+$("sign-in").addEventListener("click", () => { if (askKey()) { S.lastKey = null; S.costsFilled = false; poll(); } });
+
 // ---------------- navigation and mode ----------------
 document.querySelectorAll(".nav-item").forEach((b) => b.addEventListener("click", () => {
   S.view = b.dataset.view; S.sel = null;

@@ -204,6 +204,16 @@ ok &= check("open demo console hides real chats", all(m["text"].startswith("(hid
 server.IP_HITS.clear()
 codes = [c.post("/api/intake", json={"text": ""}).status_code for _ in range(31)]
 ok &= check("open demo console caps model spend per visitor", codes[-1] == 429 and 429 not in codes[:30], str(codes[-3:]))
+server.CONSOLE_PW = "pw"
+st = c.get("/api/state").json()
+ok &= check("password plus open demo: visitors still get the demo, the password unlocks the broker",
+            st.get("publicView") is True and "kpis" in st and st.get("readOnly") is False
+            and c.post(f"/api/loads/{real}/approve").status_code == 403
+            and c.post("/api/settings", json={"floorPct": 5}).status_code == 401
+            and c.post("/api/mode", json={"mode": "sandbox"}).status_code == 401
+            and c.get("/api/state", headers={"X-Console-Key": "pw"}).json().get("publicView") is None
+            and c.post("/api/settings", json={"floorPct": server.desk.settings["floorPct"]}, headers={"X-Console-Key": "pw"}).status_code == 200)
+server.CONSOLE_PW = ""
 server.CONSOLE_OPEN, server.ON_HOST = False, False
 floor = server.desk.settings["floorPct"]
 ok &= check("bad margins refused and not kept", c.post("/api/settings", json={"floorPct": 60}).status_code == 400

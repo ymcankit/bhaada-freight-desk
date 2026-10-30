@@ -10,6 +10,8 @@ Config (environment variables, or .streamlit/secrets.toml locally):
     CONSOLE_PASSWORD                   when set, the console and its API ask for it. Unset on a host (Render), the
                                        console is view-only unless CONSOLE_OPEN=1; on a laptop it stays open
     PUBLIC_VIEW                        1: with a password set, anyone may watch the desk; acting still needs the password
+    CONSOLE_OPEN                       1 on a host: visitors without the password get the open demo (their own loads,
+                                       demo owners only); the password still unlocks everything for the broker
     TELEGRAM_BOT_TOKEN                 a bot from @BotFather: the same desk on Telegram, free and with no phone number
     PUBLIC_URL                         this server's address, for the Telegram webhook (Render sets RENDER_EXTERNAL_URL itself)
 """
@@ -275,15 +277,21 @@ if not CONSOLE_PW and ON_HOST:
     print("WARNING: CONSOLE_PASSWORD is not set: anyone with the URL can read every chat"
           + (" and approve or change settings (CONSOLE_OPEN)" if CONSOLE_OPEN else "; the console is read-only"))
 
+def has_key(request: Request):
+    """The broker typed the console password."""
+    got = request.headers.get("x-console-key", "")
+    return bool(CONSOLE_PW) and hmac.compare_digest(got.encode(), CONSOLE_PW.encode())
+
 def console_ok(request: Request):
     """May read the whole desk."""
-    got = request.headers.get("x-console-key", "")
-    return not CONSOLE_PW or hmac.compare_digest(got.encode(), CONSOLE_PW.encode())
+    return not CONSOLE_PW or has_key(request)
 
 def console_can_act(request: Request):
     """May approve, reject, change settings, add owners or spend model calls on intake."""
+    if has_key(request) or judge_mode(request):
+        return True
     if CONSOLE_PW:
-        return console_ok(request)
+        return False
     return CONSOLE_OPEN or not ON_HOST
 
 def console_auth(request: Request):
@@ -293,14 +301,15 @@ def console_auth(request: Request):
         raise HTTPException(403, "This public console is read-only. Set CONSOLE_PASSWORD on the server to act from it.")
 
 def judge_mode(request: Request):
-    """An open console on the internet (CONSOLE_OPEN, no password): judges try the desk, but can't touch real people."""
-    return ON_HOST and not CONSOLE_PW and CONSOLE_OPEN
+    """An open console on the internet (CONSOLE_OPEN) and a visitor without the password: judges try the desk on their
+    own loads with demo owners, but can't touch real people, settings or other loads."""
+    return ON_HOST and CONSOLE_OPEN and not has_key(request)
 
 def admin_only(request: Request):
     """Margins, diesel and messaging arbitrary numbers need the password even when the console is open."""
     console_auth(request)
     if judge_mode(request):
-        raise HTTPException(403, "In the open demo console, settings and adding owners need the console password.")
+        raise HTTPException(401 if CONSOLE_PW else 403, "In the open demo console, settings and adding owners need the console password.")
 
 IP_HITS = {}
 def ip_limit(request: Request, what, per_hour):
@@ -343,7 +352,7 @@ def shutdown():
 
 @app.get("/api/state")
 def state(request: Request):
-    if not console_ok(request) and not PUBLIC_VIEW:
+    if not console_ok(request) and not PUBLIC_VIEW and not judge_mode(request):
         return {"locked": True}                    # 200, so a health check on this path keeps passing
     v = desk.view()
     v["readOnly"] = not console_can_act(request)
@@ -416,7 +425,7 @@ def load_action(lid: str, action: str, request: Request):
 @app.get("/api/loads/{lid}/lr.pdf")
 def lr_pdf(lid: str, request: Request):
     """The bilty draft of a dispatched load; whoever may read the desk may download it (driver phone is masked)."""
-    if not console_ok(request) and not PUBLIC_VIEW:
+    if not console_ok(request) and not PUBLIC_VIEW and not judge_mode(request):
         raise HTTPException(401, "Console password needed")
     load = desk._find(lid)
     if load and (ON_HOST and not console_ok(request) or judge_mode(request)) and load.get("source") != "console":
